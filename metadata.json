@@ -1,0 +1,5 @@
+{
+  "name": "SKJ",
+  "description": "Aplikasi CVSKJ Store Management",
+  "requestFramePermissions": ["geolocation", "camera"]
+}
