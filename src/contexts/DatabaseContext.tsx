@@ -560,7 +560,7 @@ export function DatabaseProvider({ children }: { children: ReactNode }) {
     try {
       const dbItem = toSnakeCase(item) as Record<string, unknown>;
 
-      const excludeAuditColumns = ['karyawan', 'area', 'cabang', 'kategori', 'satuan', 'rekening_bank', 'kategori_pelanggan', 'peran', 'persetujuan', 'users', 'harga', 'notifikasi', 'stok_pengguna', 'absensi', 'saldo_pengguna', 'reimburse', 'petty_cash', 'permintaan_barang', 'penyesuaian_stok', 'kunjungan', 'riwayat_pelanggan'];
+      const excludeAuditColumns = ['karyawan', 'area', 'cabang', 'kategori', 'satuan', 'rekening_bank', 'kategori_pelanggan', 'peran', 'persetujuan', 'users', 'harga', 'notifikasi', 'stok_pengguna', 'absensi', 'saldo_pengguna', 'reimburse', 'petty_cash', 'permintaan_barang', 'penyesuaian_stok', 'kunjungan', 'riwayat_pelanggan', 'pembayaran_penjualan'];
 
       if (currentUser && !excludeAuditColumns.includes(tableName)) {
         dbItem.created_by = currentUser.id;
@@ -636,7 +636,7 @@ export function DatabaseProvider({ children }: { children: ReactNode }) {
     try {
       const dbItem = toSnakeCase(item) as Record<string, unknown>;
 
-      const excludeAuditColumns = ['karyawan', 'area', 'cabang', 'kategori', 'satuan', 'rekening_bank', 'kategori_pelanggan', 'peran', 'persetujuan', 'users', 'harga', 'notifikasi', 'stok_pengguna', 'absensi', 'saldo_pengguna', 'permintaan_barang', 'penyesuaian_stok', 'kunjungan', 'riwayat_pelanggan'];
+      const excludeAuditColumns = ['karyawan', 'area', 'cabang', 'kategori', 'satuan', 'rekening_bank', 'kategori_pelanggan', 'peran', 'persetujuan', 'users', 'harga', 'notifikasi', 'stok_pengguna', 'absensi', 'saldo_pengguna', 'permintaan_barang', 'penyesuaian_stok', 'kunjungan', 'riwayat_pelanggan', 'pembayaran_penjualan'];
 
       if (currentUser && !excludeAuditColumns.includes(tableName)) {
         dbItem.updated_by = currentUser.id;

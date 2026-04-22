@@ -11,6 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { toast } from 'sonner';
 import { Building2, Save, CreditCard, Shield, AlertTriangle, CalendarClock, Activity, CheckCircle, XCircle, Wrench, Bot } from 'lucide-react';
 import { useRouter } from 'next/navigation';
+import { cn } from '@/lib/utils';
 import { useDatabase } from '@/contexts/DatabaseContext';
 import { supabase } from '@/lib/supabase';
 
@@ -46,6 +47,7 @@ export default function ProfilPerusahaan() {
     aiChatMode: 'read' as 'read' | 'write' | 'edit',
     radiusKunjungan: 100,
     radiusBehavior: 'allow' as 'allow' | 'reject',
+    enableAIChat: true,
   });
 
   const [isTesting, setIsTesting] = useState(false);
@@ -576,7 +578,20 @@ export default function ProfilPerusahaan() {
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="space-y-2">
+            <div className="flex items-center justify-between mb-4">
+              <div className="space-y-0.5">
+                <Label>Aktifkan Menu AI Chat</Label>
+                <p className="text-xs text-muted-foreground">Tampilkan atau sembunyikan menu Chat AI di sidebar.</p>
+              </div>
+              <Switch
+                checked={settings.enableAIChat !== false}
+                onCheckedChange={(c) => setSettings(s => ({ ...s, enableAIChat: c }))}
+              />
+            </div>
+
+            <Separator className="my-4" />
+
+            <div className={cn("space-y-2 transition-opacity", settings.enableAIChat === false && "opacity-50 pointer-events-none")}>
               <Label>Mode Akses AI</Label>
               <Select
                 value={settings.aiChatMode}

@@ -52,7 +52,7 @@ export default function TambahPenjualan() {
     const router = useRouter();
     const searchParams = useSearchParams();
     const { user } = useAuth();
-    const { pelanggan, barang, addPenjualan, satuan, stokPengguna, saldoPengguna, addSaldoPengguna, harga, promo, kategoriPelanggan, updateSaldoPengguna, penjualan, addPersetujuan, profilPerusahaan, absensi, addAbsensi, addKunjungan } = useDatabase(); // Added addPersetujuan, absensi, addAbsensi
+    const { pelanggan, barang, addPenjualan, satuan, stokPengguna, saldoPengguna, addSaldoPengguna, harga, promo, kategoriPelanggan, updateSaldoPengguna, penjualan, addPersetujuan, profilPerusahaan, absensi, addAbsensi, addKunjungan, addPembayaranPenjualan } = useDatabase(); // Added addPembayaranPenjualan
     const { getPriceDetailed, getPromo } = usePricing();
     const [loadingLoc, setLoadingLoc] = useState(false);
 
@@ -858,18 +858,20 @@ export default function TambahPenjualan() {
 
             // Record Initial Payment (If Amount > 0)
             if (currentPayment > 0) {
-                const { error: payError } = await supabase
-                    .from('pembayaran_penjualan')
-                    .insert({
-                        penjualan_id: newPenjualanId,
-                        jumlah: netReceived, // Only record the actual revenue in total paid
-                        bayar: currentPayment, // Raw cash received
+                try {
+                    await addPembayaranPenjualan({
+                        penjualanId: newPenjualanId,
+                        jumlah: netReceived,
+                        bayar: currentPayment,
                         kembalian: kembalianValue,
-                        metode_pembayaran: 'tunai', // Default to 'tunai' since selector removed (transfer/cash merged or just cash)
-                        lokasi: location, // Reuse location
-                        created_by: user?.id, // Explicitly attribute to cashier/salesman
+                        metodePembayaran: 'tunai',
+                        lokasi: location,
+                        createdBy: user?.id,
+                        tanggal: new Date(),
                     });
-                if (payError) console.error("Failed to record initial payment", payError);
+                } catch (payError) {
+                    console.error("Failed to record initial payment", payError);
+                }
             }
 
             // Update Customer Limit (Decrease Limit, Increase Sisa/Debt) if Credit Sale

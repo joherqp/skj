@@ -6,17 +6,15 @@ import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { useDatabase } from '@/contexts/DatabaseContext';
 import { formatRupiah, formatCompactRupiah } from '@/lib/utils';
-import { BarChart, TrendingUp, Calendar, ArrowLeft, Wallet, CreditCard, Receipt, User, Coins, Package, Search } from 'lucide-react';
+import { BarChart, TrendingUp, Calendar, ArrowLeft, Wallet, CreditCard, Receipt, User, Coins, Package } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { SearchableSelect } from '@/components/ui/searchable-select';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-
 import { useAuth } from '@/contexts/AuthContext';
+import { ScopeFilters } from '@/components/shared/ScopeFilters';
 
 export default function RekapPenjualan() {
     const router = useRouter();
@@ -42,27 +40,8 @@ export default function RekapPenjualan() {
     const isAdminOrOwner = user?.roles.includes('admin') || user?.roles.includes('owner');
     const isLeader = user?.roles.includes('leader');
 
-    const [filterCabang, setFilterCabang] = useState<string>(() => {
-        if (isAdminOrOwner) {
-            return 'all';
-        }
-        return user?.cabangId || '';
-    });
-    const [filterUser, setFilterUser] = useState<string>('all');
-
-    const relevantUsers = useMemo(() => {
-        let candidates = users.filter(u => u.cabangId !== 'cab-pusat');
-
-        if (isAdminOrOwner) {
-            if (filterCabang !== 'all') {
-                candidates = candidates.filter(u => u.cabangId === filterCabang);
-            }
-        } else {
-            candidates = candidates.filter(u => u.cabangId === user?.cabangId);
-        }
-
-        return candidates;
-    }, [users, filterCabang, isAdminOrOwner, user]);
+    const [selectedCabangIds, setSelectedCabangIds] = useState<string[]>([]);
+    const [selectedUserIds, setSelectedUserIds] = useState<string[]>([]);
 
     const scopedPenjualan = penjualan.filter(p => {
         const pSalesId = p.salesId || p.createdBy;
@@ -78,9 +57,9 @@ export default function RekapPenjualan() {
 
         if (!hasAccess) return false;
 
-        // 2. Specific Filters Check
-        if (filterCabang !== 'all' && p.cabangId !== filterCabang) return false;
-        if (filterUser !== 'all' && pSalesId !== filterUser) return false;
+        // 2. Multi-select Filters
+        if (selectedCabangIds.length > 0 && !selectedCabangIds.includes(p.cabangId || '')) return false;
+        if (selectedUserIds.length > 0 && !selectedUserIds.includes(pSalesId || '')) return false;
 
         return true;
     });
@@ -198,8 +177,8 @@ export default function RekapPenjualan() {
         // Filter Info
         doc.setFontSize(9);
         const periodText = isSingleDate ? `Tanggal: ${new Date(singleDate).toLocaleDateString('id-ID')}` : `Periode: ${new Date(startDate).toLocaleDateString('id-ID')} s/d ${new Date(endDate).toLocaleDateString('id-ID')}`;
-        const branchText = `Cabang: ${filterCabang === 'all' ? 'Semua Cabang' : cabang.find(c => c.id === filterCabang)?.nama}`;
-        const userText = `Pengguna: ${filterUser === 'all' ? 'Semua Pengguna' : users.find(u => u.id === filterUser)?.nama}`;
+        const branchText = `Cabang: ${selectedCabangIds.length === 0 ? 'Semua Cabang' : selectedCabangIds.map(id => cabang.find(c => c.id === id)?.nama).join(', ')}`;
+        const userText = `Pengguna: ${selectedUserIds.length === 0 ? 'Semua Pengguna' : selectedUserIds.map(id => users.find(u => u.id === id)?.nama).join(', ')}`;
 
         doc.text(periodText, 14, 32);
         doc.text(branchText, 14, 37);
@@ -294,39 +273,14 @@ export default function RekapPenjualan() {
                 <Card className="border-none shadow-sm bg-background/50 backdrop-blur-sm">
                     <CardContent className="p-4 sm:p-6">
                         <div className="flex flex-wrap items-center gap-4 w-full sm:w-auto">
-                            {/* Branch Filter (Admin Only) */}
-                            <div className="flex flex-col gap-1 w-full sm:w-auto">
-                                <span className="text-[10px] text-muted-foreground ml-1">Cabang</span>
-                                <Select
-                                    value={filterCabang}
-                                    onValueChange={(val) => { setFilterCabang(val); setFilterUser('all'); }}
-                                    disabled={!isAdminOrOwner}
-                                >
-                                    <SelectTrigger className="w-full sm:w-[160px] h-8 text-xs bg-background">
-                                        <SelectValue placeholder="Pilih Cabang" />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        <SelectItem value="all">Semua Cabang</SelectItem>
-                                        {cabang.filter(c => c.id !== 'cab-pusat').map(c => <SelectItem key={c.id} value={c.id}>{c.nama}</SelectItem>)}
-                                    </SelectContent>
-                                </Select>
-                            </div>
-
-                            {/* User Filter */}
-                            <div className="flex flex-col gap-1 w-full sm:w-auto">
-                                <span className="text-[10px] text-muted-foreground ml-1">Pengguna</span>
-                                <SearchableSelect
-                                    value={filterUser}
-                                    onChange={setFilterUser}
-                                    placeholder="Pilih Pengguna"
-                                    searchPlaceholder="Cari pengguna..."
-                                    options={[
-                                        { label: "Semua Pengguna", value: "all" },
-                                        ...relevantUsers.map(u => ({ label: u.nama, value: u.id }))
-                                    ]}
-                                    className="w-full sm:w-[160px] h-8 text-xs bg-transparent border-input"
-                                />
-                            </div>
+                            {/* Scope Filters (Branch & User) */}
+                            <ScopeFilters
+                                selectedCabangIds={selectedCabangIds}
+                                setSelectedCabangIds={setSelectedCabangIds}
+                                selectedUserIds={selectedUserIds}
+                                setSelectedUserIds={setSelectedUserIds}
+                                className="!space-y-0 flex flex-row items-center gap-2"
+                            />
                             <div className="flex flex-col gap-1 w-full sm:w-auto">
                                 <div className="flex items-center justify-between gap-2 max-w-sm">
                                     <div className="flex items-center gap-2 text-primary font-medium">

@@ -33,6 +33,7 @@ import { addDays, startOfMonth, endOfMonth, isWithinInterval, isAfter, isBefore,
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { SearchableSelect } from '@/components/ui/searchable-select';
+import { ScopeFilters } from '@/components/shared/ScopeFilters';
 
 interface PersetujuanData {
     barangId?: string;
@@ -63,14 +64,13 @@ export default function LaporanStok() {
     } = useDatabase();
 
     // Filters
-    const [filterCabang, setFilterCabang] = useState<string>(() => {
+    const [selectedCabangIds, setSelectedCabangIds] = useState<string[]>(() => {
         if (currentUser?.roles.includes('admin') || currentUser?.roles.includes('owner')) {
-            return 'all';
+            return [];
         }
-        // Access Leak Fix: If user has no branch, do NOT default to 'all'. Default to empty string (no view).
-        return currentUser?.cabangId || '';
+        return currentUser?.cabangId ? [currentUser.cabangId] : [];
     });
-    const [filterUser, setFilterUser] = useState<string>('all');
+    const [selectedUserIds, setSelectedUserIds] = useState<string[]>([]);
     const [search, setSearch] = useState('');
 
     // Date Filters
@@ -103,21 +103,14 @@ export default function LaporanStok() {
             if (u.isActive !== false) return true;
 
             // For inactive users, check if their service period overlaps with report range
-            // If no dates set, maybe include them to be safe? Or exclude? 
-            // Let's include if unsure to avoid hiding data.
             if (!u.startDate && !u.endDate) return true; // Legacy inactive
 
             const reportStart = from || new Date(0);
             const reportEnd = to || new Date();
 
             const userStart = u.startDate ? new Date(u.startDate) : new Date(0);
-            // If isActive=false and no endDate, it's ambiguous. Assume they ended "sometime"? 
-            // But logically if isActive=false, they should have endDate. If not, include them.
-
-            // Overlap: UserStart <= ReportEnd AND UserEnd >= ReportStart
             return userStart <= reportEnd && (u.endDate ? new Date(u.endDate) >= reportStart : true);
         };
-
 
         // Filter by existence in stokPengguna
         const userIdsWithStock = new Set(stokPengguna.map(s => s.userId));
@@ -126,8 +119,8 @@ export default function LaporanStok() {
 
         // 1. Admin/Owner: Full access, respect UI filter
         if (currentUser?.roles.includes('admin') || currentUser?.roles.includes('owner')) {
-            if (filterCabang !== 'all') {
-                candidates = users.filter(u => u.cabangId === filterCabang);
+            if (selectedCabangIds.length > 0) {
+                candidates = users.filter(u => u.cabangId && selectedCabangIds.includes(u.cabangId));
             }
         } else {
             // 2. Others (Leader/Sales/Staff): Restricted to their branch
@@ -135,7 +128,7 @@ export default function LaporanStok() {
         }
 
         return candidates.filter(u => checkActiveInPeriod(u) && userIdsWithStock.has(u.id));
-    }, [users, filterCabang, currentUser, effectiveDateRange, stokPengguna]);
+    }, [users, selectedCabangIds, currentUser, effectiveDateRange, stokPengguna]);
 
     // Extract calculation logic to a reusable function so we can calculate per-user
     const calculateStockReport = (specFilterUser: string) => {
@@ -157,19 +150,16 @@ export default function LaporanStok() {
             let currentStock = 0;
 
             // Filter users to consider for stock
-            const isGlobalView = filterCabang === 'all';
+            const isGlobalView = selectedCabangIds.length === 0;
 
             let targetUsers = users;
             if (specFilterUser !== 'all') {
                 targetUsers = users.filter(u => u.id === specFilterUser);
-            } else if (!isGlobalView && filterCabang) {
-                // Branch Scope
-                targetUsers = users.filter(u => u.cabangId === filterCabang);
-            } else if (!isGlobalView && !filterCabang) {
-                // No Branch ID selected/available -> No users
-                targetUsers = [];
+            } else if (!isGlobalView) {
+                // Branch Scope: filter by selected cabang IDs
+                targetUsers = users.filter(u => u.cabangId && selectedCabangIds.includes(u.cabangId));
             } else {
-                // Global (filterCabang === 'all')
+                // Global (no cabang filter)
                 targetUsers = users;
             }
 
@@ -199,8 +189,8 @@ export default function LaporanStok() {
                 // Check if this sale is relevant to our scope
                 const isRelevant = specFilterUser !== 'all'
                     ? p.salesId === specFilterUser
-                    : filterCabang !== 'all'
-                        ? p.cabangId === filterCabang
+                    : selectedCabangIds.length > 0
+                        ? selectedCabangIds.includes(p.cabangId || '')
                         : true;
 
                 if (!isRelevant) return;
@@ -236,8 +226,8 @@ export default function LaporanStok() {
                 const mDate = new Date(m.tanggal);
 
                 // Scope Checks
-                let isOriginScope = filterCabang !== 'all' ? m.dariCabangId === filterCabang : true;
-                let isDestScope = filterCabang !== 'all' ? m.keCabangId === filterCabang : true;
+                let isOriginScope = selectedCabangIds.length > 0 ? selectedCabangIds.includes(m.dariCabangId || '') : true;
+                let isDestScope = selectedCabangIds.length > 0 ? selectedCabangIds.includes(m.keCabangId || '') : true;
 
                 // User Scope Checks
                 if (specFilterUser !== 'all') {
@@ -298,8 +288,8 @@ export default function LaporanStok() {
 
                 const isRelevant = specFilterUser !== 'all'
                     ? p.targetUserId === specFilterUser
-                    : filterCabang !== 'all'
-                        ? p.targetCabangId === filterCabang || (p.targetUserId && users.find(u => u.id === p.targetUserId)?.cabangId === filterCabang)
+                    : selectedCabangIds.length > 0
+                        ? selectedCabangIds.includes(p.targetCabangId || '') || (p.targetUserId && selectedCabangIds.some(cId => users.find(u => u.id === p.targetUserId)?.cabangId === cId))
                         : true;
 
                 if (!isRelevant) return;
@@ -320,7 +310,7 @@ export default function LaporanStok() {
             penyesuaianStok.forEach(adj => {
                 if (adj.status !== 'disetujui' || adj.barangId !== item.id) return;
 
-                const isRelevant = filterCabang !== 'all' ? adj.cabangId === filterCabang : true;
+                const isRelevant = selectedCabangIds.length > 0 ? selectedCabangIds.includes(adj.cabangId || '') : true;
                 if (!isRelevant) return; // Skip if filtered out
                 if (specFilterUser !== 'all') return; // Skip for user specific
 
@@ -359,8 +349,10 @@ export default function LaporanStok() {
     };
 
     const stockReport = useMemo(() => {
-        return calculateStockReport(filterUser);
-    }, [barang, stokPengguna, penjualan, mutasiBarang, persetujuan, penyesuaianStok, effectiveDateRange, filterCabang, filterUser, users]);
+        // Use selectedUserIds[0] if exactly one user selected, otherwise 'all'
+        const specUser = selectedUserIds.length === 1 ? selectedUserIds[0] : 'all';
+        return calculateStockReport(specUser);
+    }, [barang, stokPengguna, penjualan, mutasiBarang, persetujuan, penyesuaianStok, effectiveDateRange, selectedCabangIds, selectedUserIds, users]);
 
     const filteredStockReport = useMemo(() => {
         let result = stockReport;
@@ -547,7 +539,7 @@ export default function LaporanStok() {
         doc.setFontSize(10);
         doc.text(`Periode: ${isSingleDate ? format(singleDate, 'dd/MM/yyyy') : `${format(dateRange?.from || new Date(), 'dd/MM/yyyy')} - ${format(dateRange?.to || new Date(), 'dd/MM/yyyy')}`}`, 14, 22);
 
-        const namaCabang = filterCabang === 'all' ? 'Semua Cabang' : (cabang.find(c => c.id === filterCabang)?.nama || '-');
+        const namaCabang = selectedCabangIds.length === 0 ? 'Semua Cabang' : selectedCabangIds.map(id => cabang.find(c => c.id === id)?.nama || id).join(', ');
         doc.text(`Cabang: ${namaCabang}`, 14, 27);
 
         const tableColumn = ["Nama", "Satuan", "Stok Awal", "Masuk", "Keluar", "Terjual", "Promo", "Stok Akhir"];
@@ -578,7 +570,7 @@ export default function LaporanStok() {
         });
 
         // 2. Breakdown table per User (If 'Semua Pengguna' is chosen)
-        if (filterUser === 'all' && relevantUsers.length > 0) {
+        if (selectedUserIds.length === 0 && relevantUsers.length > 0) {
             const reportsPerUser = relevantUsers.map(u => ({
                 user: u,
                 report: calculateStockReport(u.id)
@@ -647,39 +639,14 @@ export default function LaporanStok() {
                     </div>
 
                     <div className="flex flex-wrap gap-2 w-full md:w-auto">
-                        {/* Branch Filter (Admin Only) */}
-                        <div className="flex flex-col gap-1">
-                            <span className="text-[10px] text-muted-foreground ml-1">Cabang</span>
-                            <Select
-                                value={filterCabang}
-                                onValueChange={(val) => { setFilterCabang(val); setFilterUser('all'); }}
-                                disabled={!isAdminOrOwner}
-                            >
-                                <SelectTrigger className="w-[160px] h-8 text-xs">
-                                    <SelectValue placeholder="Pilih Cabang" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    <SelectItem value="all">Semua Cabang</SelectItem>
-                                    {cabang.map(c => <SelectItem key={c.id} value={c.id}>{c.nama}</SelectItem>)}
-                                </SelectContent>
-                            </Select>
-                        </div>
-
-                        {/* User Filter */}
-                        <div className="flex flex-col gap-1">
-                            <span className="text-[10px] text-muted-foreground ml-1">Pengguna</span>
-                            <SearchableSelect
-                                value={filterUser}
-                                onChange={setFilterUser}
-                                placeholder="Pilih Pengguna"
-                                searchPlaceholder="Cari pengguna..."
-                                options={[
-                                    { label: "Semua Pengguna", value: "all" },
-                                    ...relevantUsers.map(u => ({ label: u.nama, value: u.id }))
-                                ]}
-                                className="w-[160px] h-8 text-xs bg-transparent border-input"
-                            />
-                        </div>
+                    {/* Scope Filters */}
+                        <ScopeFilters
+                            selectedCabangIds={selectedCabangIds}
+                            setSelectedCabangIds={setSelectedCabangIds}
+                            selectedUserIds={selectedUserIds}
+                            setSelectedUserIds={setSelectedUserIds}
+                            className="!space-y-0 flex flex-row items-center gap-2"
+                        />
 
                         {/* Date Range */}
                         <div className="flex flex-col gap-1">

@@ -98,6 +98,13 @@ export function ApprovalCard({
                     </div>
                 );
             }
+            if (item.jenis === 'rencana_setoran' && (item.data as PersetujuanPayload)?.approvals?.owner) {
+                return (
+                    <div className="flex items-center gap-1 text-amber-600 bg-amber-50 px-2 py-0.5 rounded text-[10px] font-medium border border-amber-200">
+                        <Clock className="w-3 h-3" /> Tinjauan Manager
+                    </div>
+                );
+            }
             return (
                 <div className="flex items-center gap-1 text-yellow-600 bg-yellow-50 px-2 py-0.5 rounded text-xs font-medium">
                     <Clock className="w-3 h-3" /> Menunggu
@@ -139,7 +146,9 @@ export function ApprovalCard({
                           {/* Header Info */}
                           <div className="flex justify-between items-start mb-2">
                               <div className="min-w-0 pr-2">
-                                  <p className="font-semibold capitalize truncate">Pengajuan {item.jenis.replace(/_/g, ' ')}</p>
+                                  <p className="font-semibold capitalize truncate">
+                                      {item.jenis === 'rencana_setoran' ? 'Setoran Kepusat' : `Pengajuan ${item.jenis.replace(/_/g, ' ')}`}
+                                  </p>
                                   {customer && (
                                      <div className="flex items-center gap-1 mt-0.5 text-blue-700 bg-blue-50 w-fit px-1.5 py-0.5 rounded text-xs font-medium border border-blue-200">
                                          <UserIcon size={12} />

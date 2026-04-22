@@ -1,5 +1,4 @@
 'use client';
-import Link from 'next/link';
 import { useState, useMemo, useRef, useEffect, useCallback } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -8,31 +7,26 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useDatabase } from '@/contexts/DatabaseContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
-import { MapPin, Clock, User, Activity, Users, ShoppingCart, Crosshair, Wallet, LogIn, LogOut, Map as MapIcon, Package, Store, PlusCircle, Home, TrendingUp, Coins, Target, CheckCircle, CheckCircle2, ListFilter, Building, Navigation, RotateCcw, Search } from 'lucide-react';
+import { MapPin, Clock, User, Activity, Users, ShoppingCart, Crosshair, Wallet, LogIn, LogOut, Map as MapIcon, Package, Store, PlusCircle, Home, TrendingUp, Coins, Target, CheckCircle, CheckCircle2, ListFilter, Building, Navigation, RotateCcw, Search, AlertTriangle } from 'lucide-react';
 import { formatTanggal, formatWaktu, formatRupiah } from '@/lib/utils';
 import { differenceInMinutes } from 'date-fns';
 import { SalesRouteMap } from '@/components/features/components/SalesRouteMap';
 import { DatePickerWithRange } from '@/components/ui/date-range-picker';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { DateRange } from "react-day-picker";
-import { addDays, isWithinInterval, startOfDay, endOfDay } from "date-fns";
-import { Absensi, Pelanggan, Penjualan, User as UserType } from '@/types';
+import { startOfDay, endOfDay } from "date-fns";
+import { Absensi, Pelanggan, Penjualan } from '@/types';
 
-// Google Maps
-import { Map as GMap, AdvancedMarker, InfoWindow, useMap, Pin, useMapsLibrary, useApiIsLoaded } from '@vis.gl/react-google-maps';
+import dynamic from 'next/dynamic';
+const MonitoringMapWrapper = dynamic(() => import('./MonitoringMap').then(mod => mod.MonitoringMapWrapper), { ssr: false, loading: () => <div className="h-full w-full bg-muted flex items-center justify-center">Loading Maps...</div> });
+
 import { stringToColor, getDistance } from '@/lib/mapUtils';
 import { MapMode, MapMarker, UserLocation, DynamicActivityData, ActivityItem } from './types';
 
-// Custom Icons constants
-const ICONS = {
-    team: '#3b82f6', // blue
-    customer: '#10b981', // green
-    transaction: '#ef4444', // red
-    active: '#f59e0b' // gold
-};
 
 
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
+
+
 import { Button } from "@/components/ui/button";
 import { ExternalLink, Info, Filter, ChevronDown } from "lucide-react";
 import {
@@ -47,23 +41,27 @@ import {
 
 
 export default function Monitoring() {
-    const { user } = useAuth();
-    const currentUser = user;
+    const { user: currentUser } = useAuth();
     const router = useRouter();
     const {
         users, absensi, cabang: listCabang, pelanggan: listPelanggan, penjualan, setoran, mutasiBarang, karyawan: listKaryawan,
-        viewMode
+        viewMode, kategoriPelanggan, profilPerusahaan, deletePelanggan, refresh
     } = useDatabase();
 
     const [mapMode, setMapMode] = useState<MapMode>('team');
     const [selectedMarker, setSelectedMarker] = useState<MapMarker | null>(null);
     const [mapCenter, setMapCenter] = useState<{ lat: number; lng: number }>({ lat: -6.2088, lng: 106.8456 });
-    const [selectedCabang, setSelectedCabang] = useState<string>('all');
-    const [selectedUser, setSelectedUser] = useState<string>('all');
-    const [dateRange, setDateRange] = useState<DateRange | undefined>({
-        from: new Date(),
-        to: new Date()
-    });
+    const [selectedCabang, setSelectedCabang] = useState<string[]>([]);
+    const [selectedUser, setSelectedUser] = useState<string[]>([]);
+    const [dateRange, setDateRange] = useState<DateRange | undefined>(undefined);
+    const [colorIndicator, setColorIndicator] = useState<'pengguna' | 'cabang' | 'kategori'>('pengguna');
+    const [duplicateThreshold, setDuplicateThreshold] = useState(15); // Default 15 meters
+    const [duplicateSearch, setDuplicateSearch] = useState('');
+    const [isClient, setIsClient] = useState(false);
+
+    useEffect(() => {
+        setIsClient(true);
+    }, []);
 
     // Infinite Scroll States
     const [historyLimit, setHistoryLimit] = useState(10);
@@ -73,38 +71,34 @@ export default function Monitoring() {
     const searchParams = useSearchParams();
     const activeTab = searchParams.get('tab') || 'explore';
 
-    // --- MAP SEARCH & LOCATION ---
-    const apiIsLoaded = useApiIsLoaded();
-    const placesLibrary = useMapsLibrary('places');
-    const [mapSearchInput, setMapSearchInput] = useState('');
-    const mapSearchRef = useRef<HTMLInputElement>(null);
-    const [autocomplete, setAutocomplete] = useState<google.maps.places.Autocomplete | null>(null);
+    const hasSetDefaultTrackingDate = useRef(false);
 
     useEffect(() => {
-        if (!placesLibrary || !mapSearchRef.current || !apiIsLoaded) return;
+        if (isClient && activeTab === 'tracking' && !dateRange && !hasSetDefaultTrackingDate.current) {
+            setDateRange({ from: new Date(), to: new Date() });
+            hasSetDefaultTrackingDate.current = true;
+        } else if (activeTab !== 'tracking') {
+            hasSetDefaultTrackingDate.current = false;
+        }
+    }, [activeTab, dateRange, isClient]);
 
-        const ac = new placesLibrary.Autocomplete(mapSearchRef.current, {
-            fields: ['geometry', 'name', 'formatted_address'],
-            componentRestrictions: { country: 'id' }
-        });
-        setAutocomplete(ac);
+    // Search input states maintained for UI only
+    const [mapSearchInput, setMapSearchInput] = useState('');
+    const mapSearchRef = useRef<HTMLInputElement>(null);
 
-        ac.addListener('place_changed', () => {
-            const place = ac.getPlace();
-            if (place.geometry?.location) {
-                const lat = place.geometry.location.lat();
-                const lng = place.geometry.location.lng();
-                setMapCenter({ lat, lng });
-                setMapSearchInput(place.formatted_address || place.name || '');
+    // Provide a simple search mechanism via OpenStreetMap Nominatim
+    const handleSearchMap = async () => {
+        if (!mapSearchInput.trim()) return;
+        try {
+            const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(mapSearchInput)}&countrycodes=id`);
+            const data = await res.json();
+            if (data && data.length > 0) {
+                setMapCenter({ lat: parseFloat(data[0].lat), lng: parseFloat(data[0].lon) });
             }
-        });
-
-        return () => {
-            if (window.google?.maps?.event && ac) {
-                google.maps.event.clearInstanceListeners(ac);
-            }
-        };
-    }, [placesLibrary, apiIsLoaded]);
+        } catch (err) {
+            console.error(err);
+        }
+    };
 
     const handleCenterOnMe = () => {
         if (navigator.geolocation) {
@@ -138,24 +132,22 @@ export default function Monitoring() {
     const filterByViewMode = useCallback(<T extends { userId?: string; salesId?: string; createdBy?: string; id: string }>(items: T[]) => {
         if (viewMode === 'me') {
             return items.filter(item =>
-                (item.userId && item.userId === user?.id) ||
-                (item.salesId && item.salesId === user?.id) ||
-                (item.createdBy && item.createdBy === user?.id) ||
-                (item.id === user?.id) // For user-specific items like activeUsers
+                (item.userId && item.userId === currentUser?.id) ||
+                (item.salesId && item.salesId === currentUser?.id) ||
+                (item.createdBy && item.createdBy === currentUser?.id) ||
+                (item.id === currentUser?.id) // For user-specific items like activeUsers
             );
         }
         return items;
-    }, [viewMode, user]);
+    }, [viewMode, currentUser]);
 
     // Calculate Team Markers
     const teamMarkers = useMemo(() => {
-        if (!dateRange?.from) return [];
-
-        const start = startOfDay(dateRange.from);
-        const end = endOfDay(dateRange.to || dateRange.from);
-
         const filteredAbsensi = absensi.filter(a => {
+            if (!dateRange?.from) return true;
             const d = new Date(a.tanggal);
+            const start = startOfDay(dateRange.from);
+            const end = endOfDay(dateRange.to || dateRange.from);
             return d >= start && d <= end;
         });
 
@@ -172,8 +164,16 @@ export default function Monitoring() {
         return Array.from(userLatestAbsensi.values()).map(record => {
             const u = users.find(u => u.id === record.userId);
             if (!u) return null;
-            if (selectedCabang !== 'all' && u.cabangId !== selectedCabang) return null;
-            if (selectedUser !== 'all' && u.id !== selectedUser) return null;
+            if (selectedCabang.length > 0 && (!u.cabangId || !selectedCabang.includes(u.cabangId))) return null;
+            if (selectedUser.length > 0 && !selectedUser.includes(u.id)) return null;
+
+            let color = stringToColor(u.id);
+            let userName = u.nama;
+            if (colorIndicator === 'cabang') {
+                const cbg = listCabang.find(c => c.id === u.cabangId);
+                color = cbg ? stringToColor(cbg.id) : stringToColor(u.id);
+                userName = cbg ? cbg.nama : u.nama;
+            }
 
             return {
                 id: record.id,
@@ -182,63 +182,100 @@ export default function Monitoring() {
                 subtitle: `Check-in: ${formatWaktu(new Date(record.checkIn || record.tanggal))}`,
                 type: 'team',
                 detail: u.roles.join(', '),
-                color: stringToColor(u.id),
+                color,
                 data: { ...u, absensi: record },
-                userName: u.nama
+                userName
             };
         }).filter(Boolean) as MapMarker[];
-    }, [dateRange, absensi, users, filterByViewMode, selectedCabang, selectedUser]);
+    }, [dateRange, absensi, users, filterByViewMode, selectedCabang, selectedUser, colorIndicator, listCabang]);
 
     // Calculate Customer Markers
     const customerMarkers = useMemo(() => {
-        if (!dateRange?.from) return [];
-
-        const start = startOfDay(dateRange.from);
-        const end = endOfDay(dateRange.to || dateRange.from);
-
         return filterByViewMode<Pelanggan>(listPelanggan).filter(p => { // Apply viewMode filter here
-            const created = new Date(p.createdAt);
-            const updated = new Date(p.updatedAt);
-            const inRange = (created >= start && created <= end) || (updated >= start && updated <= end);
+            if (dateRange?.from) {
+                const start = startOfDay(dateRange.from);
+                const end = endOfDay(dateRange.to || dateRange.from);
+                const created = new Date(p.createdAt || new Date());
+                const updated = new Date(p.updatedAt || new Date());
+                const inRange = (created >= start && created <= end) || (updated >= start && updated <= end);
+                if (!inRange) return false;
+            }
 
-            if (selectedCabang !== 'all' && p.cabangId !== selectedCabang) return false;
-            if (selectedUser !== 'all' && p.salesId !== selectedUser) return false;
+            if (selectedCabang.length > 0 && (!p.cabangId || !selectedCabang.includes(p.cabangId))) return false;
+            if (selectedUser.length > 0 && (!p.salesId || !selectedUser.includes(p.salesId))) return false;
 
-            return inRange && p.lokasi?.latitude && p.lokasi?.longitude;
+            return p.lokasi?.latitude && p.lokasi?.longitude;
         }).map(p => {
             const sales = users.find(u => u.id === p.salesId);
+            const cabang = listCabang.find(c => c.id === p.cabangId);
+            const kategori = kategoriPelanggan.find(k => k.id === p.kategoriId);
+
+            let color = stringToColor(p.id);
+            let userName = p.nama;
+
+            if (colorIndicator === 'pengguna' && sales) {
+                color = stringToColor(sales.id);
+                userName = sales.nama;
+            } else if (colorIndicator === 'cabang' && cabang) {
+                color = stringToColor(cabang.id);
+                userName = cabang.nama;
+            } else if (colorIndicator === 'kategori' && kategori) {
+                color = stringToColor(kategori.id);
+                userName = kategori.nama;
+            } else if (colorIndicator === 'pengguna') {
+                userName = 'Umum (Tanpa Sales)';
+            } else if (colorIndicator === 'cabang') {
+                userName = 'Umum (Tanpa Cabang)';
+            } else if (colorIndicator === 'kategori') {
+                userName = 'Umum (Tanpa Kategori)';
+            }
+
             return {
                 id: p.id,
                 position: { lat: p.lokasi!.latitude, lng: p.lokasi!.longitude },
                 title: p.nama,
                 subtitle: p.telepon,
                 type: 'customer',
-                detail: `${p.alamat} (Sales: ${sales?.nama || '-'})`,
-                color: sales ? stringToColor(sales.id) : undefined,
+                detail: `${p.alamat} (Sales: ${sales?.nama || '-'} | Cabang: ${cabang?.nama || '-'})`,
+                color,
                 data: p,
-                userName: sales?.nama
+                userName
             };
         }) as MapMarker[];
-    }, [dateRange, listPelanggan, users, filterByViewMode, selectedCabang, selectedUser]);
+    }, [dateRange, listPelanggan, users, filterByViewMode, selectedCabang, selectedUser, colorIndicator, listCabang, kategoriPelanggan]);
 
     // Calculate Transaction Markers
     const transactionMarkers = useMemo(() => {
-        if (!dateRange?.from) return [];
-
-        const start = startOfDay(dateRange.from);
-        const end = endOfDay(dateRange.to || dateRange.from);
-
         return filterByViewMode<Penjualan>(penjualan).filter(p => { // Apply viewMode filter here
-            const d = new Date(p.tanggal);
-            if (selectedCabang !== 'all') {
-                const saleUser = users.find(u => u.id === p.salesId);
-                if (saleUser?.cabangId !== selectedCabang) return false;
+            if (dateRange?.from) {
+                const start = startOfDay(dateRange.from);
+                const end = endOfDay(dateRange.to || dateRange.from);
+                const d = new Date(p.tanggal);
+                if (d < start || d > end) return false;
             }
-            if (selectedUser !== 'all' && p.salesId !== selectedUser) return false;
-            return d >= start && d <= end && p.lokasi?.latitude && p.lokasi?.longitude;
+
+            const saleUser = users.find(u => u.id === p.salesId);
+            if (selectedCabang.length > 0) {
+                if (!saleUser?.cabangId || !selectedCabang.includes(saleUser.cabangId)) return false;
+            }
+            if (selectedUser.length > 0 && (!p.salesId || !selectedUser.includes(p.salesId))) return false;
+            return p.lokasi?.latitude && p.lokasi?.longitude;
         }).map(p => {
             const cust = listPelanggan.find(c => c.id === p.pelangganId);
             const sales = users.find(u => u.id === p.salesId);
+            const cabang = listCabang.find(c => c.id === sales?.cabangId);
+            const kategori = kategoriPelanggan.find(k => k.id === cust?.kategoriId);
+
+            let color = sales ? stringToColor(sales.id) : undefined;
+            let userName = sales?.nama || 'Umum';
+
+            if (colorIndicator === 'cabang') {
+                color = cabang ? stringToColor(cabang.id) : undefined;
+                userName = cabang?.nama || 'Umum';
+            } else if (colorIndicator === 'kategori') {
+                color = kategori ? stringToColor(kategori.id) : undefined;
+                userName = kategori?.nama || 'Umum';
+            }
 
             return {
                 id: p.id,
@@ -247,12 +284,114 @@ export default function Monitoring() {
                 subtitle: `${sales?.nama || '-'} • ${formatRupiah(p.total)}`,
                 type: 'transaction',
                 detail: `Nota: ${p.nomorNota}`,
-                color: sales ? stringToColor(sales.id) : undefined,
+                color,
                 data: p,
-                userName: sales?.nama
+                userName
             };
         }) as MapMarker[];
-    }, [dateRange, penjualan, listPelanggan, users, filterByViewMode, selectedCabang, selectedUser]);
+    }, [dateRange, penjualan, listPelanggan, users, filterByViewMode, selectedCabang, selectedUser, colorIndicator, listCabang, kategoriPelanggan]);
+
+    // --- HELPER FOR STRING SIMILARITY ---
+    const calculateSimilarity = (str1: string, str2: string): number => {
+        const s1 = str1.toLowerCase().replace(/[^a-z0-9]/g, '');
+        const s2 = str2.toLowerCase().replace(/[^a-z0-9]/g, '');
+
+        if (s1 === s2) return 100;
+        if (s1.includes(s2) || s2.includes(s1)) return 85;
+
+        // Simple Levenshtein distance
+        const track = Array(s2.length + 1).fill(null).map(() => Array(s1.length + 1).fill(null));
+        for (let i = 0; i <= s1.length; i += 1) track[0][i] = i;
+        for (let j = 0; j <= s2.length; j += 1) track[j][0] = j;
+        for (let j = 1; j <= s2.length; j += 1) {
+            for (let i = 1; i <= s1.length; i += 1) {
+                const indicator = s1[i - 1] === s2[j - 1] ? 0 : 1;
+                track[j][i] = Math.min(
+                    track[j][i - 1] + 1,
+                    track[j - 1][i] + 1,
+                    track[j - 1][i - 1] + indicator
+                );
+            }
+        }
+        const distance = track[s2.length][s1.length];
+        const maxLength = Math.max(s1.length, s2.length);
+        return Math.round(((maxLength - distance) / maxLength) * 100);
+    };
+
+    // Combine Markers based on Map Mode and View Mode
+    // --- DOUBLE STORE DETECTION LOGIC ---
+    const duplicateGroups = useMemo(() => {
+        if (customerMarkers.length === 0) return [];
+
+        const customersWithLocation = customerMarkers.filter(m => m.type === 'customer');
+
+        const groups: MapMarker[][] = [];
+        const visited = new Set<string>();
+
+        customersWithLocation.forEach(m => {
+            if (visited.has(m.id)) return;
+
+            const currentGroup: MapMarker[] = [];
+            const queue = [m];
+            visited.add(m.id);
+
+            while (queue.length > 0) {
+                const current = queue.shift()!;
+                currentGroup.push(current);
+
+                customersWithLocation.forEach(other => {
+                    if (visited.has(other.id)) return;
+                    const dist = getDistance(
+                        current.position.lat,
+                        current.position.lng,
+                        other.position.lat,
+                        other.position.lng
+                    );
+
+                    if (dist <= duplicateThreshold) {
+                        visited.add(other.id);
+                        queue.push(other);
+                    }
+                });
+            }
+
+            if (currentGroup.length > 1) {
+                groups.push(currentGroup);
+            }
+        });
+
+        return groups;
+    }, [customerMarkers, duplicateThreshold]);
+
+    const duplicateMarkerIds = useMemo(() => {
+        return new Set(duplicateGroups.flatMap(g => g.map(m => m.id)));
+    }, [duplicateGroups]);
+
+
+    const filteredDuplicateGroups = useMemo(() => {
+        const groups = duplicateGroups.map(group => {
+            const markersWithSimilarity = group.map((m, idx) => {
+                if (idx === 0) return { ...m, similarity: 100 };
+                const score = calculateSimilarity(group[0].title, m.title);
+                return { ...m, similarity: score };
+            });
+
+            const maxSimilarity = Math.max(...markersWithSimilarity.map(m => (m as any).similarity || 0));
+
+            return {
+                markers: markersWithSimilarity,
+                maxSimilarity
+            };
+        });
+
+        if (!duplicateSearch.trim()) return groups;
+
+        return groups.filter(group =>
+            group.markers.some(m =>
+                m.title.toLowerCase().includes(duplicateSearch.toLowerCase())
+            )
+        );
+    }, [duplicateGroups, duplicateSearch]);
 
     // Combine Markers based on Map Mode and View Mode
     const markers = useMemo(() => {
@@ -262,20 +401,18 @@ export default function Monitoring() {
         if (mapMode === 'pelanggan') result = customerMarkers;
         if (mapMode === 'transaksi') result = transactionMarkers;
 
-        return result;
-    }, [mapMode, teamMarkers, customerMarkers, transactionMarkers]);
-
-    // Sync Map Center when markers change or mode changes
-    useEffect(() => {
-        if (markers.length > 0) {
-            setMapCenter(markers[0].position);
+        // Mark duplicates in the final markers list for the map to highlight
+        if (mapMode === 'pelanggan') {
+            return result.map(m => ({
+                ...m,
+                isDuplicate: duplicateMarkerIds.has(m.id)
+            }));
         }
-    }, [markers]);
 
-    // Reset selectedUser when selectedCabang changes
-    useEffect(() => {
-        setSelectedUser('all');
-    }, [selectedCabang]);
+        return result;
+    }, [mapMode, teamMarkers, customerMarkers, transactionMarkers, duplicateMarkerIds]);
+
+
     // --- EXISTING LOGIC FOR OTHER TABS ---
     // Get today's check-ins
     const today = new Date();
@@ -291,30 +428,30 @@ export default function Monitoring() {
             if (!(u.roles.includes('sales') || u.roles.includes('leader'))) return false;
 
             // 3. Permission Check
-            // If Admin/Owner/Finance -> See All
-            if (user?.roles.includes('admin') || user?.roles.includes('owner') || user?.roles.includes('finance')) {
+            // If Admin/Owner/Finance/Manager -> See All
+            if (currentUser?.roles.includes('admin') || currentUser?.roles.includes('owner') || currentUser?.roles.includes('finance') || currentUser?.roles.includes('manager')) {
                 return true;
             }
             // If Leader -> See only their branch
-            if (user?.roles.includes('leader')) {
-                return u.cabangId === user.cabangId;
+            if (currentUser?.roles.includes('leader')) {
+                return u.cabangId === currentUser.cabangId;
             }
             // If Sales -> See ONLY themselves
-            return u.id === user?.id;
+            return u.id === currentUser?.id;
         });
 
         // Apply viewMode filter
         return filterByViewMode(filteredUsers);
-    }, [users, filterByViewMode, user]);
+    }, [users, filterByViewMode, currentUser]);
 
 
 
     // Fetch User Locations for Session Tab
     useEffect(() => {
         const fetchLocations = async () => {
-            if (!user) return;
+            if (!currentUser) return;
             // Only Admin/Owner can see all sessions, others only their own
-            if (!user.roles.some(r => (['admin', 'owner'] as string[]).includes(r)) && viewMode !== 'me') return;
+            if (!currentUser.roles.some(r => (['admin', 'owner'] as string[]).includes(r)) && viewMode !== 'me') return;
 
             let query = supabase
                 .from('user_locations')
@@ -325,7 +462,8 @@ export default function Monitoring() {
                   timestamp,
                   users ( id, nama, roles, cabang_id )
               `)
-                .order('timestamp', { ascending: false });
+                .order('timestamp', { ascending: false })
+                .limit(100); // Batasi query untuk mencegah performa lemot di tab Tracking
 
             // Filter Date (Same as global dateRange)
             if (dateRange?.from) {
@@ -336,7 +474,7 @@ export default function Monitoring() {
 
             // Apply viewMode filter for session locations
             if (viewMode === 'me') {
-                query = query.eq('user_id', user.id);
+                query = query.eq('user_id', currentUser.id);
             } else if (selectedSessionUsers.length > 0) {
                 query = query.in('user_id', selectedSessionUsers);
             }
@@ -364,8 +502,9 @@ export default function Monitoring() {
             }
         };
 
+        if (activeTab !== 'tracking') return;
         fetchLocations();
-    }, [dateRange, selectedSessionUsers, user, viewMode]); // Re-fetch on filters change
+    }, [dateRange, selectedSessionUsers, currentUser, viewMode, activeTab]); // Re-fetch on filters change
 
     const sessionMarkers = useMemo(() => {
         return sessionLocations.map(loc => ({
@@ -382,7 +521,7 @@ export default function Monitoring() {
 
     // COMBINED TIMELINE LOGIC
     const combinedActivities = useMemo(() => {
-        if (!dateRange?.from) return [];
+        if (!dateRange?.from || activeTab !== 'tracking') return [];
         const start = startOfDay(dateRange.from);
         const end = endOfDay(dateRange.to || dateRange.from);
 
@@ -543,7 +682,7 @@ export default function Monitoring() {
         // Process from oldest to newest for grouping logic, then reverse back
         const chronological = [...items].sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime());
 
-        chronological.forEach((item, idx) => {
+        chronological.forEach((item) => {
             if (item.type !== 'ping') {
                 if (currentStay) {
                     processed.push(currentStay);
@@ -639,19 +778,29 @@ export default function Monitoring() {
         // Filter out very short stays (pings) if they are just single pings but keep them if they are meaningful
         // Or just return everything sorted
         return processed.sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime());
-    }, [sessionLocations, absensi, penjualan, setoran, mutasiBarang, dateRange, selectedSessionUsers, users, listPelanggan, listCabang, listKaryawan, currentUser?.roles, currentUser?.cabangId]);
+    }, [sessionLocations, absensi, penjualan, setoran, mutasiBarang, dateRange, selectedSessionUsers, users, listPelanggan, listCabang, listKaryawan, currentUser?.roles, currentUser?.cabangId, activeTab]);
 
 
     return (
         <div className="animate-in fade-in duration-500">
             <div className="p-4 space-y-4">
                 <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full">
-                    <TabsList className="w-full grid grid-cols-4 h-auto p-1">
+                    <TabsList className="w-full grid grid-cols-5 h-auto p-1">
                         <TabsTrigger value="explore" className="text-xs md:text-sm py-2">
                             <MapPin className="w-3 h-3 md:w-4 md:h-4 mr-1 md:mr-2" />
                             Jelajahi
                         </TabsTrigger>
-                        {user?.roles.some(r => (['admin', 'owner'] as string[]).includes(r)) && (
+                        <TabsTrigger value="double-toko" className="text-xs md:text-sm py-2 relative">
+                            <AlertTriangle className="w-3 h-3 md:w-4 md:h-4 mr-1 md:mr-2" />
+                            Indikasi
+                            {duplicateGroups.length > 0 && (
+                                <span className="absolute -top-1 -right-1 flex h-2 w-2">
+                                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
+                                    <span className="relative inline-flex rounded-full h-2 w-2 bg-red-500"></span>
+                                </span>
+                            )}
+                        </TabsTrigger>
+                        {currentUser?.roles.some(r => (['admin', 'owner'] as string[]).includes(r)) && (
                             <TabsTrigger value="tracking" className="text-xs md:text-sm py-2">
                                 <Activity className="w-3 h-3 md:w-4 md:h-4 mr-1 md:mr-2" />
                                 Tracking
@@ -674,9 +823,9 @@ export default function Monitoring() {
                                 <>
                                     <Card className="bg-gradient-to-br from-blue-500/10 to-indigo-500/10 border-blue-200/50">
                                         <CardContent className="p-3">
-                                            <p className="text-[10px] text-blue-600 font-semibold uppercase tracking-wider mb-1">Total Tim ({selectedCabang !== 'all' ? listCabang.find(c => c.id === selectedCabang)?.nama : 'Semua'})</p>
+                                            <p className="text-[10px] text-blue-600 font-semibold uppercase tracking-wider mb-1">Total Tim ({selectedCabang.length > 0 ? `${selectedCabang.length} Cabang` : 'Semua'})</p>
                                             <div className="flex items-center justify-between">
-                                                <h4 className="text-xl font-bold text-blue-700">{users.filter(u => (selectedCabang === 'all' || u.cabangId === selectedCabang) && (selectedUser === 'all' || u.id === selectedUser)).length}</h4>
+                                                <h4 className="text-xl font-bold text-blue-700">{users.filter(u => (selectedCabang.length === 0 || (u.cabangId && selectedCabang.includes(u.cabangId))) && (selectedUser.length === 0 || selectedUser.includes(u.id))).length}</h4>
                                                 <Users className="w-4 h-4 text-blue-400" />
                                             </div>
                                         </CardContent>
@@ -769,54 +918,128 @@ export default function Monitoring() {
                             )}
                         </div>
 
+                        {/* High Visibility Warning Banner */}
+                        {duplicateGroups.length > 0 && (
+                            <div className="bg-red-50 border border-red-200 rounded-xl p-3 flex items-center justify-between animate-in slide-in-from-top-2 duration-300">
+                                <div className="flex items-center gap-3">
+                                    <div className="w-10 h-10 rounded-full bg-red-100 flex items-center justify-center shrink-0">
+                                        <AlertTriangle className="w-5 h-5 text-red-600 animate-pulse" />
+                                    </div>
+                                    <div>
+                                        <h4 className="text-sm font-bold text-red-800">Perhatian: Potensi Double Toko Terdeteksi!</h4>
+                                        <p className="text-xs text-red-600">Ditemukan {duplicateGroups.length} grup lokasi pelanggan yang saling berdekatan (di bawah {duplicateThreshold}m).</p>
+                                    </div>
+                                </div>
+                                <Button
+                                    size="sm"
+                                    className="bg-red-600 hover:bg-red-700 text-white text-xs font-bold px-4"
+                                    onClick={() => {
+                                        handleTabChange('double-toko');
+                                        setTimeout(() => {
+                                            const element = document.getElementById('duplicate-monitoring-card');
+                                            element?.scrollIntoView({ behavior: 'smooth' });
+                                        }, 300);
+                                    }}
+                                >
+                                    Periksa Sekarang
+                                </Button>
+                            </div>
+                        )}
+
                         {/* Map Controls */}
                         <div className="flex flex-col md:flex-row gap-2 p-2 bg-muted/40 rounded-xl border">
                             {(currentUser?.roles.includes('admin') || currentUser?.roles.includes('owner') || currentUser?.roles.includes('finance')) && (
                                 <>
-                                    <Select value={selectedCabang} onValueChange={setSelectedCabang}>
-                                        <SelectTrigger className="w-full md:w-[200px] h-9 text-xs bg-background">
-                                            <SelectValue placeholder="Semua Cabang" />
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                            <SelectItem value="all">
-                                                <div className="flex items-center gap-2">
-                                                    <Building className="w-3.5 h-3.5 text-muted-foreground" />
-                                                    <span className="text-xs">Semua Cabang</span>
+                                    <DropdownMenu>
+                                        <DropdownMenuTrigger asChild>
+                                            <Button variant="outline" className="w-full md:w-[200px] h-9 text-xs justify-between bg-background font-normal px-3">
+                                                <div className="flex items-center gap-2 truncate">
+                                                    <Building className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+                                                    <span className="truncate">
+                                                        {selectedCabang.length === 0
+                                                            ? "Semua Cabang"
+                                                            : `${selectedCabang.length} Cabang`}
+                                                    </span>
                                                 </div>
-                                            </SelectItem>
+                                                <ChevronDown className="w-4 h-4 opacity-50 shrink-0" />
+                                            </Button>
+                                        </DropdownMenuTrigger>
+                                        <DropdownMenuContent className="w-[200px] max-h-[300px] overflow-y-auto">
+                                            <DropdownMenuLabel>Pilih Cabang</DropdownMenuLabel>
+                                            <DropdownMenuSeparator />
+                                            <DropdownMenuCheckboxItem
+                                                checked={selectedCabang.length === 0}
+                                                onCheckedChange={() => setSelectedCabang([])}
+                                            >
+                                                Semua Cabang
+                                            </DropdownMenuCheckboxItem>
+                                            <DropdownMenuSeparator />
                                             {listCabang.map(cabang => (
-                                                <SelectItem key={cabang.id} value={cabang.id}>
-                                                    <span className="text-xs">{cabang.nama}</span>
-                                                </SelectItem>
+                                                <DropdownMenuCheckboxItem
+                                                    key={cabang.id}
+                                                    checked={selectedCabang.includes(cabang.id)}
+                                                    onCheckedChange={(checked) => {
+                                                        if (checked) {
+                                                            setSelectedCabang([...selectedCabang, cabang.id]);
+                                                        } else {
+                                                            setSelectedCabang(selectedCabang.filter(id => id !== cabang.id));
+                                                        }
+                                                    }}
+                                                >
+                                                    {cabang.nama}
+                                                </DropdownMenuCheckboxItem>
                                             ))}
-                                        </SelectContent>
-                                    </Select>
+                                        </DropdownMenuContent>
+                                    </DropdownMenu>
 
-                                    <Select value={selectedUser} onValueChange={setSelectedUser}>
-                                        <SelectTrigger className="w-full md:w-[200px] h-9 text-xs bg-background">
-                                            <SelectValue placeholder="Semua Tim" />
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                            <SelectItem value="all">
-                                                <div className="flex items-center gap-2">
-                                                    <Users className="w-3.5 h-3.5 text-muted-foreground" />
-                                                    <span className="text-xs">Semua Tim</span>
+                                    <DropdownMenu>
+                                        <DropdownMenuTrigger asChild>
+                                            <Button variant="outline" className="w-full md:w-[200px] h-9 text-xs justify-between bg-background font-normal px-3">
+                                                <div className="flex items-center gap-2 truncate">
+                                                    <Users className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+                                                    <span className="truncate">
+                                                        {selectedUser.length === 0
+                                                            ? "Semua Tim"
+                                                            : `${selectedUser.length} Tim`}
+                                                    </span>
                                                 </div>
-                                            </SelectItem>
+                                                <ChevronDown className="w-4 h-4 opacity-50 shrink-0" />
+                                            </Button>
+                                        </DropdownMenuTrigger>
+                                        <DropdownMenuContent className="w-[200px] max-h-[300px] overflow-y-auto">
+                                            <DropdownMenuLabel>Pilih Tim</DropdownMenuLabel>
+                                            <DropdownMenuSeparator />
+                                            <DropdownMenuCheckboxItem
+                                                checked={selectedUser.length === 0}
+                                                onCheckedChange={() => setSelectedUser([])}
+                                            >
+                                                Semua Tim
+                                            </DropdownMenuCheckboxItem>
+                                            <DropdownMenuSeparator />
                                             {users
-                                                .filter(u => selectedCabang === 'all' || u.cabangId === selectedCabang)
+                                                .filter(u => selectedCabang.length === 0 || (u.cabangId && selectedCabang.includes(u.cabangId)))
                                                 .map(user => (
-                                                    <SelectItem key={user.id} value={user.id}>
-                                                        <span className="text-xs">{user.nama}</span>
-                                                    </SelectItem>
+                                                    <DropdownMenuCheckboxItem
+                                                        key={user.id}
+                                                        checked={selectedUser.includes(user.id)}
+                                                        onCheckedChange={(checked) => {
+                                                            if (checked) {
+                                                                setSelectedUser([...selectedUser, user.id]);
+                                                            } else {
+                                                                setSelectedUser(selectedUser.filter(id => id !== user.id));
+                                                            }
+                                                        }}
+                                                    >
+                                                        {user.nama}
+                                                    </DropdownMenuCheckboxItem>
                                                 ))}
-                                        </SelectContent>
-                                    </Select>
+                                        </DropdownMenuContent>
+                                    </DropdownMenu>
                                 </>
                             )}
 
                             <Select value={mapMode} onValueChange={(v) => setMapMode(v as MapMode)}>
-                                <SelectTrigger className="w-full md:w-[200px] h-9 text-xs bg-background">
+                                <SelectTrigger className="w-full md:w-[160px] h-9 text-xs bg-background">
                                     <SelectValue placeholder="Pilih Mode Peta" />
                                 </SelectTrigger>
                                 <SelectContent>
@@ -827,9 +1050,16 @@ export default function Monitoring() {
                                         </div>
                                     </SelectItem>
                                     <SelectItem value="pelanggan">
-                                        <div className="flex items-center gap-2">
-                                            <Crosshair className="w-3.5 h-3.5 text-green-500" />
-                                            <span className="text-xs">Lokasi Pelanggan</span>
+                                        <div className="flex items-center justify-between gap-4 w-full">
+                                            <div className="flex items-center gap-2">
+                                                <Crosshair className="w-3.5 h-3.5 text-green-500" />
+                                                <span className="text-xs">Lokasi Pelanggan</span>
+                                            </div>
+                                            {duplicateGroups.length > 0 && (
+                                                <Badge variant="destructive" className="h-4 px-1 text-[8px] animate-pulse">
+                                                    {duplicateGroups.length}!!
+                                                </Badge>
+                                            )}
                                         </div>
                                     </SelectItem>
                                     <SelectItem value="transaksi">
@@ -837,6 +1067,23 @@ export default function Monitoring() {
                                             <ShoppingCart className="w-3.5 h-3.5 text-red-500" />
                                             <span className="text-xs">Lokasi Transaksi</span>
                                         </div>
+                                    </SelectItem>
+                                </SelectContent>
+                            </Select>
+
+                            <Select value={colorIndicator} onValueChange={(v) => setColorIndicator(v as any)}>
+                                <SelectTrigger className="w-full md:w-[180px] h-9 text-xs bg-background">
+                                    <SelectValue placeholder="Indikator Warna" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="pengguna">
+                                        <span className="text-xs">Warna: Pengguna</span>
+                                    </SelectItem>
+                                    <SelectItem value="cabang">
+                                        <span className="text-xs">Warna: Cabang</span>
+                                    </SelectItem>
+                                    <SelectItem value="kategori">
+                                        <span className="text-xs">Warna: Kategori</span>
                                     </SelectItem>
                                 </SelectContent>
                             </Select>
@@ -850,125 +1097,101 @@ export default function Monitoring() {
                             </div>
                         </div>
 
-                        {/* Map Container */}
+                        {/* Map Container - Main Explore View */}
                         <Card elevated className="overflow-hidden">
-                            <CardContent className="p-0 relative h-[300px] md:h-[450px] z-0">
-                                {/* Map Search Bar Overlay */}
-                                <div className="absolute top-4 left-4 right-4 md:left-4 md:right-auto md:w-[300px] z-[1000] flex gap-2">
-                                    <div className="relative flex-1 shadow-lg">
-                                        <input
-                                            ref={mapSearchRef}
-                                            type="text"
-                                            placeholder="Cari tempat di peta..."
-                                            value={mapSearchInput}
-                                            onChange={(e) => setMapSearchInput(e.target.value)}
-                                            className="w-full h-10 pl-10 pr-4 rounded-lg border bg-white/95 backdrop-blur-sm focus:outline-none focus:ring-2 focus:ring-primary text-sm"
-                                        />
-                                        <Search className="absolute left-3 top-3 w-4 h-4 text-muted-foreground" />
-                                    </div>
-                                    <Button
-                                        variant="secondary"
-                                        size="icon"
-                                        className="h-10 w-10 shrink-0 shadow-lg bg-white/95 backdrop-blur-sm"
-                                        onClick={handleCenterOnMe}
-                                        title="Lokasi Saya"
+                            <CardContent className="p-0 relative h-[400px] md:h-[600px] z-0">
+                                <div className="absolute inset-0 z-0 h-full w-full">
+                                    <MonitoringMapWrapper
+                                        markers={markers}
+                                        mapCenter={mapCenter}
+                                        setMapCenter={setMapCenter}
+                                        selectedMarker={selectedMarker}
+                                        setSelectedMarker={setSelectedMarker}
+                                        customerMarkers={customerMarkers}
+                                        radiusKunjungan={profilPerusahaan.config?.radiusKunjungan || 100}
+                                        duplicateThreshold={duplicateThreshold}
+                                        duplicateGroups={duplicateGroups}
                                     >
-                                        <Navigation className="w-4 h-4" />
-                                    </Button>
-                                </div>
+                                        {/* Map Search Bar Overlay */}
+                                        <div className="absolute top-4 left-1/2 -translate-x-1/2 w-[90%] md:w-[400px] z-[1000] flex gap-2">
+                                            <div className="relative flex-1 shadow-lg">
+                                                <input
+                                                    ref={mapSearchRef}
+                                                    type="text"
+                                                    placeholder="Cari tempat di peta..."
+                                                    value={mapSearchInput}
+                                                    onChange={(e) => setMapSearchInput(e.target.value)}
+                                                    onKeyDown={(e) => {
+                                                        if (e.key === 'Enter') {
+                                                            handleSearchMap();
+                                                        }
+                                                    }}
+                                                    className="w-full h-10 pl-10 pr-4 rounded-lg border bg-white/95 backdrop-blur-sm focus:outline-none focus:ring-2 focus:ring-primary text-sm"
+                                                />
+                                                <Search className="absolute left-3 top-3 w-4 h-4 text-muted-foreground" />
+                                            </div>
+                                            <Button
+                                                variant="secondary"
+                                                size="icon"
+                                                className="h-10 w-10 shrink-0 shadow-lg bg-white/95 backdrop-blur-sm"
+                                                onClick={handleCenterOnMe}
+                                                title="Lokasi Saya"
+                                            >
+                                                <Navigation className="w-4 h-4" />
+                                            </Button>
+                                        </div>
 
-                                <GMap
-                                    mapId="8e0a97af9386fef"
-                                    center={mapCenter}
-                                    zoom={11}
-                                    style={{ height: '100%', width: '100%' }}
-                                    onCenterChanged={(ev) => setMapCenter(ev.detail.center)}
-                                    mapTypeControl={true}
-                                    fullscreenControl={true}
-                                    streetViewControl={true}
-                                    zoomControl={true}
-                                >
-                                    {markers.map((marker: MapMarker) => (
-                                        <AdvancedMarker
-                                            key={marker.id}
-                                            position={marker.position}
-                                            onClick={() => {
-                                                setMapCenter(marker.position);
-                                                setSelectedMarker(marker);
-                                            }}
-                                        >
-                                            <Pin
-                                                background={marker.color || ICONS[marker.type as keyof typeof ICONS] || ICONS.team}
-                                                glyphColor={'#ffffff'}
-                                                borderColor={'#ffffff'}
-                                            />
-                                        </AdvancedMarker>
-                                    ))}
-
-                                    {selectedMarker && (
-                                        <InfoWindow
-                                            position={selectedMarker.position}
-                                            onCloseClick={() => setSelectedMarker(null)}
-                                        >
-                                            <div className="p-2 min-w-[200px]">
-                                                <div className="flex items-center gap-2 mb-2 pb-2 border-b">
-                                                    <div
-                                                        className="w-8 h-8 rounded-full flex items-center justify-center text-white font-bold text-xs"
-                                                        style={{ backgroundColor: selectedMarker.color || '#3b82f6' }}
-                                                    >
-                                                        {selectedMarker.userName ? (selectedMarker.userName.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase()) : (selectedMarker.type === 'team' ? 'T' : selectedMarker.type === 'customer' ? 'C' : 'S')}
+                                        {/* Dynamic Legend Overlay */}
+                                        <div className="absolute bottom-4 right-4 bg-white/95 backdrop-blur-sm p-3 rounded-lg shadow-lg border border-border max-w-[200px] max-h-[300px] overflow-y-auto z-[1000]">
+                                            <p className="text-[10px] font-bold uppercase text-muted-foreground mb-2 tracking-wider">
+                                                Legenda ({mapMode === 'team' ? 'Tim' : (mapMode === 'pelanggan' ? 'Pelanggan' : 'Transaksi')})
+                                            </p>
+                                            <div className="space-y-1.5">
+                                                {Array.from(new Set(markers.map((m: any) => m.userName).filter(Boolean))).map(userName => {
+                                                    const marker = markers.find((m: any) => m.userName === userName);
+                                                    return (
+                                                        <div key={userName as string} className="flex items-center gap-2">
+                                                            <div
+                                                                className="w-2.5 h-2.5 rounded-full shrink-0"
+                                                                style={{ backgroundColor: marker?.color || '#94a3b8' }}
+                                                            />
+                                                            <span className="text-xs truncate font-medium text-slate-700 capitalize">{userName as string}</span>
+                                                        </div>
+                                                    );
+                                                })}
+                                                {markers.length === 0 && <span className="text-[10px] text-muted-foreground italic">Tidak ada data</span>}
+                                                {mapMode === 'pelanggan' && duplicateGroups.length > 0 && (
+                                                    <div className="pt-2 mt-2 border-t border-dashed">
+                                                        <div className="flex items-center gap-2">
+                                                            <div className="w-2.5 h-2.5 rounded-full bg-red-600 animate-pulse shrink-0 shadow-[0_0_8px_rgba(220,38,38,0.5)]" />
+                                                            <span className="text-xs font-bold text-red-600">Potensi Double Toko</span>
+                                                        </div>
                                                     </div>
-                                                    <div>
-                                                        <p className="font-bold text-sm capitalize">{selectedMarker.title}</p>
-                                                        <p className="text-xs text-muted-foreground">{selectedMarker.subtitle}</p>
+                                                )}
+                                            </div>
+                                        </div>
+                                        {/* Map Legend Overlay for Duplicate Detection */}
+                                        {mapMode === 'pelanggan' && (
+                                            <div className="absolute top-1/2 -translate-y-1/2 left-4 z-[1000] bg-white/95 backdrop-blur-sm p-3 rounded-xl shadow-xl border border-red-100 flex flex-col gap-2 min-w-[150px]">
+                                                <div className="flex items-center gap-2">
+                                                    <AlertTriangle className="w-4 h-4 text-red-600" />
+                                                    <span className="text-[11px] font-bold text-red-800">Legenda Double Toko</span>
+                                                </div>
+                                                <div className="space-y-1.5 mt-1">
+                                                    <div className="flex items-center gap-2">
+                                                        <div className="w-3 h-3 rounded-full bg-red-600 relative">
+                                                            <div className="absolute inset-0 bg-red-600 rounded-full animate-pulse opacity-50"></div>
+                                                        </div>
+                                                        <span className="text-[10px] text-slate-600">Terindikasi Double</span>
                                                     </div>
-                                                </div>
-                                                <div className="space-y-1 mb-3">
-                                                    <p className="text-xs text-muted-foreground">{selectedMarker.detail}</p>
-                                                    {(selectedMarker.type === 'customer' || selectedMarker.type === 'transaction') && selectedMarker.userName && (
-                                                        <p className="text-xs font-semibold text-primary">Sales: {selectedMarker.userName}</p>
-                                                    )}
-                                                </div>
-                                                <div className="flex gap-2">
-                                                    <Button
-                                                        size="sm"
-                                                        variant="secondary"
-                                                        className="w-full text-xs h-7"
-                                                        onClick={(e) => {
-                                                            const url = `https://www.google.com/maps/dir/?api=1&destination=${selectedMarker.position.lat},${selectedMarker.position.lng}`;
-                                                            window.open(url, '_blank');
-                                                        }}
-                                                    >
-                                                        <MapIcon className="w-3 h-3 mr-1" />
-                                                        Rute
-                                                    </Button>
-                                                    <Button size="sm" variant="outline" className="w-full text-xs h-7">Detail</Button>
+                                                    <div className="flex items-center gap-2">
+                                                        <div className="w-3 h-3 border border-red-400 border-dashed rounded-full bg-red-100/50"></div>
+                                                        <span className="text-[10px] text-slate-600">Radius {duplicateThreshold}m</span>
+                                                    </div>
                                                 </div>
                                             </div>
-                                        </InfoWindow>
-                                    )}
-                                </GMap>
-
-                                {/* Dynamic Legend Overlay */}
-                                <div className="absolute bottom-4 right-4 bg-white/95 backdrop-blur-sm p-3 rounded-lg shadow-lg border border-border max-w-[200px] max-h-[300px] overflow-y-auto z-[1000]">
-                                    <p className="text-[10px] font-bold uppercase text-muted-foreground mb-2 tracking-wider">
-                                        Legenda ({mapMode === 'team' ? 'Tim' : 'Sales'})
-                                    </p>
-                                    <div className="space-y-1.5">
-                                        {Array.from(new Set(markers.map(m => m.userName).filter(Boolean))).map(userName => {
-                                            const marker = markers.find(m => m.userName === userName);
-                                            return (
-                                                <div key={userName} className="flex items-center gap-2">
-                                                    <div
-                                                        className="w-2.5 h-2.5 rounded-full shrink-0"
-                                                        style={{ backgroundColor: marker?.color || '#94a3b8' }}
-                                                    />
-                                                    <span className="text-xs truncate font-medium text-slate-700 capitalize">{userName}</span>
-                                                </div>
-                                            );
-                                        })}
-                                        {markers.length === 0 && <span className="text-[10px] text-muted-foreground italic">Tidak ada data</span>}
-                                    </div>
+                                        )}
+                                    </MonitoringMapWrapper>
                                 </div>
                             </CardContent>
                         </Card>
@@ -992,7 +1215,7 @@ export default function Monitoring() {
                                 </div>
                             ) : (
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                                    {mapMode === 'team' && activeUsers.map((user, index) => {
+                                    {mapMode === 'team' && activeUsers.map((user) => {
                                         const userAbsensi = todayAbsensi.find(a => a.userId === user.id);
                                         const cabang = listCabang.find(c => c.id === user.cabangId);
                                         const isCheckedIn = !!userAbsensi?.checkIn;
@@ -1039,7 +1262,7 @@ export default function Monitoring() {
                                         );
                                     })}
 
-                                    {mapMode === 'pelanggan' && markers.map((marker, index) => {
+                                    {mapMode === 'pelanggan' && markers.map((marker) => {
                                         const p = listPelanggan.find(item => item.id === marker.id);
                                         return (
                                             <Card
@@ -1055,7 +1278,14 @@ export default function Monitoring() {
                                                         <Crosshair className="w-5 h-5 text-green-600" />
                                                     </div>
                                                     <div className="flex-1 min-w-0">
-                                                        <p className="font-semibold text-sm truncate">{marker.title}</p>
+                                                        <div className="flex items-center gap-2">
+                                                            <p className="font-semibold text-sm truncate">{marker.title}</p>
+                                                            {duplicateMarkerIds.has(marker.id) && (
+                                                                <Badge className="bg-red-600 hover:bg-red-700 text-[9px] h-4 py-0 animate-pulse">
+                                                                    Potensi Double
+                                                                </Badge>
+                                                            )}
+                                                        </div>
                                                         <p className="text-xs text-muted-foreground truncate">{p?.alamat || marker.subtitle}</p>
                                                     </div>
                                                     <div className="text-right">
@@ -1068,7 +1298,7 @@ export default function Monitoring() {
                                         );
                                     })}
 
-                                    {mapMode === 'transaksi' && markers.map((marker, index) => {
+                                    {mapMode === 'transaksi' && markers.map((marker) => {
                                         const penjualan = marker.data as Penjualan;
                                         return (
                                             <Card
@@ -1103,6 +1333,313 @@ export default function Monitoring() {
                                     })}
                                 </div>
                             )}
+                        </div>
+                    </TabsContent>
+
+                    <TabsContent value="double-toko" className="mt-4 space-y-4">
+                        <div className="flex flex-col md:flex-row gap-4 items-start">
+                            {/* Sidebar Controls */}
+                            <div className="w-full md:w-80 space-y-4 shrink-0">
+                                <Card className="border-red-100 shadow-sm bg-gradient-to-b from-red-50/30 to-transparent">
+                                    <CardHeader className="pb-2">
+                                        <CardTitle className="text-sm font-bold flex items-center gap-2 text-red-800">
+                                            <AlertTriangle className="w-4 h-4 text-red-600" />
+                                            Analisis Duplikasi
+                                        </CardTitle>
+                                    </CardHeader>
+                                    <CardContent className="space-y-4">
+                                        <div className="grid grid-cols-2 gap-2">
+                                            <div className="p-3 bg-white rounded-lg border border-red-100 shadow-sm">
+                                                <p className="text-2xl font-bold text-red-600">{duplicateGroups.length}</p>
+                                                <p className="text-[10px] text-muted-foreground font-medium uppercase">Grup Potensial</p>
+                                            </div>
+                                            <div className="p-3 bg-white rounded-lg border border-red-100 shadow-sm">
+                                                <p className="text-2xl font-bold text-slate-700">{duplicateGroups.reduce((acc, g) => acc + g.length, 0)}</p>
+                                                <p className="text-[10px] text-muted-foreground font-medium uppercase">Total Toko</p>
+                                            </div>
+                                        </div>
+
+                                        <div className="space-y-3">
+                                            <div className="flex items-center justify-between">
+                                                <label className="text-[10px] font-bold uppercase text-muted-foreground">Radius Deteksi</label>
+                                                <Badge variant="outline" className="font-mono text-[10px] h-5 bg-white">{duplicateThreshold}m</Badge>
+                                            </div>
+                                            <input
+                                                type="range"
+                                                min="5"
+                                                max="150"
+                                                step="5"
+                                                value={duplicateThreshold}
+                                                onChange={(e) => setDuplicateThreshold(parseInt(e.target.value))}
+                                                className="w-full accent-red-600 h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer"
+                                            />
+                                            <div className="flex justify-between text-[9px] text-muted-foreground px-1">
+                                                <span>5m (Ketat)</span>
+                                                <span>150m (Longgar)</span>
+                                            </div>
+                                            <div className="text-[10px] text-muted-foreground italic leading-relaxed p-3 bg-blue-50/50 rounded-lg border border-blue-100 flex gap-2">
+                                                <Info className="w-3.5 h-3.5 text-blue-600 shrink-0 mt-0.5" />
+                                                <p>
+                                                    Toko yang berada dalam radius ini akan dikelompokkan sebagai potensi duplikat (Double Input). Gunakan fitur ini untuk memverifikasi keaslian data lapangan.
+                                                </p>
+                                            </div>
+                                        </div>
+                                    </CardContent>
+                                </Card>
+
+                                <Card className="border-blue-100 bg-blue-50/20">
+                                    <CardContent className="p-4">
+                                        <h4 className="text-xs font-bold text-slate-800 flex items-center gap-2 mb-2">
+                                            <Activity className="w-3.5 h-3.5 text-blue-600" />
+                                            Apa yang harus dilakukan?
+                                        </h4>
+                                        <ol className="text-[10px] text-slate-600 space-y-2 list-decimal pl-4">
+                                            <li>Periksa nama toko dan alamat di setiap grup.</li>
+                                            <li>Gunakan tombol <strong>Pantau di Peta</strong> untuk melihat visualisasi lokasinya.</li>
+                                            <li>Jika toko memang sama, silakan koordinasikan dengan sales terkait untuk pembersihan data.</li>
+                                        </ol>
+                                    </CardContent>
+                                </Card>
+                            </div>
+
+                            {/* Main List */}
+                            <div className="flex-1 space-y-4 w-full">
+                                {duplicateGroups.length === 0 ? (
+                                    <div className="flex flex-col items-center justify-center p-12 bg-muted/20 rounded-2xl border border-dashed text-center min-h-[400px]">
+                                        <div className="w-20 h-20 rounded-full bg-green-100 flex items-center justify-center mb-4">
+                                            <CheckCircle2 className="w-10 h-10 text-green-600" />
+                                        </div>
+                                        <h3 className="text-lg font-bold text-slate-800">Semua Aman!</h3>
+                                        <p className="text-sm text-muted-foreground max-w-xs mt-1">
+                                            Tidak ditemukan titik lokasi pelanggan yang tumpang tindih dalam radius {duplicateThreshold} meter. Data Anda terlihat bersih.
+                                        </p>
+                                    </div>
+                                ) : (
+                                    <div className="space-y-4" id="duplicate-monitoring-card">
+                                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 px-1">
+                                            <div className="text-sm font-bold text-slate-800 flex items-center gap-2">
+                                                Ringkasan Indikasi Double Toko
+                                                <Badge className="bg-red-600 hover:bg-red-700 animate-pulse">{filteredDuplicateGroups.length} Grup</Badge>
+                                            </div>
+
+                                            <div className="relative group max-w-xs w-full">
+                                                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400 group-focus-within:text-red-500 transition-colors" />
+                                                <input
+                                                    type="text"
+                                                    placeholder="Cari nama toko..."
+                                                    className="w-full bg-white border border-slate-200 rounded-lg py-1.5 pl-8 pr-3 text-[11px] font-medium focus:outline-none focus:ring-2 focus:ring-red-500/20 focus:border-red-500 transition-all shadow-sm"
+                                                    value={duplicateSearch}
+                                                    onChange={(e) => setDuplicateSearch(e.target.value)}
+                                                />
+                                            </div>
+                                        </div>
+
+                                        <Card className="border-red-100 shadow-sm overflow-hidden bg-white">
+                                            <div className="overflow-x-auto">
+                                                <table className="w-full text-[10px] text-slate-700">
+                                                    <thead className="bg-slate-50 text-slate-500 uppercase tracking-wider font-bold border-b">
+                                                        <tr>
+                                                            <th className="px-4 py-2.5 text-left font-bold">No</th>
+                                                            <th className="px-4 py-2.5 text-left font-bold">Daftar Toko Terindikasi Sama</th>
+                                                            <th className="px-4 py-2.5 text-center font-bold">Total</th>
+                                                            <th className="px-4 py-2.5 text-right font-bold">Aksi</th>
+                                                        </tr>
+                                                    </thead>
+                                                    <tbody className="divide-y divide-slate-100">
+                                                        {filteredDuplicateGroups.map((groupData, idx) => (
+                                                            <tr key={idx} className="hover:bg-red-50/30 transition-colors group">
+                                                                <td className="px-4 py-3 font-bold text-red-600">#{idx + 1}</td>
+                                                                <td className="px-4 py-3">
+                                                                    <div className="flex flex-wrap gap-1.5">
+                                                                        {groupData.markers.map((m, mIdx) => (
+                                                                            <Badge key={m.id} variant="outline" className={`bg-white text-slate-700 border-slate-200 py-0 h-4.5 px-2 font-medium ${mIdx === 0 ? 'border-blue-200 bg-blue-50/30' : ''}`}>
+                                                                                {m.title}
+                                                                            </Badge>
+                                                                        ))}
+                                                                    </div>
+                                                                </td>
+                                                                <td className="px-4 py-3 text-center">
+                                                                    <span className="bg-red-100 text-red-700 px-2 py-0.5 rounded-full font-bold">
+                                                                        {groupData.markers.length}
+                                                                    </span>
+                                                                </td>
+                                                                <td className="px-4 py-3 text-right">
+                                                                    <Button
+                                                                        variant="ghost"
+                                                                        size="sm"
+                                                                        className="h-7 text-[9px] font-bold text-red-600 hover:text-red-700 hover:bg-red-50 px-2"
+                                                                        onClick={() => {
+                                                                            setMapCenter(groupData.markers[0].position);
+                                                                            setSelectedMarker(groupData.markers[0]);
+                                                                            setMapMode('pelanggan');
+                                                                            handleTabChange('explore');
+                                                                        }}
+                                                                    >
+                                                                        Lihat Lokasi
+                                                                    </Button>
+                                                                </td>
+                                                            </tr>
+                                                        ))}
+                                                    </tbody>
+                                                </table>
+                                            </div>
+                                        </Card>
+
+                                        <div className="flex items-center gap-2 px-1 pt-2">
+                                            <div className="h-px bg-slate-200 flex-1" />
+                                            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Detail Per Grup</span>
+                                            <div className="h-px bg-slate-200 flex-1" />
+                                        </div>
+
+                                        {filteredDuplicateGroups.map((groupData, index) => {
+                                            const borderClass = groupData.maxSimilarity > 90 ? 'border-red-300 ring-1 ring-red-100' :
+                                                groupData.maxSimilarity > 75 ? 'border-orange-200' : 'border-slate-200';
+                                            const headerBg = groupData.maxSimilarity > 90 ? 'from-red-100/80 to-white' :
+                                                groupData.maxSimilarity > 75 ? 'from-orange-50 to-white' : 'from-slate-50 to-white';
+
+                                            return (
+                                                <Card key={index} className={`overflow-hidden shadow-md group hover:shadow-lg transition-all duration-300 ${borderClass}`}>
+                                                    <div className={`bg-gradient-to-r ${headerBg} px-4 py-3 border-b flex items-center justify-between`}>
+                                                        <div className="flex items-center gap-3">
+                                                            <div className={`w-8 h-8 rounded-full text-white flex items-center justify-center text-xs font-bold shadow-lg ${groupData.maxSimilarity > 90 ? 'bg-red-600 shadow-red-200' : groupData.maxSimilarity > 75 ? 'bg-orange-500 shadow-orange-100' : 'bg-slate-600 shadow-slate-200'}`}>
+                                                                {index + 1}
+                                                            </div>
+                                                            <div>
+                                                                <div className="text-sm font-bold text-slate-900 flex items-center gap-2">
+                                                                    Grup Potensi Duplikat
+                                                                    {groupData.maxSimilarity > 90 && <Badge className="bg-red-600 text-[8px] h-3.5 py-0 px-1 animate-bounce">Sangat Mirip</Badge>}
+                                                                </div>
+                                                                <p className="text-[10px] text-slate-500 font-medium uppercase tracking-wider">
+                                                                    Terdiri dari {groupData.markers.length} toko • Max Skor: {groupData.maxSimilarity}%
+                                                                </p>
+                                                            </div>
+                                                        </div>
+                                                        <Button
+                                                            size="sm"
+                                                            className="bg-slate-800 hover:bg-slate-900 text-white h-8 text-[10px] px-4 gap-2 shadow-sm transition-all active:scale-95"
+                                                            onClick={() => {
+                                                                setMapMode('pelanggan');
+                                                                setMapCenter(groupData.markers[0].position);
+                                                                setSelectedMarker(groupData.markers[0]);
+                                                                handleTabChange('explore');
+                                                            }}
+                                                        >
+                                                            <MapIcon className="w-3.5 h-3.5" />
+                                                            Pantau di Peta
+                                                        </Button>
+                                                    </div>
+                                                    <div className="divide-y divide-slate-100">
+                                                        {groupData.markers.map((m, mIdx) => {
+                                                            const p = listPelanggan.find(item => item.id === m.id);
+                                                            const sales = users.find(u => u.id === p?.salesId);
+                                                            const cabang = listCabang.find(c => c.id === p?.cabangId);
+
+                                                            // Calculate distance from the first store in group
+                                                            const distanceToFirst = mIdx === 0 ? 0 : getDistance(
+                                                                groupData.markers[0].position.lat,
+                                                                groupData.markers[0].position.lng,
+                                                                m.position.lat,
+                                                                m.position.lng
+                                                            );
+
+                                                            const similarityScore = (m as any).similarity;
+                                                            const scoreColor = similarityScore > 90 ? 'text-red-600 bg-red-50 border-red-200' :
+                                                                similarityScore > 75 ? 'text-orange-600 bg-orange-50 border-orange-200' :
+                                                                    'text-slate-600 bg-slate-50 border-slate-200';
+
+                                                            return (
+                                                                <div key={m.id} className={`p-4 flex items-start gap-4 transition-colors relative ${mIdx === 0 ? 'bg-blue-50/20' : 'hover:bg-slate-50'}`}>
+                                                                    {mIdx > 0 && (
+                                                                        <div className="absolute left-9 top-0 bottom-0 w-0.5 border-l border-dashed border-slate-200 -z-10" />
+                                                                    )}
+                                                                    <div className="w-10 h-10 rounded-xl bg-white border border-slate-200 shadow-sm flex items-center justify-center shrink-0 group-hover:border-slate-300 transition-colors z-10">
+                                                                        <Store className={`w-5 h-5 ${mIdx === 0 ? 'text-blue-600' : 'text-slate-500'}`} />
+                                                                    </div>
+                                                                    <div className="flex-1 min-w-0">
+                                                                        <div className="flex items-center gap-2 mb-0.5">
+                                                                            <p className="text-sm font-bold text-slate-800 truncate">{m.title}</p>
+                                                                            <Badge variant="outline" className="text-[9px] h-4 py-0 font-mono bg-white">
+                                                                                ID: {m.id.substring(0, 8)}
+                                                                            </Badge>
+                                                                            {mIdx === 0 ? (
+                                                                                <Badge className="bg-blue-600 text-white hover:bg-blue-700 text-[9px] h-4 py-0">Referensi Utama</Badge>
+                                                                            ) : (
+                                                                                <>
+                                                                                    <Badge className="bg-red-100 text-red-700 hover:bg-red-100 border-red-200 text-[9px] h-4 py-0">Jarak: {Math.round(distanceToFirst)}m</Badge>
+                                                                                    <Badge variant="outline" className={`text-[9px] h-4 py-0 font-bold border ${scoreColor}`}>
+                                                                                        Skor: {similarityScore}%
+                                                                                    </Badge>
+                                                                                </>
+                                                                            )}
+                                                                        </div>
+                                                                        <p className="text-xs text-muted-foreground line-clamp-1 flex items-center gap-1">
+                                                                            <MapPin className="w-3 h-3 shrink-0 text-red-400" />
+                                                                            {p?.alamat || m.subtitle}
+                                                                        </p>
+                                                                        <p className="text-[9px] font-mono text-muted-foreground mt-1 bg-slate-50 inline-block px-1.5 py-0.5 rounded border border-slate-100">
+                                                                            LOC: {m.position.lat.toFixed(6)}, {m.position.lng.toFixed(6)}
+                                                                        </p>
+                                                                        <div className="flex flex-wrap items-center gap-2 mt-2">
+                                                                            <div className="flex items-center gap-1.5 text-[10px] text-slate-600 font-semibold bg-slate-100 px-2 py-1 rounded-md">
+                                                                                <User className="w-3 h-3 text-blue-500" />
+                                                                                {sales?.nama || 'N/A'}
+                                                                            </div>
+                                                                            <div className="flex items-center gap-1.5 text-[10px] text-slate-600 font-semibold bg-slate-100 px-2 py-1 rounded-md">
+                                                                                <Building className="w-3 h-3 text-orange-500" />
+                                                                                {cabang?.nama || 'N/A'}
+                                                                            </div>
+                                                                            {p?.telepon && (
+                                                                                <div className="flex items-center gap-1.5 text-[10px] text-slate-600 font-semibold bg-slate-100 px-2 py-1 rounded-md">
+                                                                                    <Activity className="w-3 h-3 text-green-500" />
+                                                                                    {p.telepon}
+                                                                                </div>
+                                                                            )}
+                                                                        </div>
+                                                                    </div>
+                                                                    <div className="text-right flex flex-col gap-2">
+                                                                        <div className="flex gap-1.5">
+                                                                            <a
+                                                                                href={`https://www.google.com/maps/dir/?api=1&destination=${m.position.lat},${m.position.lng}`}
+                                                                                target="_blank"
+                                                                                rel="noopener noreferrer"
+                                                                                className="inline-flex items-center justify-center w-8 h-8 rounded-lg border border-slate-200 hover:bg-white hover:border-blue-200 hover:shadow-md transition-all text-slate-500 hover:text-blue-600"
+                                                                                title="Buka di Google Maps"
+                                                                            >
+                                                                                <ExternalLink className="w-3.5 h-3.5" />
+                                                                            </a>
+
+                                                                            {mIdx > 0 && (
+                                                                                <Button
+                                                                                    variant="ghost"
+                                                                                    size="icon"
+                                                                                    className="w-8 h-8 rounded-lg border border-slate-200 hover:bg-red-50 hover:border-red-200 hover:text-red-600 transition-all text-slate-400"
+                                                                                    title="Hapus Duplikat"
+                                                                                    onClick={async () => {
+                                                                                        if (confirm(`Hapus toko "${m.title}"? Tindakan ini tidak dapat dibatalkan.`)) {
+                                                                                            try {
+                                                                                                await deletePelanggan(m.id);
+                                                                                                refresh();
+                                                                                            } catch (err) {
+                                                                                                console.error("Failed to delete customer:", err);
+                                                                                            }
+                                                                                        }
+                                                                                    }}
+                                                                                >
+                                                                                    <AlertTriangle className="w-3.5 h-3.5" />
+                                                                                </Button>
+                                                                            )}
+                                                                        </div>
+                                                                    </div>
+                                                                </div>
+                                                            );
+                                                        })}
+                                                    </div>
+                                                </Card>
+                                            );
+                                        })}
+                                    </div>
+                                )}
+                            </div>
                         </div>
                     </TabsContent>
 
@@ -1224,56 +1761,46 @@ export default function Monitoring() {
                         {/* Session Map */}
                         <Card elevated className="overflow-hidden">
                             <CardContent className="p-0 relative h-[300px] md:h-[450px] z-0">
-                                <GMap
-                                    mapId="8e0a97af9386fef"
-                                    center={sessionMarkers.length > 0 ? sessionMarkers[0].position : { lat: -6.2088, lng: 106.8456 }}
-                                    zoom={11}
-                                    style={{ height: '100%', width: '100%' }}
-                                    mapTypeControl={true}
-                                    fullscreenControl={true}
-                                    streetViewControl={true}
-                                    zoomControl={true}
-                                >
-                                    {sessionMarkers.map((marker, idx) => (
-                                        <AdvancedMarker
-                                            key={marker.id}
-                                            position={marker.position}
-                                            onClick={() => setSelectedMarker(marker)}
-                                        >
-                                            <Pin
-                                                background={marker.color || ICONS.active}
-                                                glyphColor={'#ffffff'}
-                                                borderColor={'#ffffff'}
-                                            />
-                                        </AdvancedMarker>
-                                    ))}
-
-                                    {selectedMarker && selectedMarker.type === 'active' && (
-                                        <InfoWindow
-                                            position={selectedMarker.position}
-                                            onCloseClick={() => setSelectedMarker(null)}
-                                        >
-                                            <div className="p-2 min-w-[150px]">
-                                                <p className="font-semibold text-sm mb-1">{selectedMarker.title}</p>
-                                                <p className="text-xs text-muted-foreground mb-3">{selectedMarker.subtitle}</p>
-
-                                                <div className="flex flex-col gap-2">
-                                                    <a
-                                                        href={`https://www.google.com/maps/dir/?api=1&destination=${selectedMarker.position.lat},${selectedMarker.position.lng}`}
-                                                        target="_blank"
-                                                        rel="noopener noreferrer"
-                                                        className="w-full bg-blue-600 hover:bg-blue-700 text-white !text-white text-[10px] py-2 px-2 rounded-md flex items-center justify-center gap-1 transition-colors no-underline font-medium"
-                                                    >
-                                                        <ExternalLink className="w-3 h-3" />
-                                                        Google Maps
-                                                    </a>
+                                <div className="absolute inset-0 z-0 h-full w-full">
+                                    <MonitoringMapWrapper
+                                        markers={sessionMarkers}
+                                        mapCenter={sessionMarkers.length > 0 ? sessionMarkers[0].position : { lat: -6.2088, lng: 106.8456 }}
+                                        setMapCenter={setMapCenter}
+                                        selectedMarker={selectedMarker}
+                                        setSelectedMarker={setSelectedMarker}
+                                        customerMarkers={customerMarkers}
+                                        radiusKunjungan={profilPerusahaan.config?.radiusKunjungan || 100}
+                                    >
+                                        <div className="absolute bottom-4 right-4 bg-white/90 p-2 rounded-lg shadow-md text-xs z-[1000] border">
+                                            <p className="font-semibold mb-1">Total Logs: {sessionMarkers.length}</p>
+                                        </div>
+                                        {/* Map Legend Overlay for Duplicate Detection */}
+                                        {mapMode === 'pelanggan' && (
+                                            <div className="absolute bottom-12 right-4 z-[1000] bg-white/95 backdrop-blur-sm p-3 rounded-xl shadow-xl border border-red-100 flex flex-col gap-2 min-w-[150px]">
+                                                <div className="flex items-center gap-2">
+                                                    <AlertTriangle className="w-4 h-4 text-red-600" />
+                                                    <span className="text-[11px] font-bold text-red-800">Legenda Double Toko</span>
                                                 </div>
+                                                <div className="space-y-1.5 mt-1">
+                                                    <div className="flex items-center gap-2">
+                                                        <div className="w-3 h-3 rounded-full bg-red-600 marker-pulse-mini relative">
+                                                            <div className="absolute inset-0 bg-red-600 rounded-full animate-pulse"></div>
+                                                        </div>
+                                                        <span className="text-[10px] text-slate-600">Terindikasi Double</span>
+                                                    </div>
+                                                    <div className="flex items-center gap-2">
+                                                        <div className="w-3 h-3 border border-red-400 border-dashed rounded-full bg-red-100/50"></div>
+                                                        <span className="text-[10px] text-slate-600">Radius {duplicateThreshold}m</span>
+                                                    </div>
+                                                </div>
+                                                {duplicateGroups.length > 0 && (
+                                                    <div className="mt-2 pt-2 border-t border-red-100">
+                                                        <p className="text-[10px] font-bold text-red-600">{duplicateGroups.length} Grup Terdeteksi</p>
+                                                    </div>
+                                                )}
                                             </div>
-                                        </InfoWindow>
-                                    )}
-                                </GMap>
-                                <div className="absolute bottom-4 right-4 bg-white/90 p-2 rounded-lg shadow-md text-xs z-[1000] border">
-                                    <p className="font-semibold mb-1">Total Logs: {sessionMarkers.length}</p>
+                                        )}
+                                    </MonitoringMapWrapper>
                                 </div>
                             </CardContent>
                         </Card>
@@ -1291,7 +1818,7 @@ export default function Monitoring() {
                             ) : (
                                 <Card className="border shadow-sm p-4">
                                     <div className="relative space-y-0 pl-1 before:absolute before:left-[11px] before:top-2 before:bottom-2 before:w-[2px] before:bg-muted-foreground/20">
-                                        {combinedActivities.slice(0, sessionLimit).map((activity, idx) => {
+                                        {combinedActivities.slice(0, sessionLimit).map((activity) => {
                                             let Icon = Activity;
                                             let colorClass = 'bg-primary';
 
@@ -1395,7 +1922,7 @@ export default function Monitoring() {
                                     <CardContent className="p-0">
                                         <div className="max-h-[600px] overflow-y-auto">
                                             {listPelanggan
-                                                .filter(p => (selectedCabang === 'all' || p.cabangId === selectedCabang) && (selectedUser === 'all' || p.salesId === selectedUser))
+                                                .filter(p => (selectedCabang.length === 0 || (p.cabangId && selectedCabang.includes(p.cabangId))) && (selectedUser.length === 0 || (p.salesId && selectedUser.includes(p.salesId))))
                                                 .filter(p => p.lokasi?.latitude && p.lokasi?.longitude)
                                                 .map(p => (
                                                     <div
@@ -1466,137 +1993,6 @@ export default function Monitoring() {
                         </div>
                     </TabsContent>
                 </Tabs>
-
-                {/* Detail Dialog */}
-                <Dialog open={!!selectedMarker} onOpenChange={(open) => !open && setSelectedMarker(null)}>
-                    <DialogContent className="sm:max-w-md">
-                        <DialogHeader>
-                            <DialogTitle>Detail Informasi</DialogTitle>
-                            <DialogDescription>
-                                Rincian lengkap dari {selectedMarker?.type === 'team' ? 'Tim' : selectedMarker?.type === 'customer' ? 'Pelanggan' : 'Transaksi'} yang dipilih.
-                            </DialogDescription>
-                        </DialogHeader>
-
-                        {selectedMarker && (
-                            <div className="space-y-4 py-2">
-                                {/* TEAM DETAILS */}
-                                {selectedMarker.type === 'team' && (
-                                    <div className="space-y-3">
-                                        <div className="grid grid-cols-3 gap-2 text-sm">
-                                            {/* Cast data to User & { absensi: Absensi } */}
-                                            {(() => {
-                                                const d = selectedMarker.data as UserType & { absensi: Absensi };
-                                                return (
-                                                    <>
-                                                        <span className="text-muted-foreground">Nama:</span>
-                                                        <span className="col-span-2 font-medium">{d.nama}</span>
-
-                                                        <span className="text-muted-foreground">Jabatan:</span>
-                                                        <span className="col-span-2">{d.roles?.join(', ')}</span>
-
-                                                        <span className="text-muted-foreground">Email:</span>
-                                                        <span className="col-span-2">{d.email}</span>
-
-                                                        <span className="text-muted-foreground">Telepon:</span>
-                                                        <span className="col-span-2">{d.telepon}</span>
-
-                                                        <span className="text-muted-foreground">Waktu Check-in:</span>
-                                                        <span className="col-span-2">{formatWaktu(new Date(d.absensi.checkIn || d.absensi.tanggal))}</span>
-
-                                                        <span className="text-muted-foreground">Lokasi:</span>
-                                                        <span className="col-span-2 text-xs">{d.absensi.lokasiCheckIn?.alamat || `${selectedMarker.position.lat}, ${selectedMarker.position.lng}`}</span>
-                                                    </>
-                                                );
-                                            })()}
-                                        </div>
-                                    </div>
-                                )}
-
-                                {/* CUSTOMER DETAILS */}
-                                {selectedMarker.type === 'customer' && (
-                                    <div className="space-y-3">
-                                        <div className="grid grid-cols-3 gap-2 text-sm">
-                                            {(() => {
-                                                const d = selectedMarker.data as Pelanggan;
-                                                return (
-                                                    <>
-                                                        <span className="text-muted-foreground">Kode:</span>
-                                                        <span className="col-span-2 font-medium">{d.kode}</span>
-
-                                                        <span className="text-muted-foreground">Nama:</span>
-                                                        <span className="col-span-2 font-medium">{d.nama}</span>
-
-                                                        <span className="text-muted-foreground">Alamat:</span>
-                                                        <span className="col-span-2">{d.alamat}</span>
-
-                                                        <span className="text-muted-foreground">Telepon:</span>
-                                                        <span className="col-span-2">{d.telepon}</span>
-
-                                                        <span className="text-muted-foreground">Status:</span>
-                                                        <span className="col-span-2">
-                                                            <Badge variant={d.isActive ? 'success' : 'destructive'}>
-                                                                {d.isActive ? 'Aktif' : 'Non-Aktif'}
-                                                            </Badge>
-                                                        </span>
-                                                    </>
-                                                );
-                                            })()}
-                                        </div>
-                                    </div>
-                                )}
-
-                                {/* TRANSACTION DETAILS */}
-                                {selectedMarker.type === 'transaction' && (
-                                    <div className="space-y-3">
-                                        <div className="grid grid-cols-3 gap-2 text-sm">
-                                            {(() => {
-                                                const d = selectedMarker.data as Penjualan;
-                                                return (
-                                                    <>
-                                                        <span className="text-muted-foreground">No. Nota:</span>
-                                                        <span className="col-span-2 font-medium">{d.nomorNota}</span>
-
-                                                        <span className="text-muted-foreground">Tanggal:</span>
-                                                        <span className="col-span-2">{formatTanggal(new Date(d.tanggal))}</span>
-
-                                                        <span className="text-muted-foreground">Total:</span>
-                                                        <span className="col-span-2 font-bold text-primary">{formatRupiah(d.total)}</span>
-
-                                                        <span className="text-muted-foreground">Metode:</span>
-                                                        <span className="col-span-2 capitalize">{d.metodePembayaran}</span>
-
-                                                        <span className="text-muted-foreground">Status:</span>
-                                                        <span className="col-span-2">
-                                                            <Badge variant={
-                                                                d.status === 'lunas' ? 'success' :
-                                                                    d.status === 'batal' ? 'destructive' : 'warning'
-                                                            }>
-                                                                {d.status?.toUpperCase()}
-                                                            </Badge>
-                                                        </span>
-                                                    </>
-                                                );
-                                            })()}
-                                        </div>
-                                    </div>
-                                )}
-
-                                <div className="pt-4 flex justify-end">
-                                    <a
-                                        href={`https://www.google.com/maps/dir/?api=1&destination=${selectedMarker.position.lat},${selectedMarker.position.lng}`}
-                                        target="_blank"
-                                        rel="noopener noreferrer"
-                                    >
-                                        <Button size="sm" className="gap-2">
-                                            <ExternalLink className="w-4 h-4" />
-                                            Buka Peta
-                                        </Button>
-                                    </a>
-                                </div>
-                            </div>
-                        )}
-                    </DialogContent>
-                </Dialog>
 
             </div>
         </div>

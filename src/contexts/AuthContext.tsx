@@ -152,7 +152,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         .single();
 
       if (createError) {
-        console.error('Error creating user profile:', createError);
+        console.error('Error creating user profile:', createError.message || createError);
         return null;
       }
 

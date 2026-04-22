@@ -2,6 +2,12 @@ const GOOGLE_MAPS_API_KEY = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY;
 
 // Shared Utils for Google Maps Platform
 
+const distinctColors = [
+    '#e6194b', '#3cb44b', '#ffe119', '#4363d8', '#f58231', '#911eb4', '#46f0f0', '#f032e6', '#bcf60c', '#fabebe',
+    '#008080', '#e6beff', '#9a6324', '#fffac8', '#800000', '#aaffc3', '#808000', '#ffd8b1', '#000075', '#808080',
+    '#ffffff', '#000000'
+];
+
 /**
  * Common color generator for markers based on strings (IDs)
  */
@@ -10,8 +16,8 @@ export const stringToColor = (str: string) => {
     for (let i = 0; i < str.length; i++) {
         hash = str.charCodeAt(i) + ((hash << 5) - hash);
     }
-    const h = Math.abs(hash) % 360;
-    return `hsl(${h}, 70%, 50%)`;
+    const index = Math.abs(hash) % distinctColors.length;
+    return distinctColors[index];
 };
 
 /**
@@ -32,107 +38,31 @@ export const getDistance = (lat1: number, lon1: number, lat2: number, lon2: numb
     return R * c; // in meters
 };
 
-// --- Google Maps Platform API Utils ---
+// --- Free OSRM Platform API Utils ---
 
-export const getGoogleDistanceMatrix = async (origin: { lat: number; lng: number }, destinations: { lat: number; lng: number }[]) => {
-    if (!GOOGLE_MAPS_API_KEY) {
-        console.warn('Google Maps API Key not found');
-        return null;
-    }
-
+export const getOsrmRoute = async (origin: { lat: number; lng: number }, destination: { lat: number; lng: number }, waypoints: { lat: number; lng: number }[] = []) => {
     try {
-        // Using Routes API (v2) for distance matrix-like functionality
-        // Note: For a true distance matrix, we'd use computeRouteMatrix, 
-        // but for simple distance/duration, computeRoutes is often sufficient or preferred for modern apps.
-        // However, the error specifically asks for Routes API.
+        // OSRM requires coordinates in lng,lat format and separated by semicolons
+        const coords = [
+            `${origin.lng},${origin.lat}`,
+            ...waypoints.map(w => `${w.lng},${w.lat}`),
+            `${destination.lng},${destination.lat}`
+        ].join(';');
 
-        const response = await fetch(
-            `https://routes.googleapis.com/directions/v2:computeRoutes`,
-            {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'X-Goog-Api-Key': GOOGLE_MAPS_API_KEY,
-                    'X-Goog-FieldMask': 'routes.duration,routes.distanceMeters'
-                },
-                body: JSON.stringify({
-                    origin: {
-                        location: {
-                            latLng: {
-                                latitude: origin.lat,
-                                longitude: origin.lng
-                            }
-                        }
-                    },
-                    destination: {
-                        location: {
-                            latLng: {
-                                latitude: destinations[0].lat,
-                                longitude: destinations[0].lng
-                            }
-                        }
-                    },
-                    travelMode: 'DRIVE',
-                    routingPreference: 'TRAFFIC_AWARE'
-                })
-            }
-        );
+        // Using geometries=geojson to easily render on Leaflet Map
+        const url = `https://router.project-osrm.org/route/v1/driving/${coords}?overview=full&geometries=geojson`;
+        
+        const response = await fetch(url);
         const data = await response.json();
-        return data;
+        
+        if (data.code !== 'Ok') {
+            console.error('OSRM API Error:', data.message || 'Routing failed');
+            return null;
+        }
+        
+        return data; // returns OSRM response where route geometry is in route.routes[0].geometry
     } catch (error) {
-        console.error('Error fetching Routes API:', error);
-        return null;
-    }
-};
-
-export const getGoogleRoute = async (origin: { lat: number; lng: number }, destination: { lat: number; lng: number }, waypoints: { lat: number; lng: number }[] = []) => {
-    if (!GOOGLE_MAPS_API_KEY) return null;
-
-    try {
-        const response = await fetch(
-            `https://routes.googleapis.com/directions/v2:computeRoutes`,
-            {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'X-Goog-Api-Key': GOOGLE_MAPS_API_KEY,
-                    'X-Goog-FieldMask': 'routes.duration,routes.distanceMeters,routes.polyline.encodedPolyline'
-                },
-                body: JSON.stringify({
-                    origin: {
-                        location: {
-                            latLng: {
-                                latitude: origin.lat,
-                                longitude: origin.lng
-                            }
-                        }
-                    },
-                    destination: {
-                        location: {
-                            latLng: {
-                                latitude: destination.lat,
-                                longitude: destination.lng
-                            }
-                        }
-                    },
-                    intermediates: waypoints.map(w => ({
-                        location: {
-                            latLng: {
-                                latitude: w.lat,
-                                longitude: w.lng
-                            }
-                        }
-                    })),
-                    travelMode: 'DRIVE',
-                    routingPreference: 'TRAFFIC_AWARE',
-                    optimizeWaypointOrder: waypoints.length > 0
-                })
-            }
-        );
-        const data = await response.json();
-        return data;
-    } catch (error) {
-        console.error('Error fetching Routes API:', error);
+        console.error('Error fetching OSRM API:', error);
         return null;
     }
 };

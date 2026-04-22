@@ -155,3 +155,41 @@
     text-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
   }
 }
+
+/* ============================================
+   LEAFLET MAP — Fix drag / pointer-events
+   Tooltip pane & shadow pane must NOT intercept
+   mouse events so the map remains draggable.
+   Only the marker-icon layer stays interactive.
+   ============================================ */
+
+/* Disable pointer-events on panes that sit on top of map tiles */
+.leaflet-tooltip-pane,
+.leaflet-shadow-pane,
+.leaflet-overlay-pane svg,
+.leaflet-zoom-animated {
+  pointer-events: none !important;
+}
+
+/* Re-enable on just the clickable marker icon */
+.leaflet-marker-icon {
+  pointer-events: auto !important;
+  cursor: pointer !important;
+}
+
+/* Make sure map container cursor is always drag */
+.leaflet-container {
+  cursor: grab !important;
+  touch-action: pan-x pan-y !important;
+}
+
+.leaflet-container:active,
+.leaflet-dragging .leaflet-container {
+  cursor: grabbing !important;
+}
+
+/* Label tooltips: no pointer events at all */
+.leaflet-tooltip {
+  pointer-events: none !important;
+}
+

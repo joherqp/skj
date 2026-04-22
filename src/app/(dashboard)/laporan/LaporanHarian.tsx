@@ -47,6 +47,9 @@ import {
     SelectTrigger,
     SelectValue,
 } from "@/components/ui/select";
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Filter as FilterIcon, ChevronDown as ChevronDownIcon } from 'lucide-react';
+import { ScopeFilters } from '@/components/shared/ScopeFilters';
 import { Progress } from '@/components/ui/progress';
 import { startOfWeek, endOfWeek, startOfMonth, endOfMonth } from 'date-fns';
 
@@ -86,8 +89,10 @@ export default function LaporanHarian() {
     const [isRefreshingTargets, setIsRefreshingTargets] = useState(false);
 
     const [selectedDate, setSelectedDate] = useState<string>(() => format(new Date(), 'yyyy-MM-dd'));
-    const [filterCabang, setFilterCabang] = useState<string>(() => currentUser?.cabangId || 'all');
+    const [selectedCabangIds, setSelectedCabangIds] = useState<string[]>([]);
+    const [selectedUserIds, setSelectedUserIds] = useState<string[]>([]);
     const [isGenerating, setIsGenerating] = useState(false);
+    const [isFilterOpen, setIsFilterOpen] = useState(false);
 
     const isAdminOrOwner = currentUser?.roles.some(r => ['admin', 'owner'].includes(r));
 
@@ -140,12 +145,18 @@ export default function LaporanHarian() {
         const dayStart = startOfDay(date);
         const dayEnd = endOfDay(date);
 
-        // Filter sales for the day and branch
+        // Filter sales for the day and branch/user
         const filteredSales = penjualan.filter(p => {
             const pDate = new Date(p.tanggal);
             const inDate = pDate >= dayStart && pDate <= dayEnd;
-            const inBranch = filterCabang === 'all' || p.cabangId === filterCabang;
-            return inDate && inBranch && p.status !== 'batal' && p.status !== 'draft';
+            
+            // Branch Filter
+            const inBranch = selectedCabangIds.length === 0 || (p.cabangId && selectedCabangIds.includes(p.cabangId));
+            
+            // User/Sales Filter
+            const inUser = selectedUserIds.length === 0 || selectedUserIds.includes(p.salesId) || selectedUserIds.includes(p.createdBy);
+
+            return inDate && inBranch && inUser && p.status !== 'batal' && p.status !== 'draft';
         });
 
         // 1. Sales Summary
@@ -206,9 +217,9 @@ export default function LaporanHarian() {
         }>();
 
         // Get relevant userIds for stock check (based on branch)
-        const branchUserIds = filterCabang === 'all'
+        const branchUserIds = selectedCabangIds.length === 0
             ? users.map(u => u.id)
-            : users.filter(u => u.cabangId === filterCabang).map(u => u.id);
+            : users.filter(u => u.cabangId && selectedCabangIds.includes(u.cabangId)).map(u => u.id);
 
         barang.forEach(item => {
             // Current Stock for selected users
@@ -252,8 +263,8 @@ export default function LaporanHarian() {
                 const mDate = new Date(m.tanggal);
 
                 // Scope Checks (Align with LaporanStok.tsx)
-                const isOriginScope = filterCabang === 'all' ? true : (m.dariCabangId === filterCabang);
-                const isDestScope = filterCabang === 'all' ? true : (m.keCabangId === filterCabang);
+                const isOriginScope = selectedCabangIds.length === 0 ? true : selectedCabangIds.includes(m.dariCabangId);
+                const isDestScope = selectedCabangIds.length === 0 ? true : selectedCabangIds.includes(m.keCabangId);
 
                 // Skip if movement is internal to the current scope
                 if (isOriginScope && isDestScope) return;
@@ -279,7 +290,7 @@ export default function LaporanHarian() {
                 if (p.jenis !== 'restock' || p.status !== 'disetujui' || !p.data) return;
                 const pData = p.data as Record<string, unknown>;
                 const pDate = new Date(p.tanggalPersetujuan || p.tanggalPengajuan);
-                const isRelevant = filterCabang === 'all' || p.targetCabangId === filterCabang || (p.targetUserId && users.find(u => u.id === p.targetUserId)?.cabangId === filterCabang);
+                const isRelevant = selectedCabangIds.length === 0 || (p.targetCabangId && selectedCabangIds.includes(p.targetCabangId)) || (p.targetUserId && selectedCabangIds.includes(users.find(u => u.id === p.targetUserId)?.cabangId || ''));
                 if (!isRelevant) return;
 
                 const items = (pData.items as any[]) || (pData.barangId ? [{ barangId: pData.barangId, jumlah: pData.jumlah }] : []);
@@ -295,7 +306,7 @@ export default function LaporanHarian() {
             // Penyesuaian Stok
             penyesuaianStok?.forEach(adj => {
                 if (adj.status !== 'disetujui' || adj.barangId !== item.id) return;
-                const isRelevant = filterCabang === 'all' || adj.cabangId === filterCabang;
+                const isRelevant = selectedCabangIds.length === 0 || (adj.cabangId && selectedCabangIds.includes(adj.cabangId));
                 if (!isRelevant) return;
 
                 const aDate = new Date(adj.tanggal);
@@ -335,7 +346,7 @@ export default function LaporanHarian() {
         const dailySetoran = setoran.filter(s => {
             const sDate = new Date(s.tanggal);
             const inDate = sDate >= dayStart && sDate <= dayEnd;
-            const inBranch = filterCabang === 'all' || (users.find(u => u.id === (s.salesId || s.userId))?.cabangId === filterCabang);
+            const inBranch = selectedCabangIds.length === 0 || selectedCabangIds.includes(users.find(u => u.id === (s.salesId || s.userId))?.cabangId || '');
             return inDate && inBranch;
         });
 
@@ -484,7 +495,11 @@ export default function LaporanHarian() {
 
         return {
             date: selectedDate,
-            branchName: filterCabang === 'all' ? 'Semua Cabang' : cabang.find(c => c.id === filterCabang)?.nama || '-',
+            branchName: selectedCabangIds.length === 0
+                ? 'Semua Cabang'
+                : selectedCabangIds.length === 1
+                    ? cabang.find(c => c.id === selectedCabangIds[0])?.nama || '-'
+                    : `${selectedCabangIds.length} Cabang`,
             sales: {
                 totalOmzet,
                 totalTunai,
@@ -504,7 +519,7 @@ export default function LaporanHarian() {
                 net: cashCollectionToday - totalSetoranValid
             }
         };
-    }, [selectedDate, filterCabang, penjualan, barang, users, stokPengguna, persetujuan, setoran, satuan, mutasiBarang, penyesuaianStok, pembayaran, pelanggan, kategoriPelanggan]);
+    }, [selectedDate, selectedCabangIds, selectedUserIds, penjualan, barang, users, stokPengguna, persetujuan, setoran, cabang, satuan, mutasiBarang, penyesuaianStok, pembayaran, pelanggan, kategoriPelanggan]);
 
     const handleDownloadPDF = async () => {
         setIsGenerating(true);
@@ -694,17 +709,13 @@ export default function LaporanHarian() {
                         </div>
 
                         {isAdminOrOwner && (
-                            <Select value={filterCabang} onValueChange={setFilterCabang}>
-                                <SelectTrigger className="w-[180px] h-9 bg-slate-50 border-slate-200">
-                                    <SelectValue placeholder="Semua Cabang" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    <SelectItem value="all">Semua Cabang</SelectItem>
-                                    {cabang.map(c => (
-                                        <SelectItem key={c.id} value={c.id}>{c.nama}</SelectItem>
-                                    ))}
-                                </SelectContent>
-                            </Select>
+                            <ScopeFilters
+                                selectedCabangIds={selectedCabangIds}
+                                setSelectedCabangIds={setSelectedCabangIds}
+                                selectedUserIds={selectedUserIds}
+                                setSelectedUserIds={setSelectedUserIds}
+                                className="!space-y-0 flex flex-row items-center gap-2"
+                            />
                         )}
 
                         <Button

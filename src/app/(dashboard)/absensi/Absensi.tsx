@@ -9,8 +9,16 @@ import { Clock, MapPin, CheckCircle, XCircle, History, Navigation, AlertTriangle
 import { formatTanggal, formatWaktu } from '@/lib/utils';
 import { getCurrentLocation } from '@/lib/gps';
 import { toast } from 'sonner';
-import { AdvancedMarker, Map } from '@vis.gl/react-google-maps';
 import { isWithinGeofence } from '@/lib/mapUtils';
+import dynamic from 'next/dynamic';
+
+const SimpleMap = dynamic(
+  () => import('@/components/map/components/SimpleMap'),
+  {
+    ssr: false,
+    loading: () => <div className="h-full w-full bg-muted flex items-center justify-center animate-pulse"><p className="text-xs text-muted-foreground">Memuat Peta...</p></div>,
+  }
+);
 import {
   Dialog,
   DialogContent,
@@ -97,7 +105,7 @@ export default function Absensi() {
       const location = await getCurrentLocation();
       setCurrentLocation(location);
     } catch (error) {
-      console.error('Error getting location:', error);
+      console.error(`Error getting location: ${error.message} (Code: ${error.code})`);
       toast.error(error instanceof Error ? error.message : 'Gagal mendapatkan lokasi');
     } finally {
       setIsGettingLocation(false);
@@ -282,19 +290,9 @@ export default function Absensi() {
           <CardContent className="p-0 overflow-hidden">
             <div className="h-40 w-full relative">
               {currentLocation ? (
-                <Map
-                  mapId="bf51a910020faedc"
-                  defaultCenter={{ lat: currentLocation.latitude, lng: currentLocation.longitude }}
-                  defaultZoom={15}
-                  center={{ lat: currentLocation.latitude, lng: currentLocation.longitude }}
-                  gestureHandling={'none'}
-                  disableDefaultUI={true}
-                >
-                  <AdvancedMarker
-                    position={{ lat: currentLocation.latitude, lng: currentLocation.longitude }}
-                    title="Lokasi Sales"
-                  />
-                </Map>
+                <div className="absolute inset-0 z-0">
+                  <SimpleMap position={{ lat: currentLocation.latitude, lng: currentLocation.longitude }} />
+                </div>
               ) : (
                 <div className="w-full h-full bg-muted flex items-center justify-center">
                   <p className="text-xs text-muted-foreground italic">Peta belum tersedia</p>

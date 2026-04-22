@@ -3,9 +3,11 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { useDatabase } from '@/contexts/DatabaseContext';
+import { useAuth } from '@/contexts/AuthContext';
 import { formatRupiah } from '@/lib/utils';
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { ArrowRightLeft, LayoutGrid } from 'lucide-react';
+import { ScopeFilters } from '@/components/shared/ScopeFilters';
 
 type PivotField = 'tanggal' | 'bulan' | 'tahun' | 'kategori' | 'produk' | 'pelanggan' | 'sales' | 'cabang';
 type AggregationType = 'sum_total' | 'sum_qty' | 'count_trx';
@@ -26,17 +28,30 @@ interface PivotDataItem {
 
 export default function AnalisaPivot() {
     const { penjualan, barang, kategori: kategoriList, pelanggan, users, cabang } = useDatabase();
+    const { user: currentUser } = useAuth();
 
     // Configuration State
     const [rowField, setRowField] = useState<PivotField>('kategori');
     const [colField, setColField] = useState<PivotField | 'none'>('bulan');
     const [valField, setValField] = useState<AggregationType>('sum_total');
 
+    // Scope Filters
+    const [selectedCabangIds, setSelectedCabangIds] = useState<string[]>([]);
+    const [selectedUserIds, setSelectedUserIds] = useState<string[]>([]);
+
     // 1. Flatten Data Source
     // Transform hierarchical sales data into a flat array of sales items
     const flatData = useMemo(() => {
         const data: PivotDataItem[] = [];
-        penjualan.filter(p => p.status !== 'batal').forEach(p => {
+        penjualan
+            .filter(p => p.status !== 'batal')
+            .filter(p => {
+                const pSalesId = p.salesId || p.createdBy;
+                if (selectedCabangIds.length > 0 && !selectedCabangIds.includes(p.cabangId || '')) return false;
+                if (selectedUserIds.length > 0 && !selectedUserIds.includes(pSalesId || '')) return false;
+                return true;
+            })
+            .forEach(p => {
             const date = new Date(p.tanggal);
             const custName = pelanggan.find(c => c.id === p.pelangganId)?.nama || 'Umum';
             const salesName = users.find(u => u.id === p.salesId)?.nama || 'Unknown';
@@ -63,7 +78,7 @@ export default function AnalisaPivot() {
             });
         });
         return data;
-    }, [penjualan, barang, kategoriList, pelanggan, users, cabang]);
+    }, [penjualan, barang, kategoriList, pelanggan, users, cabang, selectedCabangIds, selectedUserIds]);
 
     // 2. Compute Pivot Table
     const pivotData = useMemo(() => {
@@ -114,6 +129,17 @@ export default function AnalisaPivot() {
                 </CardHeader>
                 <CardContent>
                     <div className="flex flex-wrap items-center gap-4">
+                        {/* Scope Filters */}
+                        <ScopeFilters
+                            selectedCabangIds={selectedCabangIds}
+                            setSelectedCabangIds={setSelectedCabangIds}
+                            selectedUserIds={selectedUserIds}
+                            setSelectedUserIds={setSelectedUserIds}
+                            className="!space-y-0 flex flex-row items-center gap-2"
+                        />
+
+                        <div className="w-[1px] h-9 bg-border hidden md:block" />
+
                         <div className="space-y-1">
                             <label className="text-xs font-medium text-muted-foreground">Baris (Rows)</label>
                             <Select value={rowField} onValueChange={(v) => setRowField(v as PivotField)}>

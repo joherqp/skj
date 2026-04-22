@@ -12,7 +12,11 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { toast } from 'sonner';
 import { Switch } from "@/components/ui/switch";
-import { Search, Plus, ShoppingCart, Filter, Receipt, BarChart, Trophy, TrendingUp, Users, ChevronLeft, ChevronRight, User, Coins } from 'lucide-react';
+import { 
+  Search, Plus, ShoppingCart, Filter, Receipt, BarChart, Trophy, 
+  TrendingUp, Users, ChevronLeft, ChevronRight, User, Coins,
+  Building, ChevronDown 
+} from 'lucide-react';
 import { formatRupiah, formatTanggal, cn, formatNumber } from '@/lib/utils';
 import {
   Dialog,
@@ -21,6 +25,15 @@ import {
   DialogTitle,
   DialogDescription,
 } from "@/components/ui/dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+  DropdownMenuCheckboxItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+} from "@/components/ui/dropdown-menu";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow, TableFooter } from "@/components/ui/table";
 
@@ -35,12 +48,13 @@ export default function Penjualan() {
   const { user } = useAuth();
   const {
     penjualan, pelanggan, barang, satuan, users, karyawan,
-    viewMode, setViewMode
+    viewMode, setViewMode, cabang: listCabang
   } = useDatabase();
   const [search, setSearch] = useState('');
   const router = useRouter();
   const [displayLimit, setDisplayLimit] = useState(10);
-  const [scopedSalesId, setScopedSalesId] = useState<string>('all');
+  const [selectedCabangIds, setSelectedCabangIds] = useState<string[]>([]);
+  const [selectedUserIds, setSelectedUserIds] = useState<string[]>([]);
 
 
   // Filters
@@ -57,29 +71,47 @@ export default function Penjualan() {
     (filterStartDate ? 1 : 0) +
     (filterEndDate ? 1 : 0) +
     (filterStatus.length > 0 ? 1 : 0) +
-    (filterPayment.length > 0 ? 1 : 0);
+    (filterPayment.length > 0 ? 1 : 0) +
+    (selectedCabangIds.length > 0 ? 1 : 0) +
+    (selectedUserIds.length > 0 ? 1 : 0);
 
-  // ... [Scope Filtering Logic] ...
   // Scope Filtering: "Sub-database" logic
   const isAdminOrOwner = user?.roles.includes('admin') || user?.roles.includes('owner');
   const isLeader = user?.roles.includes('leader');
 
-  // Determine effective sales ID for filtering
-  // If viewMode is 'self', we always filter by user.id
-  // If viewMode is 'all', we use scopedSalesId (which could be 'all' or a specific user)
-  const effectiveSalesId = viewMode === 'me' ? (user?.id || 'all') : scopedSalesId;
-
   const scopedPenjualan = penjualan.filter(p => {
+    // 1. View Mode Constraint
+    if (viewMode === 'me') {
+      return p.salesId === user?.id || p.createdBy === user?.id;
+    }
+
+    // 2. Role-based Scope
     if (isAdminOrOwner) {
-      if (effectiveSalesId !== 'all' && p.salesId !== effectiveSalesId && p.createdBy !== effectiveSalesId) return false;
+      // Multi-select Branch filter
+      if (selectedCabangIds.length > 0) {
+        if (!p.cabangId || !selectedCabangIds.includes(p.cabangId)) return false;
+      }
+      // Multi-select User filter
+      if (selectedUserIds.length > 0) {
+        const salesId = p.salesId || p.createdBy;
+        if (!selectedUserIds.includes(salesId)) return false;
+      }
       return true;
     }
-    if (p.cabangId !== user?.cabangId) return false;
+
     if (isLeader) {
-      if (effectiveSalesId !== 'all' && p.salesId !== effectiveSalesId && p.createdBy !== effectiveSalesId) return false;
+      // Branch isolation for Leader
+      if (p.cabangId !== user?.cabangId) return false;
+      // Multi-select User filter within branch
+      if (selectedUserIds.length > 0) {
+        const salesId = p.salesId || p.createdBy;
+        if (!selectedUserIds.includes(salesId)) return false;
+      }
       return true;
     }
-    return p.salesId === user?.id;
+
+    // Sales role isolation
+    return p.salesId === user?.id || p.createdBy === user?.id;
   });
 
   const filteredPenjualan = scopedPenjualan.filter(p => {
@@ -102,11 +134,7 @@ export default function Penjualan() {
       }
       if (filterEndDate && matchesDate) {
         const end = new Date(filterEndDate);
-        end.setHours(23, 59, 59, 999); // End of day
-        const pDateEndOfDay = new Date(p.tanggal); // Use original time or normalize?
-        // Comparison: pDate is date object.
-        // Let's normalize pDate to 00:00:00 for strict day comparison or keep time?
-        // Usually "End Date" means "Up to the end of that day".
+        end.setHours(23, 59, 59, 999);
         if (pDate > end) matchesDate = false;
       }
     }
@@ -121,7 +149,6 @@ export default function Penjualan() {
   })
     .sort((a, b) => {
       // Priority 1: Unpaid (Belum Lunas) first
-      // Check if it's a credit sale that is NOT lunas
       const aUnpaid = a.metodePembayaran === 'tempo' && !a.isLunas;
       const bUnpaid = b.metodePembayaran === 'tempo' && !b.isLunas;
 
@@ -131,9 +158,6 @@ export default function Penjualan() {
       // Priority 2: Newest Date first
       return new Date(b.tanggal).getTime() - new Date(a.tanggal).getTime();
     });
-
-  // Infinite scroll observer
-
 
   const today = new Date();
   const todayStr = today.toDateString();
@@ -190,12 +214,22 @@ export default function Penjualan() {
       .join(', ');
 
     // 3. Sisa Kredit (Debtors)
-    // Filter customers who belong to the current user's scope and have debt
+    // Respect the multi-select filters for debtors as well
     const debtors = pelanggan.filter(p => {
-      // Scope logic matching filteredPelanggan
-      if (!isAdminOrOwner) {
-        if (p.cabangId !== user?.cabangId) return false;
-        if (!isLeader && p.salesId !== user?.id) return false;
+      // Role-based scope (similar to Pelanggan.tsx)
+      if (viewMode === 'me') {
+        if (p.salesId !== user?.id) return false;
+      } else {
+        if (isAdminOrOwner) {
+          if (selectedCabangIds.length > 0 && (!p.cabangId || !selectedCabangIds.includes(p.cabangId))) return false;
+          if (selectedUserIds.length > 0 && !selectedUserIds.includes(p.salesId)) return false;
+        } else if (p.cabangId !== user?.cabangId) {
+          return false; // Branch isolation
+        } else if (isLeader) {
+          if (selectedUserIds.length > 0 && !selectedUserIds.includes(p.salesId)) return false;
+        } else if (p.salesId !== user?.id) {
+          return false;
+        }
       }
       return p.sisaKredit > 0;
     }).sort((a, b) => b.sisaKredit - a.sisaKredit);
@@ -211,16 +245,13 @@ export default function Penjualan() {
       totalPiutang,
       debtors
     };
-  }, [scopedPenjualan, pelanggan, barang, satuan, todayStr, user, isAdminOrOwner, isLeader]);
+  }, [scopedPenjualan, pelanggan, barang, satuan, todayStr, user, isAdminOrOwner, isLeader, viewMode, selectedCabangIds, selectedUserIds]);
 
   return (
     <div className="animate-in fade-in duration-500">
       <div className="p-4 space-y-4">
-        {/* Management Filter: Team Switcher removed - moved to Beranda */}
-
         {/* Search & Actions */}
         <div className="flex gap-2">
-          {/* ... [Search Inputs] ... */}
           <div className="relative flex-1">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
             <Input
@@ -234,7 +265,12 @@ export default function Penjualan() {
             <PopoverTrigger asChild>
               <Button variant="outline" size="icon" className={activeFiltersCount > 0 ? "border-primary text-primary relative" : ""}>
                 <Filter className="w-4 h-4" />
-                {activeFiltersCount > 0 && <span className="absolute -top-1 -right-1 flex h-3 w-3"><span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary opacity-75"></span><span className="relative inline-flex rounded-full h-3 w-3 bg-primary"></span></span>}
+                {activeFiltersCount > 0 && (
+                  <span className="absolute -top-1 -right-1 flex h-3 w-3">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary opacity-75"></span>
+                    <span className="relative inline-flex rounded-full h-3 w-3 bg-primary"></span>
+                  </span>
+                )}
               </Button>
             </PopoverTrigger>
             <PopoverContent className="w-80 p-0" align="end">
@@ -251,6 +287,8 @@ export default function Penjualan() {
                         setFilterEndDate('');
                         setFilterStatus([]);
                         setFilterPayment([]);
+                        setSelectedCabangIds([]);
+                        setSelectedUserIds([]);
                       }}
                     >
                       Reset
@@ -330,24 +368,102 @@ export default function Penjualan() {
                     ))}
                   </div>
                 </div>
+
+                {/* Branch Filter (Admin/Owner only) */}
+                {isAdminOrOwner && viewMode === 'all' && (
+                  <div className="space-y-3 pt-2 border-t">
+                    <Label>Cabang</Label>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button variant="outline" className="w-full h-9 text-xs justify-between bg-background font-normal px-3">
+                          <div className="flex items-center gap-2 truncate">
+                            <Building className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+                            <span className="truncate">
+                              {selectedCabangIds.length === 0
+                                ? "Semua Cabang"
+                                : `${selectedCabangIds.length} Cabang`}
+                            </span>
+                          </div>
+                          <ChevronDown className="w-4 h-4 opacity-50 shrink-0" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent className="w-[240px] max-h-[300px] overflow-y-auto">
+                        <DropdownMenuLabel>Pilih Cabang</DropdownMenuLabel>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuCheckboxItem
+                          checked={selectedCabangIds.length === 0}
+                          onCheckedChange={() => setSelectedCabangIds([])}
+                        >
+                          Semua Cabang
+                        </DropdownMenuCheckboxItem>
+                        <DropdownMenuSeparator />
+                        {listCabang.map(c => (
+                          <DropdownMenuCheckboxItem
+                            key={c.id}
+                            checked={selectedCabangIds.includes(c.id)}
+                            onCheckedChange={(checked) => {
+                              if (checked) setSelectedCabangIds([...selectedCabangIds, c.id]);
+                              else setSelectedCabangIds(selectedCabangIds.filter(id => id !== c.id));
+                            }}
+                          >
+                            {c.nama}
+                          </DropdownMenuCheckboxItem>
+                        ))}
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </div>
+                )}
+
                 {/* Sales Filter (Only if in Team Mode) */}
                 {(isAdminOrOwner || isLeader) && viewMode === 'all' && (
-                  <div className="space-y-3">
+                  <div className="space-y-3 pt-2 border-t">
                     <Label>Salesperson</Label>
-                    <Select value={scopedSalesId} onValueChange={setScopedSalesId}>
-                      <SelectTrigger className="h-9">
-                        <SelectValue placeholder="Pilih Sales" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="all">Semua Sales</SelectItem>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button variant="outline" className="w-full h-9 text-xs justify-between bg-background font-normal px-3">
+                          <div className="flex items-center gap-2 truncate">
+                            <Users className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+                            <span className="truncate">
+                              {selectedUserIds.length === 0
+                                ? "Semua Sales"
+                                : `${selectedUserIds.length} Sales`}
+                            </span>
+                          </div>
+                          <ChevronDown className="w-4 h-4 opacity-50 shrink-0" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent className="w-[240px] max-h-[300px] overflow-y-auto">
+                        <DropdownMenuLabel>Pilih Sales</DropdownMenuLabel>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuCheckboxItem
+                          checked={selectedUserIds.length === 0}
+                          onCheckedChange={() => setSelectedUserIds([])}
+                        >
+                          Semua Sales
+                        </DropdownMenuCheckboxItem>
+                        <DropdownMenuSeparator />
                         {users.filter(u => {
-                          if (isAdminOrOwner) return (u.roles.includes('sales') || u.roles.includes('leader')) && u.isActive !== false;
-                          return (u.roles.includes('sales') || u.roles.includes('leader')) && u.cabangId === user?.cabangId && u.isActive !== false;
+                          const isSalesOrLeader = u.roles.includes('sales') || u.roles.includes('leader');
+                          const isActive = u.isActive !== false;
+                          if (isAdminOrOwner) {
+                            const isInSelectedCabang = selectedCabangIds.length === 0 || (u.cabangId && selectedCabangIds.includes(u.cabangId));
+                            return isSalesOrLeader && isActive && isInSelectedCabang;
+                          }
+                          return isSalesOrLeader && isActive && u.cabangId === user?.cabangId;
                         }).map(u => (
-                          <SelectItem key={u.id} value={u.id}>{u.nama.toUpperCase()}</SelectItem>
+                          <DropdownMenuCheckboxItem
+                            key={u.id}
+                            checked={selectedUserIds.includes(u.id)}
+                            onCheckedChange={(checked) => {
+                              if (checked) setSelectedUserIds([...selectedUserIds, u.id]);
+                              else setSelectedUserIds(selectedUserIds.filter(id => id !== u.id));
+                            }}
+                          >
+                            {u.nama.toUpperCase()}
+                          </DropdownMenuCheckboxItem>
                         ))}
-                      </SelectContent>
-                    </Select>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
                   </div>
                 )}
               </div>
@@ -370,8 +486,6 @@ export default function Penjualan() {
           barang={barang}
           satuan={satuan}
         />
-
-        {/* ... [Rest of code] ... */}
 
         {/* Quick Stats Summaries */}
         <div className="grid grid-cols-3 gap-2">

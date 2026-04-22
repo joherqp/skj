@@ -1,5 +1,5 @@
 // User and Auth Types
-export type UserRole = 'admin' | 'owner' | 'gudang' | 'leader' | 'sales' | 'staff' | 'finance' | 'driver';
+export type UserRole = 'admin' | 'owner' | 'manager' | 'gudang' | 'leader' | 'sales' | 'staff' | 'finance' | 'driver';
 export type ViewMode = 'all' | 'self';
 
 export interface User {
@@ -206,6 +206,8 @@ export interface PembayaranPenjualan {
   lokasi?: Lokasi;
   catatan?: string;
   createdBy?: string;
+  bayar?: number;
+  kembalian?: number;
 }
 
 export interface PenjualanItem {
@@ -282,6 +284,10 @@ export interface Notifikasi {
 }
 
 export interface PersetujuanPayload {
+  approvals?: {
+    owner?: { userId: string, date: Date | string };
+    finance?: { userId: string, date: Date | string };
+  };
   forwardToPusat?: boolean;
   isCabangChanged?: boolean;
   isStatusChanged?: boolean;
@@ -557,6 +563,7 @@ export interface ProfilPerusahaan {
     aiChatMode?: 'read' | 'write' | 'edit';
     radiusKunjungan?: number;
     radiusBehavior?: 'allow' | 'reject';
+    enableAIChat?: boolean;
     databaseType?: 'supabase' | 'firestore' | 'server';
     databaseConfig?: {
       supabaseUrl?: string;

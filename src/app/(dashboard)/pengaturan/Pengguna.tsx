@@ -30,6 +30,7 @@ export default function Pengguna() {
     staff: 'Staff',
     finance: 'Finance',
     driver: 'Driver',
+    manager: 'Manager',
   };
 
   const [activeTab, setActiveTab] = useState('aktif');

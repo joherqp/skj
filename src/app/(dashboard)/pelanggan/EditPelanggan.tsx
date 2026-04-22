@@ -32,6 +32,7 @@ export default function EditPelanggan() {
   const { pelanggan, updatePelanggan, addRiwayatPelanggan, kategoriPelanggan, profilPerusahaan } = useDatabase();
   const [loadingLoc, setLoadingLoc] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const [formData, setFormData] = useState({
     nama: '',
@@ -63,19 +64,19 @@ export default function EditPelanggan() {
           email: customer.email || '',
           namaBank: customer.namaBank || '',
           noRekening: customer.noRekening || '',
-          kategoriId: customer.kategoriId,
-          limitKredit: customer.limitKredit.toString(),
+          kategoriId: customer.kategoriId || '',
+          limitKredit: customer.limitKredit?.toString() || '0',
           latitude: customer.lokasi?.latitude || 0,
           longitude: customer.lokasi?.longitude || 0,
-          salesId: customer.salesId,
-          cabangId: customer.cabangId
+          salesId: customer.salesId || '',
+          cabangId: customer.cabangId || ''
         });
       } else {
         toast.error('Data pelanggan tidak ditemukan');
         router.push('/pelanggan');
       }
     }
-  }, [id, pelanggan, router]);
+  }, [idStr, pelanggan, router]);
 
   const handleGetLocation = async () => {
     setLoadingLoc(true);
@@ -154,9 +155,11 @@ export default function EditPelanggan() {
   const handleExecuteSubmit = async () => {
     if (!idStr) return;
 
+    setIsSubmitting(true);
     try {
       if (!formData.nama || !formData.kategoriId) {
         toast.error('Nama dan Kategori wajib diisi');
+        setIsSubmitting(false);
         return;
       }
 
@@ -201,8 +204,9 @@ export default function EditPelanggan() {
       router.push(`/pelanggan/${id}`);
     } catch (error) {
       console.error('Error requesting update:', error);
-      toast.error('Gagal mengirim/memperbarui data');
+      toast.error('Gagal mengirim/memperbarui data. Silakan coba lagi.');
     } finally {
+      setIsSubmitting(false);
       setShowConfirm(false);
     }
   };
@@ -248,7 +252,6 @@ export default function EditPelanggan() {
                     value={formData.nama}
                     onChange={(e) => setFormData(prev => ({ ...prev, nama: e.target.value }))}
                     placeholder="Nama lengkap/toko..."
-                    required
                   />
                 </div>
               </div>
@@ -307,7 +310,6 @@ export default function EditPelanggan() {
                     onChange={(e) => setFormData(prev => ({ ...prev, alamat: e.target.value }))}
                     placeholder="Alamat lengkap..."
                     className="min-h-[80px] pr-12"
-                    required
                   />
                   <Button
                     type="button"
@@ -327,21 +329,20 @@ export default function EditPelanggan() {
                     Koordinat: {formData.latitude}, {formData.longitude}
                   </p>
                 )}
-                {isAdminOrOwner && (
-                  <div className="mt-4">
-                    <Label className="mb-2 block text-sm text-muted-foreground">Peta Lokasi (Khusus Admin/Owner - Klik Peta untuk pin lokasi)</Label>
-                    <LocationPicker
-                      position={{ lat: formData.latitude, lng: formData.longitude }}
-                      onLocationSelect={handleMapLocationSelect}
-                    />
-                  </div>
-                )}
+                <div className="mt-4">
+                  <Label className="mb-2 block text-sm text-muted-foreground">Peta Lokasi (Klik Peta atau geser marker untuk memindahkan lokasi secara visual)</Label>
+                  <LocationPicker
+                    position={{ lat: formData.latitude, lng: formData.longitude }}
+                    onLocationSelect={handleMapLocationSelect}
+                  />
+                </div>
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label>Kategori</Label>
                   <Select
+                    key={formData.kategoriId ? `kategori-${formData.kategoriId}` : 'kategori-empty'}
                     value={formData.kategoriId}
                     onValueChange={(val) => setFormData(prev => ({ ...prev, kategoriId: val }))}
                   >
@@ -379,9 +380,9 @@ export default function EditPelanggan() {
                 )}
               </div>
 
-              <Button type="submit" className="w-full">
-                <Save className="w-4 h-4 mr-2" />
-                Simpan Perubahan
+              <Button type="submit" className="w-full" disabled={isSubmitting}>
+                <Save className={`w-4 h-4 mr-2 ${isSubmitting ? 'animate-spin' : ''}`} />
+                {isSubmitting ? 'Menyimpan...' : 'Simpan Perubahan'}
               </Button>
             </form>
           </CardContent>
@@ -396,8 +397,13 @@ export default function EditPelanggan() {
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Batal</AlertDialogCancel>
-            <AlertDialogAction onClick={handleExecuteSubmit}>Simpan</AlertDialogAction>
+            <AlertDialogCancel disabled={isSubmitting}>Batal</AlertDialogCancel>
+            <AlertDialogAction onClick={(e) => {
+              e.preventDefault();
+              handleExecuteSubmit();
+            }} disabled={isSubmitting}>
+              {isSubmitting ? 'Menyimpan...' : 'Simpan'}
+            </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>

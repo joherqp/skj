@@ -136,14 +136,21 @@ export function ApprovalDetailDialog({
     const isReimburse = item.jenis === 'reimburse';
     const rData = isReimburse ? reimburse.find(r => r.id === item.referensiId) : null;
     const isWaitingPayment = isReimburse && item.status === 'disetujui' && rData?.status === 'disetujui';
-    const canProcess = (item.status === 'pending' && item.diajukanOleh !== user?.id) || isWaitingPayment;
+    
+    // Prevent owner from seeing "Setujui" again if waiting for Manager
+    const isOwnerWaitingManager = item.jenis === 'rencana_setoran' && data?.approvals?.owner && !user?.roles.includes('manager');
+    
+    // Prevent Manager from seeing "Setujui" if Owner hasn't approved
+    const isManagerWaitingOwner = item.jenis === 'rencana_setoran' && !data?.approvals?.owner && user?.roles.includes('manager') && !user?.roles.includes('owner');
+
+    const canProcess = ((item.status === 'pending' && item.diajukanOleh !== user?.id) && !isOwnerWaitingManager && !isManagerWaitingOwner) || isWaitingPayment;
 
     return (
         <Dialog open={isOpen} onOpenChange={onOpenChange}>
             <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
                 <DialogHeader>
                     <DialogTitle className="flex items-center gap-2 capitalize">
-                        {item.jenis.replace(/_/g, ' ')}
+                        {item.jenis === 'rencana_setoran' ? 'Setoran Kepusat' : item.jenis.replace(/_/g, ' ')}
                         <span className="text-xs font-normal text-muted-foreground px-2 py-0.5 bg-slate-100 rounded-full">
                             {new Date(item.tanggalPengajuan).toLocaleDateString()}
                         </span>

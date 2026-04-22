@@ -50,11 +50,11 @@ export function LocationTracker() {
                 }
               }
             } catch (error) {
-              console.error('Error tracking location:', error);
+              console.error(`Error tracking location: ${error.message || error}`);
             }
           },
           (error) => {
-            console.error('Error getting location:', error);
+            console.error(`Error getting location: ${error.message} (Code: ${error.code})`);
           }
         );
       }

@@ -76,14 +76,28 @@ export function ApprovalSetoran({ data }: { data: PersetujuanPayload }) {
                          </div>
                      </div>
 
+                     {data.approvals?.owner && (
+                         <div className="mb-4 text-center">
+                             <Badge className="bg-amber-100 text-amber-800 border-amber-200">
+                                 Telah disetujui Owner, menunggu Finance Pusat
+                             </Badge>
+                         </div>
+                     )}
+
                      {data.transfers && data.transfers.length > 0 && (
                          <div className="space-y-2">
                              <p className="text-xs font-semibold text-indigo-900">Bukti Transfer ({data.transfers.length}):</p>
                              <div className="flex gap-2 chat-scroll overflow-x-auto pb-2">
                                  {data.transfers.map((t, i) => (
-                                     <a key={i} href={t.proofUrl} target="_blank" rel="noreferrer" className="block w-16 h-16 shrink-0 border rounded overflow-hidden">
-                                         <img src={t.proofUrl} className="w-full h-full object-cover" alt="Bukti" />
-                                     </a>
+                                     t.proofUrl ? (
+                                         <a key={i} href={t.proofUrl} target="_blank" rel="noreferrer" className="block w-16 h-16 shrink-0 border rounded overflow-hidden">
+                                             <img src={t.proofUrl} className="w-full h-full object-cover" alt="Bukti" />
+                                         </a>
+                                     ) : (
+                                         <div key={i} className="flex items-center justify-center w-16 h-16 shrink-0 border rounded bg-gray-100 text-[10px] text-gray-500 text-center p-1">
+                                             Tidak ada lampiran
+                                         </div>
+                                     )
                                  ))}
                              </div>
                          </div>
@@ -104,13 +118,13 @@ export function ApprovalSetoran({ data }: { data: PersetujuanPayload }) {
                          Ke: {data.rekeningNama} {data.rekeningNomor ? `(${data.rekeningNomor})` : ''}
                      </Badge>
                  )}
-                 {data.buktiGambar && (
+                 {data.buktiGambar ? (
                      <div className="mt-4 flex justify-center">
                          <a href={data.buktiGambar} target="_blank" rel="noreferrer" className="block w-32 max-h-32 rounded overflow-hidden border">
                              <img src={data.buktiGambar} className="w-full h-full object-cover" alt="Bukti Setor" />
                          </a>
                      </div>
-                 )}
+                 ) : null}
             </div>
         </div>
     );

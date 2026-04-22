@@ -68,7 +68,7 @@ export default function DetailPelanggan() {
       const location = await getCurrentLocation();
       setCurrentLocation(location);
     } catch (error) {
-      console.error('Error getting location:', error);
+      console.error(`Error getting location: ${error.message} (Code: ${error.code})`);
       toast.error(error instanceof Error ? error.message : 'Gagal mendapatkan lokasi');
     }
   };

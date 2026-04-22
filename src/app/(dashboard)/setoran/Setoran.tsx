@@ -6,7 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { useAuth } from '@/contexts/AuthContext';
 import { useDatabase } from '@/contexts/DatabaseContext';
-import { Search, Plus, Wallet, Filter, Clock, CheckCircle, XCircle, Users, AlertCircle } from 'lucide-react';
+import { Search, Plus, Wallet, Filter, Clock, CheckCircle, XCircle, Users, AlertCircle, Building, ChevronDown } from 'lucide-react';
 import { formatRupiah, formatCompactRupiah, formatTanggal } from '@/lib/utils';
 import { useRouter } from 'next/navigation';
 import {
@@ -16,6 +16,15 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+  DropdownMenuCheckboxItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+} from "@/components/ui/dropdown-menu";
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Label } from '@/components/ui/label';
 
@@ -44,7 +53,8 @@ export default function Setoran() {
     users, cabang, viewMode, persetujuan
   } = useDatabase();
   const [search, setSearch] = useState('');
-  const [filterCabang, setFilterCabang] = useState<string>('all');
+  const [selectedCabangIds, setSelectedCabangIds] = useState<string[]>([]);
+  const [selectedUserIds, setSelectedUserIds] = useState<string[]>([]);
   const router = useRouter();
   const [displayLimit, setDisplayLimit] = useState(10);
 
@@ -57,7 +67,9 @@ export default function Setoran() {
   const activeFiltersCount =
     (filterStartDate ? 1 : 0) +
     (filterEndDate ? 1 : 0) +
-    (filterStatus.length > 0 ? 1 : 0);
+    (filterStatus.length > 0 ? 1 : 0) +
+    (selectedCabangIds.length > 0 ? 1 : 0) +
+    (selectedUserIds.length > 0 ? 1 : 0);
 
 
 
@@ -65,18 +77,23 @@ export default function Setoran() {
   const isFinance = user?.roles.includes('finance') || isAdminOrOwner;
 
   // 2. Determine Target Users based on Role & Filter
-  // If Admin/Owner: Filter users by selected branch (or all)
-  // If Sales: Only self
   const targetUsers = isAdminOrOwner
     ? users.filter(u => {
       if (viewMode === 'me') return u.id === user?.id;
-      return filterCabang === 'all' ? true : u.cabangId === filterCabang;
+      const matchesCabang = selectedCabangIds.length === 0 || (u.cabangId && selectedCabangIds.includes(u.cabangId));
+      const matchesUser = selectedUserIds.length === 0 || selectedUserIds.includes(u.id);
+      return matchesCabang && matchesUser;
     })
     : users.filter(u => {
       if (viewMode === 'me') return u.id === user?.id;
-      // Leaders can see branch in 'all' mode
+      // Leaders/Finance can see branch in 'all' mode
       const isUserLeader = user?.roles.includes('leader');
-      if (isUserLeader) return u.cabangId === user?.cabangId;
+      const isUserFinance = user?.roles.includes('finance');
+      if (isUserLeader || isUserFinance) {
+        const matchesCabang = u.cabangId === user?.cabangId;
+        const matchesUser = selectedUserIds.length === 0 || selectedUserIds.includes(u.id);
+        return matchesCabang && matchesUser;
+      }
       return u.id === user?.id;
     });
 
@@ -167,8 +184,8 @@ export default function Setoran() {
     .filter(u => {
       if (viewMode === 'me') return u.id === user?.id;
       if (isAdminOrOwner) {
-        // If filter is active, check branch
-        if (filterCabang !== 'all') return u.cabangId === filterCabang;
+        // Use selectedCabangIds for filtering
+        if (selectedCabangIds.length > 0) return u.cabangId && selectedCabangIds.includes(u.cabangId);
         return true; // Show all for Global
       }
       // If finance, see same branch
@@ -256,17 +273,47 @@ export default function Setoran() {
                 <h3 className="text-sm font-semibold text-muted-foreground">Monitoring Saldo Tim</h3>
                 {isAdminOrOwner && (
                   <div className="w-[160px] md:w-[200px]">
-                    <Select value={filterCabang} onValueChange={setFilterCabang}>
-                      <SelectTrigger className="h-8 text-xs">
-                        <SelectValue placeholder="Filter Cabang" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="all">Global (Semua Cabang)</SelectItem>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button variant="outline" className="w-full h-8 text-xs justify-between bg-background font-normal px-2">
+                          <div className="flex items-center gap-1.5 truncate">
+                            <Building className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+                            <span className="truncate">
+                              {selectedCabangIds.length === 0
+                                ? "Semua Cabang"
+                                : `${selectedCabangIds.length} Cabang`}
+                            </span>
+                          </div>
+                          <ChevronDown className="w-3 h-3 opacity-50 shrink-0" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent className="w-[200px] max-h-[300px] overflow-y-auto" align="end">
+                        <DropdownMenuLabel>Pilih Cabang</DropdownMenuLabel>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuCheckboxItem
+                          checked={selectedCabangIds.length === 0}
+                          onCheckedChange={() => setSelectedCabangIds([])}
+                        >
+                          Semua Cabang
+                        </DropdownMenuCheckboxItem>
+                        <DropdownMenuSeparator />
                         {cabang.map(c => (
-                          <SelectItem key={c.id} value={c.id}>{c.nama}</SelectItem>
+                          <DropdownMenuCheckboxItem
+                            key={c.id}
+                            checked={selectedCabangIds.includes(c.id)}
+                            onCheckedChange={(checked) => {
+                              if (checked) {
+                                setSelectedCabangIds([...selectedCabangIds, c.id]);
+                              } else {
+                                setSelectedCabangIds(selectedCabangIds.filter(id => id !== c.id));
+                              }
+                            }}
+                          >
+                            {c.nama}
+                          </DropdownMenuCheckboxItem>
                         ))}
-                      </SelectContent>
-                    </Select>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
                   </div>
                 )}
               </div>
@@ -371,6 +418,8 @@ export default function Setoran() {
                         setFilterStartDate('');
                         setFilterEndDate('');
                         setFilterStatus([]);
+                        setSelectedCabangIds([]);
+                        setSelectedUserIds([]);
                       }}
                     >
                       Reset
@@ -426,6 +475,111 @@ export default function Setoran() {
                     ))}
                   </div>
                 </div>
+
+                {/* Cabang Filter (Admin/Owner only) */}
+                {isAdminOrOwner && viewMode === 'all' && (
+                  <div className="space-y-3">
+                    <Label>Cabang</Label>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button variant="outline" className="w-full h-9 text-xs justify-between bg-background font-normal px-3">
+                          <div className="flex items-center gap-2 truncate">
+                            <Building className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+                            <span className="truncate">
+                              {selectedCabangIds.length === 0
+                                ? "Semua Cabang"
+                                : `${selectedCabangIds.length} Cabang`}
+                            </span>
+                          </div>
+                          <ChevronDown className="w-4 h-4 opacity-50 shrink-0" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent className="w-[240px] max-h-[300px] overflow-y-auto">
+                        <DropdownMenuLabel>Pilih Cabang</DropdownMenuLabel>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuCheckboxItem
+                          checked={selectedCabangIds.length === 0}
+                          onCheckedChange={() => setSelectedCabangIds([])}
+                        >
+                          Semua Cabang
+                        </DropdownMenuCheckboxItem>
+                        <DropdownMenuSeparator />
+                        {cabang.map(c => (
+                          <DropdownMenuCheckboxItem
+                            key={c.id}
+                            checked={selectedCabangIds.includes(c.id)}
+                            onCheckedChange={(checked) => {
+                              if (checked) {
+                                setSelectedCabangIds([...selectedCabangIds, c.id]);
+                              } else {
+                                setSelectedCabangIds(selectedCabangIds.filter(id => id !== c.id));
+                              }
+                            }}
+                          >
+                            {c.nama}
+                          </DropdownMenuCheckboxItem>
+                        ))}
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </div>
+                )}
+
+                {/* Sales Filter (Only if in Team Mode) */}
+                {(isAdminOrOwner || isFinance || user?.roles.includes('leader')) && viewMode === 'all' && (
+                  <div className="space-y-3">
+                    <Label>Salesperson</Label>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button variant="outline" className="w-full h-9 text-xs justify-between bg-background font-normal px-3">
+                          <div className="flex items-center gap-2 truncate">
+                            <Users className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+                            <span className="truncate">
+                              {selectedUserIds.length === 0
+                                ? "Semua Sales"
+                                : `${selectedUserIds.length} Sales`}
+                            </span>
+                          </div>
+                          <ChevronDown className="w-4 h-4 opacity-50 shrink-0" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent className="w-[240px] max-h-[300px] overflow-y-auto">
+                        <DropdownMenuLabel>Pilih Sales</DropdownMenuLabel>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuCheckboxItem
+                          checked={selectedUserIds.length === 0}
+                          onCheckedChange={() => setSelectedUserIds([])}
+                        >
+                          Semua Sales
+                        </DropdownMenuCheckboxItem>
+                        <DropdownMenuSeparator />
+                        {users.filter(u => {
+                          const isSalesOrLeader = u.roles.includes('sales') || u.roles.includes('leader');
+                          const isActive = u.isActive !== false;
+                          if (isAdminOrOwner) {
+                            const isInSelectedCabang = selectedCabangIds.length === 0 || (u.cabangId && selectedCabangIds.includes(u.cabangId));
+                            return isSalesOrLeader && isActive && isInSelectedCabang;
+                          }
+                          // If finance/leader, see same branch
+                          return isSalesOrLeader && isActive && u.cabangId === user?.cabangId;
+                        }).map(u => (
+                          <DropdownMenuCheckboxItem
+                            key={u.id}
+                            checked={selectedUserIds.includes(u.id)}
+                            onCheckedChange={(checked) => {
+                              if (checked) {
+                                setSelectedUserIds([...selectedUserIds, u.id]);
+                              } else {
+                                setSelectedUserIds(selectedUserIds.filter(id => id !== u.id));
+                              }
+                            }}
+                          >
+                            {u.nama.toUpperCase()}
+                          </DropdownMenuCheckboxItem>
+                        ))}
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </div>
+                )}
               </div>
             </PopoverContent>
           </Popover>

@@ -146,7 +146,7 @@ export default function Beranda() {
     if (p.targetUserId) {
       if (p.targetUserId !== user?.id) isTarget = false;
     } else {
-      const isSuperUser = isAdminOrOwner;
+      const isSuperUser = isAdminOrOwner || user?.roles.includes('manager');
       if (p.targetRole && !user?.roles.includes(p.targetRole) && !isSuperUser) isTarget = false;
       if (p.targetCabangId && !isSuperUser && p.targetCabangId !== cabangId) isTarget = false;
     }

@@ -174,12 +174,12 @@ export default function Persetujuan() {
                 isTarget = false;
             } else {
                 // 2. Role Target
-                const isSuperUser = user?.roles.includes('admin') || user?.roles.includes('owner');
+                const isSuperUser = user?.roles.includes('admin') || user?.roles.includes('owner') || user?.roles.includes('manager');
                 if (p.targetRole && !user?.roles.includes(p.targetRole) && !isSuperUser) isTarget = false;
 
-                // 3. Branch Target (unless global admin/owner)
+                // 3. Branch Target (unless global admin/owner/manager)
                 if (p.targetCabangId) {
-                    const isGlobalUser = user?.roles.includes('admin') || user?.roles.includes('owner');
+                    const isGlobalUser = user?.roles.includes('admin') || user?.roles.includes('owner') || user?.roles.includes('manager');
                     if (!isGlobalUser && p.targetCabangId !== user?.cabangId) isTarget = false;
                 }
             }
@@ -206,10 +206,10 @@ export default function Persetujuan() {
         if (p.targetUserId) {
             if (p.targetUserId !== user?.id) isTarget = false;
         } else {
-            const isSuperUser = user?.roles.includes('admin') || user?.roles.includes('owner');
+            const isSuperUser = user?.roles.includes('admin') || user?.roles.includes('owner') || user?.roles.includes('manager');
             if (p.targetRole && !user?.roles.includes(p.targetRole) && !isSuperUser) isTarget = false;
             if (p.targetCabangId) {
-                const isGlobalUser = user?.roles.includes('admin') || user?.roles.includes('owner');
+                const isGlobalUser = user?.roles.includes('admin') || user?.roles.includes('owner') || user?.roles.includes('manager');
                 if (!isGlobalUser && p.targetCabangId !== user?.cabangId) isTarget = false;
             }
         }

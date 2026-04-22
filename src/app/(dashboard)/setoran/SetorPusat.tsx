@@ -297,7 +297,7 @@ export default function SetorPusat() {
               jenis: 'rencana_setoran', 
               referensiId: crypto.randomUUID(),
               status: 'pending',
-              targetRole: 'admin',
+              targetRole: 'manager',
               diajukanOleh: user?.id || 'system',
               tanggalPengajuan: new Date(),
               catatan: notes,
@@ -305,14 +305,18 @@ export default function SetorPusat() {
           });
 
           // 4. NOTIFICATIONS
-          const admins = users.filter(u => u.roles.includes('admin') || u.roles.includes('owner'));
-          if (admins.length > 0) {
-              const notifPromises = admins.map(admin => 
+          const notifiedUsers = users.filter(u => 
+              u.roles.includes('admin') || 
+              u.roles.includes('owner') ||
+              u.roles.includes('manager')
+          );
+          if (notifiedUsers.length > 0) {
+              const notifPromises = notifiedUsers.map(u => 
                   addNotifikasi({
                       judul: 'Setoran Baru (Pusat)',
                       pesan: `${user?.nama || 'Sales'} mengajukan setoran ke pusat sebesar ${formatRupiah(currentTotal)}`,
                       jenis: 'info',
-                      userId: admin.id,
+                      userId: u.id,
                       dibaca: false,
                       tanggal: new Date(),
                       link: '/persetujuan'

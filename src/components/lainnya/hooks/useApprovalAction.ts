@@ -123,6 +123,69 @@ export const useApprovalAction = () => {
             return { success: true };
         }
 
+        // 1.5 Handle Dual Approval for Rencana Setoran
+        if (type === 'rencana_setoran') {
+            const approvalItem = persetujuan.find(p => p.id === id);
+            if (approvalItem && approvalItem.data) {
+                const payload = approvalItem.data as PersetujuanPayload;
+                
+                // If user is not Manager, treat as Owner approval
+                if (!user?.roles.includes('manager')) {
+                    const newPayload = {
+                        ...payload,
+                        approvals: {
+                            ...payload.approvals,
+                            owner: { userId: user?.id || '', date: new Date().toISOString() }
+                        }
+                    };
+                    
+                    await updatePersetujuan(id, {
+                        data: newPayload,
+                        targetRole: 'manager',
+                    });
+
+                    // Notify Manager
+                    const pusatManagers = users.filter(u =>
+                        u.roles.includes('manager')
+                    );
+                    
+                    await Promise.all(pusatManagers.map(mUser =>
+                        addNotifikasi({
+                            userId: mUser.id,
+                            judul: 'Persetujuan Setoran Pusat',
+                            pesan: `Menunggu tinjauan Manager untuk setoran senilai ${formatRupiah((payload.amount as number) || 0)}.`,
+                            jenis: 'info',
+                            dibaca: false,
+                            tanggal: new Date(),
+                            link: '/persetujuan'
+                        })
+                    ));
+
+                    toast.success('Disetujui (Owner), diteruskan ke Manager.');
+                    return { success: true };
+                } 
+                
+                // If Finance, add their approval to payload and proceed to final approval
+                if (!payload.approvals?.owner) {
+                    toast.error('Gagal: Menunggu persetujuan Owner terlebih dahulu.');
+                    return { success: false, reason: 'unauthorized_sequence' };
+                }
+
+                const newPayload = {
+                    ...payload,
+                    approvals: {
+                        ...payload.approvals,
+                        finance: { userId: user?.id || '', date: new Date().toISOString() }
+                    }
+                };
+                
+                // We update the data payload and then let it continue to final approval
+                await updatePersetujuan(id, {
+                    data: newPayload
+                });
+            }
+        }
+
         // 2. Update Persetujuan (Final Approval)
         await updatePersetujuan(id, {
             status: 'disetujui',

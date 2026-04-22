@@ -44,7 +44,9 @@ export function Sidebar({ className, onClose, isCollapsed = false }: SidebarProp
 
   const menuItems = [
     { icon: Home, label: 'Beranda', path: '/beranda' },
-    { icon: MessageSquare, label: 'Chat AI', path: '/chat-ai' },
+    ...(profilPerusahaan?.config?.enableAIChat !== false ? [
+      { icon: MessageSquare, label: 'Chat AI', path: '/chat-ai' },
+    ] : []),
     { icon: Inbox, label: 'Kotak Masuk', path: '/persetujuan' },
     { icon: Clock, label: 'Absensi', path: '/absensi' },
     { icon: Package, label: 'Barang', path: '/barang' },
@@ -57,12 +59,12 @@ export function Sidebar({ className, onClose, isCollapsed = false }: SidebarProp
     ...(!user?.roles?.includes('owner') ? [
       { icon: FileText, label: 'Reimburse', path: '/reimburse' },
     ] : []),
-    ...(user?.roles?.some(r => ['admin', 'finance'].includes(r)) ? [
+    ...(user?.roles?.some(r => ['admin', 'finance', 'manager'].includes(r)) ? [
       { icon: Coins, label: 'Kas Kecil', path: '/petty-cash' },
     ] : []),
 
-    // Only show Monitoring to Admin or Owner
-    ...(user?.roles?.some(r => ['admin', 'owner'].includes(r)) ? [
+    // Only show Monitoring to Admin, Owner, or Manager
+    ...(user?.roles?.some(r => ['admin', 'owner', 'manager'].includes(r)) ? [
       { icon: Activity, label: 'Monitoring', path: '/monitoring' }
     ] : []),
     // Only show Settings to Admin

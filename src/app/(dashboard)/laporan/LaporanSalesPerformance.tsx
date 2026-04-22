@@ -19,6 +19,7 @@ import { id as localeId } from 'date-fns/locale';
 import * as XLSX from 'xlsx';
 import { toast } from 'sonner';
 import { Penjualan, PenjualanItem } from '@/types';
+import { ScopeFilters } from '@/components/shared/ScopeFilters';
 
 interface SalesTargetDB {
   id: string;
@@ -52,7 +53,7 @@ interface AdjustmentHistory {
 
 export default function LaporanSalesPerformance() {
   const { user } = useAuth();
-  const { cabang } = useDatabase();
+  const { } = useDatabase();
   const [loading, setLoading] = useState(false);
   const [performanceData, setPerformanceData] = useState<PerformanceItem[]>([]);
 
@@ -62,9 +63,8 @@ export default function LaporanSalesPerformance() {
   const isAdminOrOwner = user?.roles.some(r => ['admin', 'owner'].includes(r));
   const userCabangId = user?.cabangId;
 
-  const [selectedCabang, setSelectedCabang] = useState<string>(
-    isAdminOrOwner ? 'all' : (userCabangId || 'all')
-  );
+  const [selectedCabangIds, setSelectedCabangIds] = useState<string[]>([]);
+  const [selectedUserIds, setSelectedUserIds] = useState<string[]>([]);
 
   // History State
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
@@ -117,8 +117,11 @@ export default function LaporanSalesPerformance() {
 
         if (!isAdminOrOwner && userCabangId) {
           salesQuery = salesQuery.eq('cabang_id', userCabangId);
-        } else if (selectedCabang !== 'all') {
-          salesQuery = salesQuery.eq('cabang_id', selectedCabang);
+        } else if (selectedCabangIds.length === 1) {
+          // For a single selection, use eq for efficiency; for multiple use in()
+          salesQuery = salesQuery.eq('cabang_id', selectedCabangIds[0]);
+        } else if (selectedCabangIds.length > 1) {
+          salesQuery = salesQuery.in('cabang_id', selectedCabangIds);
         }
 
         const { data, error: salesError } = await salesQuery;
@@ -184,8 +187,9 @@ export default function LaporanSalesPerformance() {
 
         const filteredData = rawCalculatedData?.filter((item: PerformanceItem) => {
           if (isAdminOrOwner) {
-            if (selectedCabang === 'all') return true;
-            return item.cabang_id === selectedCabang || (item.scope === 'sales' && salesData?.some(p => p.salesId === item.sales_id));
+            if (selectedCabangIds.length === 0) return true;
+            return selectedCabangIds.includes(item.cabang_id || '') ||
+              (item.scope === 'sales' && salesData?.some(p => p.salesId === item.sales_id));
           }
           return item.cabang_id === userCabangId || (item.scope === 'sales' && salesData?.some(p => p.salesId === item.sales_id));
         });
@@ -216,7 +220,7 @@ export default function LaporanSalesPerformance() {
     };
 
     fetchData();
-  }, [selectedMonth, selectedYear, selectedCabang, isAdminOrOwner, userCabangId]);
+  }, [selectedMonth, selectedYear, selectedCabangIds, isAdminOrOwner, userCabangId]);
 
   const fetchHistory = async (target: PerformanceItem) => {
     setSelectedTarget(target);
@@ -306,24 +310,15 @@ export default function LaporanSalesPerformance() {
               </div>
             </div>
 
-            <div className="space-y-1.5">
-              <label className="text-xs font-semibold text-muted-foreground uppercase opacity-70">Cabang</label>
-              <Select
-                value={selectedCabang}
-                onValueChange={setSelectedCabang}
-                disabled={!isAdminOrOwner}
-              >
-                <SelectTrigger className="w-full md:w-[200px] h-9">
-                  <SelectValue placeholder="Semua Cabang" />
-                </SelectTrigger>
-                <SelectContent>
-                  {isAdminOrOwner && <SelectItem value="all">Semua Cabang</SelectItem>}
-                  {cabang.map(c => (
-                    <SelectItem key={c.id} value={c.id}>{c.nama}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+            {/* Scope Filters */}
+            <ScopeFilters
+              selectedCabangIds={selectedCabangIds}
+              setSelectedCabangIds={setSelectedCabangIds}
+              selectedUserIds={selectedUserIds}
+              setSelectedUserIds={setSelectedUserIds}
+              showUserFilter={false}
+              className="!space-y-0 flex flex-row items-center gap-2"
+            />
 
             <div className="hidden md:block flex-1"></div>
 
