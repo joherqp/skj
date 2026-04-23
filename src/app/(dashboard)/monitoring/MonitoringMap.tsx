@@ -59,7 +59,6 @@ function MapInstanceCapture({ setMap }: { setMap: (map: L.Map) => void }) {
       map.touchZoom.enable();
       map.doubleClickZoom.enable();
       map.scrollWheelZoom.enable();
-      // @ts-ignore - tap is a Leaflet 1.x internal for mobile safari, might not be in types
       if ((map as any).tap) (map as any).tap.enable();
     }
   }, [map, setMap]);
@@ -147,7 +146,7 @@ export function MonitoringMapWrapper({
         doubleClickZoom={true}
         zoomControl={true}
         attributionControl={true}
-        // @ts-ignore
+        // @ts-expect-error - tap property is required for mobile touch support in some Leaflet versions
         tap={true}
       >
         <TileLayer
@@ -217,7 +216,6 @@ export function MonitoringMapWrapper({
                 direction="top"
                 offset={[0, -10]}
                 opacity={0.95}
-                // @ts-ignore
                 interactive={false}
                 className="leaflet-name-label"
               >

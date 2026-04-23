@@ -6,7 +6,7 @@ import { Input } from '@/components/ui/input';
 import { useDatabase } from '@/contexts/DatabaseContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { formatRupiah } from '@/lib/utils';
-import { ArrowLeft, Download, Search, FileSpreadsheet, FileText, ArrowUp, ArrowDown } from 'lucide-react';
+import { ArrowLeft, Download, Search, FileSpreadsheet, FileText, ArrowUp, ArrowDown, Building, Calendar } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { Barang, User, MutasiItem } from '@/types';
 import * as XLSX from 'xlsx';
@@ -626,78 +626,92 @@ export default function LaporanStok() {
     return (
         <div className="animate-in fade-in duration-500">
             <div className="p-4 space-y-4">
-                {/* Header & Filters */}
-                <div className="flex flex-col md:flex-row justify-between gap-4 items-start md:items-center bg-white p-4 rounded-lg border shadow-sm">
-                    <div className="flex items-center gap-2">
-                        <Button variant="ghost" onClick={() => router.push('/laporan')} className="pl-0">
-                            <ArrowLeft className="w-4 h-4 mr-2" /> Kembali
+                {/* Header & Main Filters */}
+                <div className="flex flex-col lg:flex-row justify-between gap-6 items-start lg:items-center bg-white p-6 rounded-2xl border shadow-sm border-slate-200">
+                    <div className="flex items-center gap-4">
+                        <Button variant="ghost" size="icon" onClick={() => router.push('/laporan')} className="rounded-full hover:bg-slate-100 shrink-0">
+                            <ArrowLeft className="w-5 h-5 text-slate-600" />
                         </Button>
                         <div className="flex flex-col">
-                            <h2 className="font-semibold text-lg hidden md:block">Laporan Arus Stok</h2>
-                            <p className="text-xs text-muted-foreground hidden md:block">Pantau pergerakan stok multi-gudang & multi-satuan</p>
+                            <h1 className="text-2xl font-bold tracking-tight text-slate-900">Laporan Arus Stok</h1>
+                            <p className="text-sm text-slate-500">Pantau pergerakan stok multi-gudang & multi-satuan</p>
                         </div>
                     </div>
 
-                    <div className="flex flex-wrap gap-2 w-full md:w-auto">
-                    {/* Scope Filters */}
-                        <ScopeFilters
-                            selectedCabangIds={selectedCabangIds}
-                            setSelectedCabangIds={setSelectedCabangIds}
-                            selectedUserIds={selectedUserIds}
-                            setSelectedUserIds={setSelectedUserIds}
-                            className="!space-y-0 flex flex-row items-center gap-2"
-                        />
-
-                        {/* Date Range */}
-                        <div className="flex flex-col gap-1">
-                            <div className="flex justify-between items-center ml-1">
-                                <span className="text-[10px] text-muted-foreground ml-1">Periode</span>
-                                <button
-                                    className="text-[10px] text-primary hover:underline cursor-pointer"
-                                    onClick={() => setIsSingleDate(!isSingleDate)}
-                                >
-                                    {isSingleDate ? 'Pilih Rentang' : 'Pilih 1 Hari'}
-                                </button>
+                    <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-4 w-full lg:w-auto">
+                        {/* Scope Group */}
+                        <div className="bg-slate-50 p-2 rounded-xl border border-slate-100 flex items-center gap-3 flex-1 lg:flex-none">
+                            <div className="bg-white p-2 rounded-lg shadow-sm border border-slate-200 shrink-0">
+                                <Building className="w-4 h-4 text-primary" />
                             </div>
+                            <ScopeFilters
+                                selectedCabangIds={selectedCabangIds}
+                                setSelectedCabangIds={setSelectedCabangIds}
+                                selectedUserIds={selectedUserIds}
+                                setSelectedUserIds={setSelectedUserIds}
+                                className="!space-y-0"
+                            />
+                        </div>
 
-                            {isSingleDate ? (
-                                <Input
-                                    type="date"
-                                    value={format(singleDate, 'yyyy-MM-dd')}
-                                    onChange={(e) => {
-                                        if (e.target.value) {
-                                            setSingleDate(new Date(e.target.value));
-                                        }
-                                    }}
-                                    className="h-8 text-xs w-[160px]"
-                                />
-                            ) : (
-                                <DatePickerWithRange date={dateRange} setDate={setDateRange} className="w-[240px]" />
-                            )}
+                        {/* Date Group */}
+                        <div className="bg-slate-50 p-2 rounded-xl border border-slate-100 flex items-center gap-3 flex-1 lg:flex-none">
+                            <div className="bg-white p-2 rounded-lg shadow-sm border border-slate-200 shrink-0">
+                                <Calendar className="w-4 h-4 text-primary" />
+                            </div>
+                            <div className="flex flex-col min-w-[160px] sm:min-w-[180px]">
+                                <div className="flex justify-between items-center mb-1 pr-1">
+                                    <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Periode</span>
+                                    <button
+                                        className="text-[10px] font-bold text-primary hover:text-primary/80 transition-colors uppercase"
+                                        onClick={() => setIsSingleDate(!isSingleDate)}
+                                    >
+                                        {isSingleDate ? 'Pilih Rentang' : 'Pilih 1 Hari'}
+                                    </button>
+                                </div>
+
+                                {isSingleDate ? (
+                                    <Input
+                                        type="date"
+                                        value={format(singleDate, 'yyyy-MM-dd')}
+                                        onChange={(e) => {
+                                            if (e.target.value) {
+                                                setSingleDate(new Date(e.target.value));
+                                            }
+                                        }}
+                                        className="h-8 text-xs bg-white border-slate-200 rounded-lg focus:ring-primary/20"
+                                    />
+                                ) : (
+                                    <DatePickerWithRange 
+                                        date={dateRange} 
+                                        setDate={setDateRange} 
+                                        className="w-full"
+                                    />
+                                )}
+                            </div>
                         </div>
                     </div>
                 </div>
 
-                {/* Search & Export */}
-                <div className="flex justify-between items-center bg-muted/20 p-2 rounded-md">
-                    <div className="relative w-full max-w-sm">
-                        <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                {/* Search & Export Bar */}
+                <div className="flex flex-col sm:flex-row justify-between items-stretch sm:items-center gap-4 bg-slate-50/50 p-3 rounded-xl border border-slate-100">
+                    <div className="relative flex-1 max-w-md">
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
                         <Input
                             type="search"
                             placeholder="Cari barang (Kode / Nama)..."
-                            className="pl-8 h-9 bg-white"
+                            className="pl-9 h-10 bg-white border-slate-200 rounded-xl focus:ring-primary/20"
                             value={search}
                             onChange={(e) => setSearch(e.target.value)}
                         />
                     </div>
-                    <div className="flex gap-2">
-                        <Button variant="secondary" size="sm" className="bg-white" onClick={handleExportExcel}>
+                    <div className="flex items-center gap-2 overflow-x-auto pb-1 sm:pb-0 no-scrollbar">
+                        <Button variant="outline" size="sm" className="bg-white border-slate-200 hover:bg-slate-50 rounded-xl h-10 shadow-sm" onClick={handleExportExcel}>
                             <FileSpreadsheet className="w-4 h-4 mr-2 text-green-600" /> Excel
                         </Button>
-                        <Button variant="outline" size="sm" className="bg-white" onClick={handleExportCSV}>
-                            <FileText className="w-4 h-4 mr-2" /> CSV
+                        <Button variant="outline" size="sm" className="bg-white border-slate-200 hover:bg-slate-50 rounded-xl h-10 shadow-sm" onClick={handleExportCSV}>
+                            <FileText className="w-4 h-4 mr-2 text-blue-600" /> CSV
                         </Button>
-                        <Button variant="outline" size="sm" className="bg-white" onClick={handleExportPDF}>
+                        <Button variant="outline" size="sm" className="bg-white border-slate-200 hover:bg-slate-50 rounded-xl h-10 shadow-sm" onClick={handleExportPDF}>
                             <Download className="w-4 h-4 mr-2 text-red-600" /> PDF
                         </Button>
                     </div>

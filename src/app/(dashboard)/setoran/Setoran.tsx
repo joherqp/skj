@@ -377,11 +377,7 @@ export default function Setoran() {
                     </CardContent>
                   </Card>
                 ))}
-                {teamBalances.length > 5 && (
-                  <Button variant="ghost" size="sm" className="w-full text-xs" onClick={() => router.push('/pengaturan/pengguna')}>
-                    Lihat Semua ({teamBalances.length})
-                  </Button>
-                )}
+
               </div>
             </div>
           </div>

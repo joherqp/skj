@@ -6,7 +6,7 @@ import { useDatabase } from '@/contexts/DatabaseContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { formatRupiah } from '@/lib/utils';
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { ArrowRightLeft, LayoutGrid } from 'lucide-react';
+import { ArrowRightLeft, LayoutGrid, Building } from 'lucide-react';
 import { ScopeFilters } from '@/components/shared/ScopeFilters';
 
 type PivotField = 'tanggal' | 'bulan' | 'tahun' | 'kategori' | 'produk' | 'pelanggan' | 'sales' | 'cabang';
@@ -120,67 +120,83 @@ export default function AnalisaPivot() {
     return (
         <div className="space-y-6">
             {/* Configuration Panel */}
-            <Card className="bg-muted/30">
-                <CardHeader className="pb-3">
-                    <CardTitle className="text-sm font-medium flex items-center gap-2">
-                         <LayoutGrid className="w-4 h-4" />
-                         Konfigurasi Pivot
+            <Card className="border-slate-200 shadow-sm overflow-hidden rounded-2xl">
+                <CardHeader className="bg-slate-50/50 border-b border-slate-100 py-4">
+                    <CardTitle className="text-base font-bold flex items-center gap-2 text-slate-800">
+                         <div className="bg-primary/10 p-1.5 rounded-lg">
+                            <LayoutGrid className="w-4 h-4 text-primary" />
+                         </div>
+                         Konfigurasi Analisa Pivot
                     </CardTitle>
                 </CardHeader>
-                <CardContent>
-                    <div className="flex flex-wrap items-center gap-4">
-                        {/* Scope Filters */}
-                        <ScopeFilters
-                            selectedCabangIds={selectedCabangIds}
-                            setSelectedCabangIds={setSelectedCabangIds}
-                            selectedUserIds={selectedUserIds}
-                            setSelectedUserIds={setSelectedUserIds}
-                            className="!space-y-0 flex flex-row items-center gap-2"
-                        />
-
-                        <div className="w-[1px] h-9 bg-border hidden md:block" />
-
-                        <div className="space-y-1">
-                            <label className="text-xs font-medium text-muted-foreground">Baris (Rows)</label>
-                            <Select value={rowField} onValueChange={(v) => setRowField(v as PivotField)}>
-                                <SelectTrigger className="w-[180px] bg-background">
-                                    <SelectValue />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    <SelectItem value="kategori">Kategori Produk</SelectItem>
-                                    <SelectItem value="produk">Produk</SelectItem>
-                                    <SelectItem value="pelanggan">Pelanggan</SelectItem>
-                                    <SelectItem value="sales">Sales / Karyawan</SelectItem>
-                                    <SelectItem value="cabang">Cabang</SelectItem>
-                                    <SelectItem value="bulan">Bulan</SelectItem>
-                                </SelectContent>
-                            </Select>
+                <CardContent className="p-6">
+                    <div className="flex flex-col xl:flex-row items-stretch xl:items-end gap-6">
+                        {/* Scope Filters Group */}
+                        <div className="flex flex-col gap-2">
+                            <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider ml-1">Cakupan Data</label>
+                            <div className="bg-slate-50 p-2 rounded-xl border border-slate-100 flex items-center gap-3">
+                                <div className="bg-white p-2 rounded-lg shadow-sm border border-slate-200">
+                                    <Building className="w-4 h-4 text-primary" />
+                                </div>
+                                <ScopeFilters
+                                    selectedCabangIds={selectedCabangIds}
+                                    setSelectedCabangIds={setSelectedCabangIds}
+                                    selectedUserIds={selectedUserIds}
+                                    setSelectedUserIds={setSelectedUserIds}
+                                    className="!space-y-0"
+                                />
+                            </div>
                         </div>
 
-                        <ArrowRightLeft className="w-4 h-4 text-muted-foreground mt-5 hidden md:block" />
+                        <div className="hidden xl:block w-[1px] h-12 bg-slate-200 self-center" />
 
-                        <div className="space-y-1">
-                            <label className="text-xs font-medium text-muted-foreground">Kolom (Columns)</label>
-                             <Select value={colField} onValueChange={(v) => setColField(v as PivotField | 'none')}>
-                                <SelectTrigger className="w-[180px] bg-background">
-                                    <SelectValue />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    <SelectItem value="none">Tidak Ada (Hanya Total)</SelectItem>
-                                    <SelectItem value="bulan">Bulan</SelectItem>
-                                    <SelectItem value="tahun">Tahun</SelectItem>
-                                    <SelectItem value="kategori">Kategori Produk</SelectItem>
-                                    <SelectItem value="cabang">Cabang</SelectItem>
-                                </SelectContent>
-                            </Select>
+                        {/* Pivot Dimension Group */}
+                        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-4 flex-1">
+                            <div className="flex-1 space-y-2">
+                                <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider ml-1 text-nowrap">Baris (Rows)</label>
+                                <Select value={rowField} onValueChange={(v) => setRowField(v as PivotField)}>
+                                    <SelectTrigger className="w-full bg-white border-slate-200 rounded-xl h-11 focus:ring-primary/20 shadow-sm">
+                                        <SelectValue />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="kategori">Kategori Produk</SelectItem>
+                                        <SelectItem value="produk">Produk</SelectItem>
+                                        <SelectItem value="pelanggan">Pelanggan</SelectItem>
+                                        <SelectItem value="sales">Sales / Karyawan</SelectItem>
+                                        <SelectItem value="cabang">Cabang</SelectItem>
+                                        <SelectItem value="bulan">Bulan</SelectItem>
+                                    </SelectContent>
+                                </Select>
+                            </div>
+
+                            <div className="hidden sm:flex items-center justify-center pt-6">
+                                <ArrowRightLeft className="w-4 h-4 text-slate-400" />
+                            </div>
+
+                            <div className="flex-1 space-y-2">
+                                <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider ml-1 text-nowrap">Kolom (Columns)</label>
+                                 <Select value={colField} onValueChange={(v) => setColField(v as PivotField | 'none')}>
+                                    <SelectTrigger className="w-full bg-white border-slate-200 rounded-xl h-11 focus:ring-primary/20 shadow-sm">
+                                        <SelectValue />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="none">Tidak Ada (Hanya Total)</SelectItem>
+                                        <SelectItem value="bulan">Bulan</SelectItem>
+                                        <SelectItem value="tahun">Tahun</SelectItem>
+                                        <SelectItem value="kategori">Kategori Produk</SelectItem>
+                                        <SelectItem value="cabang">Cabang</SelectItem>
+                                    </SelectContent>
+                                </Select>
+                            </div>
                         </div>
 
-                        <div className="w-[1px] h-10 bg-border mx-2 hidden md:block" />
+                        <div className="hidden xl:block w-[1px] h-12 bg-slate-200 self-center" />
 
-                        <div className="space-y-1">
-                            <label className="text-xs font-medium text-muted-foreground">Nilai (Values)</label>
+                        {/* Values Group */}
+                        <div className="flex-1 xl:max-w-[240px] space-y-2">
+                            <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider ml-1">Nilai (Values)</label>
                             <Select value={valField} onValueChange={(v) => setValField(v as AggregationType)}>
-                                <SelectTrigger className="w-[180px] bg-background">
+                                <SelectTrigger className="w-full bg-white border-slate-200 rounded-xl h-11 focus:ring-primary/20 shadow-sm font-semibold text-primary">
                                     <SelectValue />
                                 </SelectTrigger>
                                 <SelectContent>

@@ -48,13 +48,13 @@ export default function Monitoring() {
         viewMode, kategoriPelanggan, profilPerusahaan, deletePelanggan, refresh
     } = useDatabase();
 
-    const [mapMode, setMapMode] = useState<MapMode>('team');
+    const [mapMode, setMapMode] = useState<MapMode>('pelanggan');
     const [selectedMarker, setSelectedMarker] = useState<MapMarker | null>(null);
     const [mapCenter, setMapCenter] = useState<{ lat: number; lng: number }>({ lat: -6.2088, lng: 106.8456 });
     const [selectedCabang, setSelectedCabang] = useState<string[]>([]);
     const [selectedUser, setSelectedUser] = useState<string[]>([]);
     const [dateRange, setDateRange] = useState<DateRange | undefined>(undefined);
-    const [colorIndicator, setColorIndicator] = useState<'pengguna' | 'cabang' | 'kategori'>('pengguna');
+    const [colorIndicator, setColorIndicator] = useState<'pengguna' | 'cabang' | 'kategori'>('kategori');
     const [duplicateThreshold, setDuplicateThreshold] = useState(15); // Default 15 meters
     const [duplicateSearch, setDuplicateSearch] = useState('');
     const [isClient, setIsClient] = useState(false);

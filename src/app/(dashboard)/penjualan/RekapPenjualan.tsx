@@ -6,7 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { useDatabase } from '@/contexts/DatabaseContext';
 import { formatRupiah, formatCompactRupiah } from '@/lib/utils';
-import { BarChart, TrendingUp, Calendar, ArrowLeft, Wallet, CreditCard, Receipt, User, Coins, Package } from 'lucide-react';
+import { BarChart, TrendingUp, Calendar, ArrowLeft, Wallet, CreditCard, Receipt, User, Coins, Package, Building } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
@@ -251,7 +251,7 @@ export default function RekapPenjualan() {
                     <Button
                         variant="ghost"
                         size="sm"
-                        onClick={() => router.push('/penjualan')}
+                        onClick={() => router.push('/laporan')}
                         className="-ml-2 text-muted-foreground hover:text-foreground"
                     >
                         <ArrowLeft className="w-4 h-4 mr-1" />
@@ -270,26 +270,34 @@ export default function RekapPenjualan() {
                 </div>
 
                 {/* Filter Section */}
-                <Card className="border-none shadow-sm bg-background/50 backdrop-blur-sm">
+                <Card className="border-none shadow-sm bg-background/50 backdrop-blur-sm overflow-visible">
                     <CardContent className="p-4 sm:p-6">
-                        <div className="flex flex-wrap items-center gap-4 w-full sm:w-auto">
-                            {/* Scope Filters (Branch & User) */}
-                            <ScopeFilters
-                                selectedCabangIds={selectedCabangIds}
-                                setSelectedCabangIds={setSelectedCabangIds}
-                                selectedUserIds={selectedUserIds}
-                                setSelectedUserIds={setSelectedUserIds}
-                                className="!space-y-0 flex flex-row items-center gap-2"
-                            />
-                            <div className="flex flex-col gap-1 w-full sm:w-auto">
-                                <div className="flex items-center justify-between gap-2 max-w-sm">
+                        <div className="flex flex-col md:flex-row md:items-end gap-6">
+                            {/* Left: Scope Filters */}
+                            <div className="flex flex-col gap-2">
+                                <div className="flex items-center gap-2 text-primary font-medium ml-1">
+                                    <Building className="w-4 h-4" />
+                                    <span className="text-sm">Filter Cabang & Sales</span>
+                                </div>
+                                <ScopeFilters
+                                    selectedCabangIds={selectedCabangIds}
+                                    setSelectedCabangIds={setSelectedCabangIds}
+                                    selectedUserIds={selectedUserIds}
+                                    setSelectedUserIds={setSelectedUserIds}
+                                    className="!space-y-0 flex flex-row items-center gap-2"
+                                />
+                            </div>
+
+                            {/* Middle: Date Filter */}
+                            <div className="flex flex-col gap-2 flex-1 max-w-sm">
+                                <div className="flex items-center justify-between gap-2 ml-1">
                                     <div className="flex items-center gap-2 text-primary font-medium">
                                         <Calendar className="w-4 h-4" />
-                                        <span>Periode Laporan</span>
+                                        <span className="text-sm">Periode Laporan</span>
                                     </div>
                                     <button
                                         type="button"
-                                        className="text-[10px] text-primary hover:underline cursor-pointer ml-auto"
+                                        className="text-[10px] text-primary hover:underline cursor-pointer"
                                         onClick={() => setIsSingleDate(!isSingleDate)}
                                     >
                                         {isSingleDate ? 'Pilih Rentang' : 'Pilih 1 Hari'}
@@ -297,41 +305,43 @@ export default function RekapPenjualan() {
                                 </div>
 
                                 {isSingleDate ? (
-                                    <div className="w-full max-w-sm">
+                                    <div className="w-full">
                                         <Input
                                             type="date"
                                             value={singleDate}
                                             onChange={e => setSingleDate(e.target.value)}
-                                            className="h-8 text-xs w-full sm:w-[160px] bg-background cursor-pointer"
+                                            className="h-9 text-xs w-full sm:w-[180px] bg-background cursor-pointer rounded-xl border-muted-foreground/20 shadow-sm"
                                         />
                                     </div>
                                 ) : (
-                                    <div className="grid grid-cols-2 gap-2 max-w-sm">
+                                    <div className="flex items-center gap-2">
                                         <Input
                                             type="date"
                                             value={startDate}
                                             onChange={e => setStartDate(e.target.value)}
-                                            className="h-8 text-xs bg-background cursor-pointer"
+                                            className="h-9 text-xs bg-background cursor-pointer rounded-xl border-muted-foreground/20 shadow-sm flex-1"
                                         />
+                                        <span className="text-muted-foreground text-xs font-bold">s/d</span>
                                         <Input
                                             type="date"
                                             value={endDate}
                                             onChange={e => setEndDate(e.target.value)}
-                                            className="h-8 text-xs bg-background cursor-pointer"
+                                            className="h-9 text-xs bg-background cursor-pointer rounded-xl border-muted-foreground/20 shadow-sm flex-1"
                                         />
                                     </div>
                                 )}
                             </div>
 
-                            <div className="flex items-center space-x-2 bg-background border rounded-lg p-2 h-8 self-end">
+                            {/* Right: Display Mode Switch */}
+                            <div className="flex items-center space-x-2 bg-background border border-muted-foreground/20 rounded-xl px-3 h-9 shadow-sm">
                                 <Switch
                                     id="currency-mode"
                                     checked={showDetailed}
                                     onCheckedChange={setShowDetailed}
                                 />
-                                <Label htmlFor="currency-mode" className="text-xs font-medium cursor-pointer flex items-center gap-1.5">
+                                <Label htmlFor="currency-mode" className="text-xs font-semibold cursor-pointer flex items-center gap-1.5 whitespace-nowrap">
                                     <Coins className="w-3.5 h-3.5 text-muted-foreground" />
-                                    {showDetailed ? 'Detail' : 'Singkat'}
+                                    {showDetailed ? 'Mode Detail' : 'Mode Singkat'}
                                 </Label>
                             </div>
                         </div>
