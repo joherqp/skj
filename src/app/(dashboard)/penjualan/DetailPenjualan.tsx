@@ -19,7 +19,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { QRCodeCanvas } from 'qrcode.react';
+import { QRCodeSVG } from 'qrcode.react';
 
 export default function DetailPenjualan() {
     const { id } = useParams<{ id: string }>();
@@ -295,30 +295,30 @@ ${profilPerusahaan.nama}`;
     return (
         <div className="animate-in fade-in duration-500">
             {/* Printable Receipt */}
-            <div className={cn("hidden print:fixed print:top-0 print:left-0 print:w-full print:h-full print:bg-white print:z-[99999] print:p-0", showPrintReceipt ? 'print:block block' : 'hidden')}>
-                <div className="w-[58mm] mx-auto p-4 text-black font-mono text-[10px] leading-tight">
+            <div className={cn("hidden print:absolute print:top-0 print:left-0 print:w-full print:bg-white print:z-[99999] print:p-0 receipt-mode", showPrintReceipt ? 'print:block block' : 'hidden')}>
+                <div className="w-[58mm] text-black font-mono text-[10px] leading-tight p-2">
                     <div className="text-center mb-4">
                         <h1 className="font-bold text-sm uppercase">{profilPerusahaan.nama}</h1>
-                        <p className="text-[9px] leading-snug">{branch?.alamat || profilPerusahaan.alamat}</p>
-                        <p className="text-[9px]">{branch?.telepon || profilPerusahaan.telepon}</p>
+                        <p className="text-[10px] leading-snug">{branch?.alamat || profilPerusahaan.alamat}</p>
+                        <p className="text-[10px]">{branch?.telepon || profilPerusahaan.telepon}</p>
                     </div>
 
                     <div className="border-t border-black border-dashed my-2" />
 
-                    <div className="space-y-1 mb-2">
+                    <div className="space-y-0.5 mb-2">
                         <div className="flex justify-between">
                             <span>NOTA: {trx.nomorNota}</span>
                         </div>
                         <div className="flex justify-between">
-                            <span>TGL: {new Date(trx.tanggal).toLocaleDateString('id-ID')}</span>
+                            <span>TGL : {new Date(trx.tanggal).toLocaleDateString('id-ID')}</span>
                             <span>{new Date(trx.tanggal).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })}</span>
                         </div>
                         <div className="flex justify-between uppercase">
-                            <span>CS: {customer?.nama || 'UMUM'}</span>
+                            <span>PEL : {customer?.nama || 'UMUM'}</span>
                         </div>
                         <div className="flex justify-between font-bold">
                             <span>STATUS:</span>
-                            <span className="border border-black px-1">{trx.status.toUpperCase()}</span>
+                            <span className="bg-black text-white px-1 ml-1">{trx.status.toUpperCase()}</span>
                         </div>
                     </div>
 
@@ -337,7 +337,7 @@ ${profilPerusahaan.nama}`;
                                                 <span>{item.jumlah} {unit?.simbol} x {formatRupiah(item.harga).replace('Rp', '')}</span>
                                                 <span className="font-bold">{formatRupiah(item.subtotal).replace('Rp', '')}</span>
                                             </div>
-                                            {item.isBonus && <div className="text-[8px] font-bold italic pl-2">*** ITEM BONUS ***</div>}
+                                            {item.isBonus && <div className="text-[9px] font-bold italic pl-2">*** ITEM BONUS ***</div>}
                                         </td>
                                     </tr>
                                 );
@@ -371,15 +371,15 @@ ${profilPerusahaan.nama}`;
                     <div className="border-t border-black border-dashed my-4" />
 
                     <div className="flex flex-col items-center gap-3 text-center">
-                        <div className="bg-white p-1 border border-black inline-block">
-                            <QRCodeCanvas
-                                value={`${trx.nomorNota}`}
-                                size={60}
-                                level="M"
-                                includeMargin={false}
-                            />
+                        <div className="bg-white p-2 border border-black inline-block">
+                        <QRCodeSVG
+                            value={`JBR-NOTA-${trx.nomorNota}`}
+                            size={100}
+                            level="H"
+                            includeMargin={true}
+                        />
                         </div>
-                        <div className="text-[8px] leading-tight uppercase">
+                        <div className="text-[9px] leading-tight uppercase">
                             <p className="font-bold">Terima kasih atas kunjungan Anda</p>
                             <p>Barang yang sudah dibeli tidak dapat dikembalikan</p>
                         </div>
@@ -388,12 +388,12 @@ ${profilPerusahaan.nama}`;
             </div>
 
             {/* Printable Invoice (A4/A5) */}
-            <div className={cn("hidden print:fixed print:top-0 print:left-0 print:w-full print:h-full print:bg-white print:z-[99999] print:p-8", showPrintInvoice ? 'print:block block' : 'hidden')}>
+            <div className={cn("hidden print:absolute print:top-0 print:left-0 print:w-full print:bg-white print:z-[99999] print:p-8 invoice-mode", showPrintInvoice ? 'print:block block' : 'hidden')}>
                 <div className="max-w-4xl mx-auto text-black font-sans text-xs relative">
                     {/* Invoice QR Code Top Right */}
                     <div className="absolute top-0 right-0 p-2 border bg-white flex flex-col items-center gap-1">
-                        <QRCodeCanvas
-                            value={`${trx.nomorNota}`}
+                        <QRCodeSVG
+                            value={`JBR-NOTA-${trx.nomorNota}`}
                             size={70}
                             level="H"
                         />
@@ -956,8 +956,10 @@ ${profilPerusahaan.nama}`;
                                     setShowPrintReceipt(true);
                                     setTimeout(() => {
                                         window.print();
-                                        setShowPrintReceipt(false);
-                                    }, 300);
+                                        setTimeout(() => {
+                                            setShowPrintReceipt(false);
+                                        }, 500);
+                                    }, 1000);
                                 }}
                             >
                                 <Printer className="w-6 h-6 text-primary" />
@@ -974,8 +976,10 @@ ${profilPerusahaan.nama}`;
                                     setShowPrintInvoice(true);
                                     setTimeout(() => {
                                         window.print();
-                                        setShowPrintInvoice(false);
-                                    }, 300);
+                                        setTimeout(() => {
+                                            setShowPrintInvoice(false);
+                                        }, 500);
+                                    }, 1000);
                                 }}
                             >
                                 <Receipt className="w-6 h-6 text-primary" />

@@ -1,6 +1,6 @@
 import { formatRupiah, formatNumber } from '@/lib/utils';
 import { ProfilPerusahaan } from '@/types';
-import { QRCodeCanvas } from 'qrcode.react';
+import { QRCodeSVG } from 'qrcode.react';
 
 export interface SalesRecapItem {
   cabang: string;
@@ -228,8 +228,8 @@ export function SetoranPusatPrintTemplate({
             {data.deposit.catatan || 'Tidak ada catatan.'}
           </div>
           <div className="flex flex-col items-center justify-center p-4 border-2 border-dashed border-slate-200 rounded-lg bg-slate-50">
-            <QRCodeCanvas 
-              value={`CVSKJ-PST-${data.id}`} 
+            <QRCodeSVG 
+              value={`JBR-PST-${data.id}`} 
               size={80}
               level="H"
               includeMargin={false}

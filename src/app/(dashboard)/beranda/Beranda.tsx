@@ -694,62 +694,148 @@ function QRScannerModal({ isOpen, onClose }: { isOpen: boolean; onClose: () => v
   const { penjualan } = useDatabase();
 
   const handleScanSuccess = useCallback((decodedText: string) => {
-    if (decodedText.startsWith('JBR-PST-')) {
-      const id = decodedText.replace('JBR-PST-', '');
-      toast.success("QR Berhasil dipindai!");
+    const text = decodedText.trim();
+    if (!text) return;
+
+    // Check for Approval/Persetujuan QR
+    const isApproval = text.toUpperCase().startsWith('JBR-PST-') || 
+                      text.toUpperCase().startsWith('CVSKJ-PST-') ||
+                      text.toUpperCase().startsWith('PST-');
+                      
+    if (isApproval) {
+      const id = text.split('-').pop() || '';
+        
+      toast.success("QR Persetujuan berhasil dipindai!");
       onClose();
       router.push(`/persetujuan?id=${id}`);
-    } else if (decodedText.startsWith('JBR-NOTA-')) {
-      const notaNum = decodedText.replace('JBR-NOTA-', '');
-      const trx = penjualan.find(p => p.nomorNota === notaNum);
+      return;
+    } 
+    
+    // Check for Sales/Nota QR
+    const isNota = text.toUpperCase().startsWith('JBR-NOTA-') || 
+                  text.toUpperCase().startsWith('CVSKJ-NOTA-') ||
+                  text.toUpperCase().startsWith('NOTA-');
+
+    if (isNota) {
+      const notaNum = text.split('NOTA-').pop() || '';
+        
+      const trx = penjualan.find(p => p.nomorNota.toUpperCase() === notaNum.toUpperCase());
 
       if (trx) {
         toast.success("Nota berhasil ditemukan!");
         onClose();
         router.push(`/penjualan/${trx.id}`);
       } else {
-        toast.error(`Nota ${notaNum} tidak ditemukan di database Anda.`);
+        // Try exact match if split fails or didn't find anything
+        const secondTry = penjualan.find(p => p.nomorNota.toUpperCase() === text.toUpperCase());
+        if (secondTry) {
+          toast.success("Nota berhasil ditemukan!");
+          onClose();
+          router.push(`/penjualan/${secondTry.id}`);
+        } else {
+          toast.error(`Nota ${notaNum || text} tidak ditemukan di database.`);
+        }
       }
-    } else {
-      toast.error("QR Code tidak valid atau bukan format CVSKJ.");
+      return;
     }
+
+    // Fallback for raw Nota number (if scanned from legacy/other systems)
+    const isLikelyNota = /^[A-Z0-9\/\-]+$/i.test(text) && text.length > 5;
+    if (isLikelyNota) {
+        const trx = penjualan.find(p => p.nomorNota.toUpperCase() === text.toUpperCase());
+        if (trx) {
+            toast.success("Nota berhasil ditemukan!");
+            onClose();
+            router.push(`/penjualan/${trx.id}`);
+            return;
+        }
+    }
+
+    toast.error("Format QR Code tidak dikenali atau Nota tidak ditemukan.");
   }, [router, onClose, penjualan]);
 
   useEffect(() => {
     let html5QrCode: Html5Qrcode | null = null;
+    let isMounted = true;
 
     if (isOpen && activeMode === 'camera') {
-
-      const startScanner = async () => {
-        // Wait a bit for Dialog animation/portal to settle
-        await new Promise(resolve => setTimeout(resolve, 100));
+      const startScanner = async (retryCount = 0) => {
+        // Wait for Dialog animation and DOM to settle
+        await new Promise(resolve => setTimeout(resolve, 300 + (retryCount * 200)));
+        
+        if (!isMounted) return;
 
         const element = document.getElementById("reader");
         if (!element) {
-          console.warn("Reader element not found yet, retrying...");
+          if (retryCount < 5) {
+            console.warn(`Reader element not found, retry ${retryCount + 1}...`);
+            startScanner(retryCount + 1);
+          }
           return;
         }
 
         try {
+          // Clear any existing instance on the element first
+          try {
+            const existing = new Html5Qrcode("reader");
+            if (existing) await existing.clear();
+          } catch (e) {
+            // Ignore clear errors
+          }
+
           setIsScanning(true);
           html5QrCode = new Html5Qrcode("reader");
-          const config = { fps: 10, qrbox: { width: 250, height: 250 } };
+          
+          const qrboxFunction = (viewfinderWidth: number, viewfinderHeight: number) => {
+            const minEdgeSize = Math.min(viewfinderWidth, viewfinderHeight);
+            // On mobile, we want a larger box for easier scanning
+            const isMobile = window.innerWidth < 768;
+            const qrboxSize = Math.floor(minEdgeSize * (isMobile ? 0.75 : 0.6));
+            return {
+              width: qrboxSize,
+              height: qrboxSize
+            };
+          };
 
-          await html5QrCode?.start(
+          const config = { 
+            fps: 20, // Slightly higher FPS
+            qrbox: qrboxFunction,
+            aspectRatio: 1.0,
+            experimentalFeatures: {
+              useBarCodeDetectorIfSupported: true
+            },
+            videoConstraints: {
+              facingMode: "environment",
+              focusMode: "continuous",
+              width: { min: 640, ideal: 1280, max: 1920 },
+              height: { min: 480, ideal: 720, max: 1080 }
+            }
+          };
+
+          await html5QrCode.start(
             { facingMode: "environment" },
             config,
             (decodedText) => {
-              handleScanSuccess(decodedText);
+              if (isMounted) {
+                // Visual feedback before closing
+                const readerElement = document.getElementById('reader');
+                if (readerElement) {
+                  readerElement.style.outline = '4px solid hsl(var(--primary))';
+                  readerElement.style.transition = 'outline 0.2s ease-in-out';
+                }
+                setTimeout(() => handleScanSuccess(decodedText), 300);
+              }
             },
-            () => { } // Ignore errors
+            () => { } // Ignore verbose errors
           );
         } catch (err) {
           console.error("Failed to start scanner", err);
-          // Only show toast if it's not a "not found" error which we already logged
-          if (isOpen && activeMode === 'camera') {
-            toast.error("Gagal mengakses kamera. Pastikan izin diberikan.");
+          if (retryCount < 2) {
+            setTimeout(() => startScanner(retryCount + 1), 1000);
+          } else if (isMounted) {
+            toast.error("Gagal mengakses kamera. Pastikan izin diberikan dan gunakan HTTPS.");
+            setIsScanning(false);
           }
-          setIsScanning(false);
         }
       };
 
@@ -757,8 +843,11 @@ function QRScannerModal({ isOpen, onClose }: { isOpen: boolean; onClose: () => v
     }
 
     return () => {
+      isMounted = false;
       if (html5QrCode?.isScanning) {
-        html5QrCode.stop().catch(err => console.error("Error stopping scanner", err));
+        html5QrCode.stop()
+          .then(() => html5QrCode?.clear())
+          .catch(err => console.error("Error stopping scanner", err));
       }
     };
   }, [isOpen, activeMode, handleScanSuccess]);
@@ -806,13 +895,33 @@ function QRScannerModal({ isOpen, onClose }: { isOpen: boolean; onClose: () => v
             </button>
           </div>
 
-          <div className="relative aspect-square bg-black rounded-lg overflow-hidden border-2 border-primary/20">
+          <div className="relative aspect-square bg-black rounded-lg overflow-hidden border-2 border-primary/20 shadow-inner">
             {activeMode === 'camera' ? (
               <>
                 <div id="reader" className="w-full h-full"></div>
+                {isScanning && (
+                  <div className="qr-viewfinder">
+                    <div className="qr-corner corner-tl"></div>
+                    <div className="qr-corner corner-tr"></div>
+                    <div className="qr-corner corner-bl"></div>
+                    <div className="qr-corner corner-br"></div>
+                  </div>
+                )}
                 {!isScanning && (
-                  <div className="absolute inset-0 flex items-center justify-center bg-black/50 text-white text-xs text-center p-4">
-                    Menghubungkan ke kamera...
+                  <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/80 text-white text-xs text-center p-8 gap-4 z-20">
+                    <div className="w-12 h-12 border-4 border-primary border-t-transparent rounded-full animate-spin"></div>
+                    <div className="space-y-1">
+                      <p className="font-bold tracking-wide uppercase">Menghubungkan Kamera...</p>
+                      <p className="text-[10px] text-white/60">Pastikan izin kamera sudah diberikan</p>
+                    </div>
+                    <Button 
+                      variant="outline" 
+                      size="sm" 
+                      onClick={() => window.location.reload()}
+                      className="mt-2 border-white/20 text-white hover:bg-white/10"
+                    >
+                      Muat Ulang Halaman
+                    </Button>
                   </div>
                 )}
               </>

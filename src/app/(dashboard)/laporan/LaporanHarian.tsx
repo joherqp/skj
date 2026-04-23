@@ -30,7 +30,7 @@ import { format, startOfDay, endOfDay, isAfter } from 'date-fns';
 import { id as localeId } from 'date-fns/locale';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
-import { QRCodeCanvas } from 'qrcode.react';
+import { QRCodeSVG } from 'qrcode.react';
 import { useRef } from 'react';
 import {
     Table,
@@ -692,7 +692,7 @@ export default function LaporanHarian() {
                     <div className="flex flex-wrap items-center gap-3">
                         {/* Hidden QR for PDF */}
                         <div ref={qrRef} className="hidden">
-                            <QRCodeCanvas
+                            <QRCodeSVG
                                 value={`DAILY REPORT | ${reportData.date} | ${reportData.branchName} | Omzet: ${reportData.sales.totalOmzet}`}
                                 size={128}
                             />
