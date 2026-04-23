@@ -1,5 +1,3 @@
-const SYSTEM_PUSH_PREF_KEY = 'system_push_enabled';
-
 type SubscriptionPayload = {
   endpoint: string;
   keys?: {
@@ -30,14 +28,14 @@ function getSubscriptionPayload(subscription: PushSubscription): SubscriptionPay
   };
 }
 
+let systemPushEnabled = false; // Default to false in-memory
+
 export function isSystemPushEnabled(): boolean {
-  if (typeof window === 'undefined') return false;
-  return localStorage.getItem(SYSTEM_PUSH_PREF_KEY) === 'true';
+  return systemPushEnabled;
 }
 
 export function setSystemPushEnabled(enabled: boolean): void {
-  if (typeof window === 'undefined') return;
-  localStorage.setItem(SYSTEM_PUSH_PREF_KEY, String(enabled));
+  systemPushEnabled = enabled;
 }
 
 export async function syncSystemPushSubscription(userId: string): Promise<boolean> {

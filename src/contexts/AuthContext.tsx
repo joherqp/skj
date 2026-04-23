@@ -6,7 +6,6 @@ import { User, UserRole } from '@/types';
 import { toast } from 'sonner';
 
 const AUTH_TIMEOUT_MS = 20000;
-const USER_CACHE_KEY = 'cvskj:user_profile_cache';
 
 async function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
   let timeoutId: ReturnType<typeof setTimeout> | undefined;
@@ -36,31 +35,6 @@ interface AuthContextType {
   loginWithGoogle: () => Promise<void>;
 }
 
-function saveCachedUser(user: User | null) {
-  if (typeof window === 'undefined') return;
-  if (!user) {
-    localStorage.removeItem(USER_CACHE_KEY);
-    return;
-  }
-  localStorage.setItem(USER_CACHE_KEY, JSON.stringify(user));
-}
-
-function readCachedUser(): User | null {
-  if (typeof window === 'undefined') return null;
-  const raw = localStorage.getItem(USER_CACHE_KEY);
-  if (!raw) return null;
-
-  try {
-    const parsed = JSON.parse(raw) as User & { createdAt?: string | Date };
-    if (!parsed?.id) return null;
-    return {
-      ...parsed,
-      createdAt: parsed.createdAt ? new Date(parsed.createdAt) : new Date(),
-    } as User;
-  } catch {
-    return null;
-  }
-}
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
@@ -171,17 +145,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setSupabaseUser(sessionUser);
     if (!sessionUser) {
       setUser(null);
-      saveCachedUser(null);
       return;
     }
 
     const profile = await loadUserProfile(sessionUser);
     if (!profile) {
-      const cachedUser = readCachedUser();
-      if (cachedUser && cachedUser.id === sessionUser.id && cachedUser.isActive) {
-        setUser(cachedUser);
-        return;
-      }
       setUser(null);
       return;
     }
@@ -191,12 +159,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       await supabase.auth.signOut();
       setUser(null);
       setSupabaseUser(null);
-      saveCachedUser(null);
       return;
     }
 
     setUser(profile);
-    saveCachedUser(profile);
   }, [loadUserProfile]);
 
   // Initialize auth state
@@ -205,10 +171,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     const initialize = async () => {
       try {
-        const cachedUser = readCachedUser();
-        if (isMounted && cachedUser?.isActive) {
-          setUser(cachedUser);
-        }
 
         const { data: { session } } = await withTimeout(
           supabase.auth.getSession(),
@@ -220,8 +182,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       } catch (err) {
         console.warn('Auth initialization warning:', err);
         if (isMounted) {
-          const cachedUser = readCachedUser();
-          setUser(cachedUser && cachedUser.isActive ? cachedUser : null);
+          setUser(null);
           setSupabaseUser(null);
         }
       } finally {
@@ -242,8 +203,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         await applySessionUser(session?.user ?? null);
       } catch (error) {
         console.warn('Auth state change warning:', error);
-        const cachedUser = readCachedUser();
-        setUser(cachedUser && cachedUser.isActive ? cachedUser : null);
+        setUser(null);
         setSupabaseUser(null);
       } finally {
         setIsLoading(false);
@@ -314,7 +274,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       await supabase.auth.signOut();
       setUser(null);
       setSupabaseUser(null);
-      saveCachedUser(null);
     } catch (error) {
       console.error('Logout error:', error);
     }

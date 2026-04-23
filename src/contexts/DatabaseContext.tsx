@@ -94,17 +94,9 @@ export function DatabaseProvider({ children }: { children: ReactNode }) {
   // Database Mode
   const [dbMode, setDbModeState] = useState<'public' | 'demo'>('public');
 
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-    const savedMode = localStorage.getItem('db_mode') === 'demo' ? 'demo' : 'public';
-    setDbModeState(savedMode);
-  }, []);
 
   const setDbMode = useCallback((mode: 'public' | 'demo') => {
     setDbModeState(mode);
-    if (typeof window !== 'undefined') {
-      localStorage.setItem('db_mode', mode);
-    }
   }, []);
 
   const getErrorCode = useCallback((error: unknown): string => {
@@ -137,9 +129,6 @@ export function DatabaseProvider({ children }: { children: ReactNode }) {
       const code = (error as { code?: string }).code;
       if (code === 'PGRST106') {
         setDbModeState('public');
-        if (typeof window !== 'undefined') {
-          localStorage.setItem('db_mode', 'public');
-        }
         if (!demoWarningShown.current) {
           toast.error("Schema 'demo' belum aktif di Supabase API. Mode dikembalikan ke public.");
           demoWarningShown.current = true;
@@ -161,7 +150,6 @@ export function DatabaseProvider({ children }: { children: ReactNode }) {
 
   // Feature: Offline Sync
   const [isOnline, setIsOnline] = useState(true);
-  const [pendingSyncCount, setPendingSyncCount] = useState(0);
   // Feature: Other tables
   const [penyesuaianStok, setPenyesuaianStok] = useState<any[]>([]);
   const [permintaanBarang, setPermintaanBarang] = useState<any[]>([]);
@@ -177,10 +165,6 @@ export function DatabaseProvider({ children }: { children: ReactNode }) {
     window.addEventListener('online', handleOnline);
     window.addEventListener('offline', handleOffline);
 
-    // Check initial queue
-    const queue = JSON.parse(localStorage.getItem('item_queue') || '[]');
-    setPendingSyncCount(queue.length);
-
     return () => {
       window.removeEventListener('online', handleOnline);
       window.removeEventListener('offline', handleOffline);
@@ -189,51 +173,9 @@ export function DatabaseProvider({ children }: { children: ReactNode }) {
 
   // Process Offline Queue
   const processQueue = useCallback(async () => {
-    if (!navigator.onLine) return;
-
-    const queue = JSON.parse(localStorage.getItem('item_queue') || '[]');
-    if (queue.length === 0) return;
-
-    console.log(`Processing ${queue.length} offline items...`);
-
-    const failedItems: unknown[] = [];
-
-    for (const item of queue) {
-      try {
-        const itemTyped = item as { table: string; action: string; data: Record<string, unknown>; id: string };
-        const table = itemTyped.table;
-        const action = itemTyped.action;
-        const data = itemTyped.data;
-        const id = itemTyped.id;
-
-        // Remove internal flags before sending
-        const { ...dbData } = data;
-
-        if (action === 'CREATE') {
-          const { error } = await supabase.schema(dbMode).from(table).insert(dbData);
-          if (error) throw error;
-        } else if (action === 'UPDATE') {
-          const { error } = await supabase.schema(dbMode).from(table).update(dbData).eq('id', id);
-          if (error) throw error;
-        } else if (action === 'DELETE') {
-          const { error } = await supabase.schema(dbMode).from(table).delete().eq('id', id);
-          if (error) throw error;
-        }
-      } catch (err) {
-        console.error('Sync failed for item', item, err);
-        failedItems.push(item);
-      }
-    }
-
-    localStorage.setItem('item_queue', JSON.stringify(failedItems));
-    setPendingSyncCount(failedItems.length);
-
-    if (failedItems.length === 0 && queue.length > 0) {
-      toast.success('Sinkronisasi data berhasil!');
-    } else if (failedItems.length > 0) {
-      toast.error(`Gagal menyinkronkan ${failedItems.length} data.`);
-    }
-  }, [dbMode]);
+    // Offline queue disabled as per persistence removal policy
+    return;
+  }, []);
 
   // Trigger Sync when Online
   useEffect(() => {
@@ -569,25 +511,8 @@ export function DatabaseProvider({ children }: { children: ReactNode }) {
 
       // Check Offline
       if (!isOnline) {
-        const tempId = crypto.randomUUID();
-        const offlineItem = { ...dbItem, id: tempId };
-
-        const queueItem = {
-          table: tableName,
-          action: 'CREATE',
-          data: offlineItem,
-          id: tempId,
-          timestamp: Date.now()
-        };
-
-        const currentQueue = JSON.parse(localStorage.getItem('item_queue') || '[]');
-        localStorage.setItem('item_queue', JSON.stringify([...currentQueue, queueItem]));
-        setPendingSyncCount(prev => prev + 1);
-
-        const newItem = toCamelCase(offlineItem) as T;
-        setter((prev) => [newItem, ...prev]);
-        toast.info('Disimpan offline (akan disinkronkan saat online)');
-        return newItem;
+        toast.error('Gagal menyimpan: Anda sedang offline');
+        throw new Error('Offline');
       }
 
       if (!dbItem.id) {
@@ -644,26 +569,8 @@ export function DatabaseProvider({ children }: { children: ReactNode }) {
 
       // Check Offline
       if (!isOnline) {
-        const queueItem = {
-          table: tableName,
-          action: 'UPDATE',
-          data: dbItem,
-          id: id,
-          timestamp: Date.now()
-        };
-
-        const currentQueue = JSON.parse(localStorage.getItem('item_queue') || '[]');
-        localStorage.setItem('item_queue', JSON.stringify([...currentQueue, queueItem]));
-        setPendingSyncCount(prev => prev + 1);
-
-        setter((prev) => prev.map((p) => {
-          if ((p as { id: string }).id === id) {
-            return { ...p, ...(toCamelCase(item) as any) };
-          }
-          return p;
-        }));
-        toast.info('Perubahan disimpan offline');
-        return;
+        toast.error('Gagal memperbarui: Anda sedang offline');
+        throw new Error('Offline');
       }
 
       // Clean empty strings for UUID columns (PostgreSQL rejects "" for uuid)
@@ -707,21 +614,8 @@ export function DatabaseProvider({ children }: { children: ReactNode }) {
     try {
       // Check Offline
       if (!isOnline) {
-        const queueItem = {
-          table: tableName,
-          action: 'DELETE',
-          data: {},
-          id: id,
-          timestamp: Date.now()
-        };
-
-        const currentQueue = JSON.parse(localStorage.getItem('item_queue') || '[]');
-        localStorage.setItem('item_queue', JSON.stringify([...currentQueue, queueItem]));
-        setPendingSyncCount(prev => prev + 1);
-
-        setter((prev) => prev.filter((p) => (p as { id: string }).id !== id));
-        toast.info('Dihapus (offline)');
-        return;
+        toast.error('Gagal menghapus: Anda sedang offline');
+        throw new Error('Offline');
       }
 
       let { error } = await supabase
@@ -819,7 +713,7 @@ export function DatabaseProvider({ children }: { children: ReactNode }) {
     setIsLoading,
     viewMode,
     setViewMode,
-    pendingSyncCount,
+    pendingSyncCount: 0,
     isAdminOrOwner,
     refresh: () => loadAllData(true),
     repairUser: async () => {
@@ -928,29 +822,8 @@ export function DatabaseProvider({ children }: { children: ReactNode }) {
         const dbItem = toSnakeCase(item) as Record<string, unknown>;
 
         if (!isOnline) {
-          const tempId = crypto.randomUUID();
-          const offlineItem = { ...dbItem, id: tempId };
-
-          const queueItem = {
-            table: 'absensi',
-            action: 'CREATE',
-            data: offlineItem,
-            id: tempId,
-            timestamp: Date.now()
-          };
-
-          const currentQueue = JSON.parse(localStorage.getItem('item_queue') || '[]');
-          localStorage.setItem('item_queue', JSON.stringify([...currentQueue, queueItem]));
-          setPendingSyncCount(prev => prev + 1);
-
-          const newItem = toCamelCase(offlineItem) as Absensi;
-          setAbsensi((prev) => {
-            const next = [newItem, ...prev];
-            localStorage.setItem('cache_absensi', JSON.stringify(next));
-            return next;
-          });
-          toast.info('Check-in disimpan offline');
-          return newItem;
+          toast.error('Gagal check-in: Anda sedang offline');
+          throw new Error('Offline');
         }
 
         delete dbItem.id;
@@ -977,9 +850,7 @@ export function DatabaseProvider({ children }: { children: ReactNode }) {
         const newItem = toCamelCase(data) as Absensi;
         setAbsensi((prev) => {
           const filtered = prev.filter(p => p.id !== newItem.id);
-          const next = [newItem, ...filtered];
-          localStorage.setItem('cache_absensi', JSON.stringify(next));
-          return next;
+          return [newItem, ...filtered];
         });
 
         await loadAllData();

@@ -1,3 +1,4 @@
+'use client';
 import React, { useState, useMemo, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -5,7 +6,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { useDatabase } from '@/contexts/DatabaseContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { formatRupiah } from '@/lib/utils';
-import { ScrollArea } from "@/components/ui/scroll-area";
+import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
 import { 
     ArrowRightLeft, 
     LayoutGrid, 
@@ -102,6 +103,14 @@ export default function AnalisaPivot() {
     const [selectedKategoriIds, setSelectedKategoriIds] = useState<string[]>([]);
     const [selectedKategoriPelangganIds, setSelectedKategoriPelangganIds] = useState<string[]>([]);
     const [selectedBarangIds, setSelectedBarangIds] = useState<string[]>([]);
+    const [isMobile, setIsMobile] = useState(false);
+
+    useEffect(() => {
+        const checkMobile = () => setIsMobile(window.innerWidth < 640);
+        checkMobile();
+        window.addEventListener('resize', checkMobile);
+        return () => window.removeEventListener('resize', checkMobile);
+    }, []);
 
     // Auto-select "Rokok" category on initial load
     useEffect(() => {
@@ -388,7 +397,7 @@ export default function AnalisaPivot() {
         return (
             <>
                 <TableRow className={`hover:bg-muted/30 group transition-colors ${node.level === 0 ? 'bg-slate-50/50' : ''}`}>
-                    <TableCell className="border-r py-2 relative" style={{ paddingLeft: `${node.level * 20 + 16}px` }}>
+                    <TableCell className="border-r py-2 relative" style={{ paddingLeft: `${node.level * (isMobile ? 12 : 20) + 16}px` }}>
                         <div className="flex items-center gap-2">
                             {hasChildren ? (
                                 <button onClick={() => toggleExpand(node.id)} className="p-0.5 hover:bg-slate-200 rounded transition-transform duration-200">
@@ -599,13 +608,13 @@ export default function AnalisaPivot() {
     };
 
     return (
-        <div className="space-y-6 animate-in fade-in duration-700 p-1 sm:p-0">
+        <div className="space-y-6 animate-in fade-in duration-700 p-2 sm:p-0">
             {/* Improved Filter Section */}
             <Card className="border-none shadow-md bg-white/80 backdrop-blur-md rounded-2xl overflow-visible ring-1 ring-slate-200/50">
                 <CardContent className="p-4 sm:p-6">
                     <div className="flex flex-col gap-6">
                         {/* Top Row: Basic Selection */}
-                        <div className="flex flex-col lg:flex-row lg:items-end gap-6 pb-6 border-b border-slate-100">
+                        <div className="flex flex-col xl:flex-row xl:items-end gap-4 sm:gap-6 pb-6 border-b border-slate-100">
                             {/* Left: Scope */}
                             <div className="flex flex-col gap-2">
                                 <div className="flex items-center justify-between gap-2 text-primary font-bold ml-1">
@@ -617,19 +626,19 @@ export default function AnalisaPivot() {
                                         <X className="w-3 h-3" /> RESET FILTER
                                     </button>
                                 </div>
-                                <div className="flex flex-wrap items-center gap-2">
+                                <div className="grid grid-cols-1 sm:flex sm:flex-wrap items-center gap-2">
                                     <ScopeFilters
                                         selectedCabangIds={selectedCabangIds}
                                         setSelectedCabangIds={setSelectedCabangIds}
                                         selectedUserIds={selectedUserIds}
                                         setSelectedUserIds={setSelectedUserIds}
-                                        className="!space-y-0 flex flex-row items-center gap-2"
+                                        className="!space-y-0 grid grid-cols-1 sm:flex sm:flex-row items-center gap-2"
                                     />
 
                                     {/* Kategori Filter */}
                                     <DropdownMenu>
                                         <DropdownMenuTrigger asChild>
-                                            <Button variant="outline" className="h-9 text-xs justify-between bg-background font-medium px-3 border-muted-foreground/20 hover:border-primary/50 transition-all rounded-xl shadow-sm min-w-[140px]">
+                                            <Button variant="outline" className="h-9 text-xs justify-between bg-background font-medium px-3 border-muted-foreground/20 hover:border-primary/50 transition-all rounded-xl shadow-sm w-full sm:min-w-[140px] sm:w-auto">
                                                 <div className="flex items-center gap-2 truncate">
                                                     <div className="p-1.5 rounded-lg bg-purple-500/10 text-purple-600">
                                                         <Tag className="w-3.5 h-3.5 shrink-0" />
@@ -676,7 +685,7 @@ export default function AnalisaPivot() {
                                     {/* Kategori Pelanggan Filter */}
                                     <DropdownMenu>
                                         <DropdownMenuTrigger asChild>
-                                            <Button variant="outline" className="h-9 text-xs justify-between bg-background font-medium px-3 border-muted-foreground/20 hover:border-primary/50 transition-all rounded-xl shadow-sm min-w-[140px]">
+                                            <Button variant="outline" className="h-9 text-xs justify-between bg-background font-medium px-3 border-muted-foreground/20 hover:border-primary/50 transition-all rounded-xl shadow-sm w-full sm:min-w-[140px] sm:w-auto">
                                                 <div className="flex items-center gap-2 truncate">
                                                     <div className="p-1.5 rounded-lg bg-orange-500/10 text-orange-600">
                                                         <Users className="w-3.5 h-3.5 shrink-0" />
@@ -723,7 +732,7 @@ export default function AnalisaPivot() {
                                     {/* Produk Filter */}
                                     <DropdownMenu>
                                         <DropdownMenuTrigger asChild>
-                                            <Button variant="outline" className="h-9 text-xs justify-between bg-background font-medium px-3 border-muted-foreground/20 hover:border-primary/50 transition-all rounded-xl shadow-sm min-w-[140px]">
+                                            <Button variant="outline" className="h-9 text-xs justify-between bg-background font-medium px-3 border-muted-foreground/20 hover:border-primary/50 transition-all rounded-xl shadow-sm w-full sm:min-w-[140px] sm:w-auto">
                                                 <div className="flex items-center gap-2 truncate">
                                                     <div className="p-1.5 rounded-lg bg-blue-500/10 text-blue-600">
                                                         <Package className="w-3.5 h-3.5 shrink-0" />
@@ -772,7 +781,7 @@ export default function AnalisaPivot() {
                             </div>
 
                             {/* Middle: Date Filter */}
-                            <div className="flex flex-col gap-2 flex-1 max-w-sm">
+                            <div className="flex flex-col gap-2 flex-1 w-full xl:max-w-sm">
                                 <div className="flex items-center justify-between gap-2 ml-1">
                                     <div className="flex items-center gap-2 text-primary font-bold">
                                         <Calendar className="w-4 h-4" />
@@ -816,12 +825,12 @@ export default function AnalisaPivot() {
                             </div>
 
                             {/* Right: Actions */}
-                            <div className="flex items-center gap-2 self-end">
+                            <div className="flex items-center gap-2 w-full xl:w-auto xl:self-end">
                                 <Button
                                     variant="outline"
                                     size="sm"
                                     onClick={handleExportCSV}
-                                    className="h-10 px-4 rounded-xl border-slate-200 hover:bg-slate-50 gap-2"
+                                    className="h-10 flex-1 xl:flex-none xl:px-4 rounded-xl border-slate-200 hover:bg-slate-50 gap-2"
                                 >
                                     <Download className="w-4 h-4 text-slate-500" />
                                     <span className="text-xs font-semibold uppercase tracking-wider">CSV</span>
@@ -830,7 +839,7 @@ export default function AnalisaPivot() {
                                     variant="default"
                                     size="sm"
                                     onClick={handleExportPDF}
-                                    className="h-10 px-4 rounded-xl shadow-sm gap-2"
+                                    className="h-10 flex-1 xl:flex-none xl:px-4 rounded-xl shadow-sm gap-2"
                                 >
                                     <Download className="w-4 h-4" />
                                     <span className="text-xs font-semibold uppercase tracking-wider">PDF</span>
@@ -898,7 +907,7 @@ export default function AnalisaPivot() {
                             </div>
 
                             {/* Metrik & Sorting */}
-                            <div className="md:col-span-4 grid grid-cols-2 gap-4">
+                            <div className="md:col-span-4 grid grid-cols-1 sm:grid-cols-2 gap-4">
                                 <div className="space-y-3">
                                     <div className="flex items-center gap-2 text-slate-500 font-bold ml-1">
                                         <BarChart3 className="w-3.5 h-3.5" />
@@ -956,7 +965,7 @@ export default function AnalisaPivot() {
 
             {/* Table Area with Controls */}
             <Card className="border-none shadow-xl rounded-2xl overflow-hidden bg-white/90 backdrop-blur-md ring-1 ring-slate-200/50">
-                <CardHeader className="py-4 px-6 bg-slate-50/50 border-b border-slate-100 flex flex-row items-center justify-between space-y-0">
+                <CardHeader className="py-4 px-4 sm:px-6 bg-slate-50/50 border-b border-slate-100 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 sm:space-y-0">
                     <CardTitle className="text-sm font-bold flex items-center gap-3 text-slate-800">
                         <div className="bg-primary/10 p-2 rounded-xl">
                             <LayoutGrid className="w-4 h-4 text-primary" />
@@ -968,28 +977,29 @@ export default function AnalisaPivot() {
                             </p>
                         </div>
                     </CardTitle>
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 w-full sm:w-auto">
                         <Button 
                             variant="outline" 
                             size="sm" 
-                            className="h-8 text-[10px] font-bold rounded-lg gap-1.5"
+                            className="h-8 flex-1 sm:flex-none text-[10px] font-bold rounded-lg gap-1.5"
                             onClick={() => expandAll(Object.values(pivotTable.root))}
                         >
-                            <Maximize2 className="w-3 h-3" /> EKSPAND SEMUA
+                            <Maximize2 className="w-3 h-3" /> <span className="hidden xs:inline">EKSPAND SEMUA</span><span className="xs:hidden">EKSPAND</span>
                         </Button>
                         <Button 
                             variant="outline" 
                             size="sm" 
-                            className="h-8 text-[10px] font-bold rounded-lg gap-1.5"
+                            className="h-8 flex-1 sm:flex-none text-[10px] font-bold rounded-lg gap-1.5"
                             onClick={collapseAll}
                         >
-                            <Minimize2 className="w-3 h-3" /> CIUTKAN SEMUA
+                            <Minimize2 className="w-3 h-3" /> <span className="hidden xs:inline">CIUTKAN SEMUA</span><span className="xs:hidden">CIUTKAN</span>
                         </Button>
                     </div>
                 </CardHeader>
                 <CardContent className="p-0">
                     <ScrollArea className="h-[600px] w-full">
-                        <Table>
+                        <div className="min-w-max">
+                            <Table>
                             <TableHeader className="sticky top-0 bg-white z-30 shadow-md">
                                 <TableRow className="hover:bg-transparent border-b-2 border-slate-100">
                                     <TableHead rowSpan={metrics.length > 1 ? 2 : 1} className="min-w-[280px] pl-6 py-4 font-black text-[10px] uppercase tracking-tighter text-slate-900 border-r bg-slate-50/80">
@@ -1066,7 +1076,9 @@ export default function AnalisaPivot() {
                                 )}
                             </TableBody>
                         </Table>
-                    </ScrollArea>
+                    </div>
+                    <ScrollBar orientation="horizontal" />
+                </ScrollArea>
                 </CardContent>
             </Card>
         </div>

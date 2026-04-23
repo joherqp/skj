@@ -47,27 +47,6 @@ export default function AnalisaVisual() {
     // Dashboard State
     const [widgets, setWidgets] = useState<WidgetConfig[]>(DEFAULT_WIDGETS);
 
-    // Load from localStorage on mount
-    useEffect(() => {
-        try {
-            const saved = localStorage.getItem('analisa_dashboard_config');
-            if (saved) {
-                setWidgets(JSON.parse(saved));
-            }
-        } catch (e) {
-            console.error("Failed to load dashboard config", e);
-        }
-    }, []);
-
-    // Save on Change
-    useEffect(() => {
-        try {
-            localStorage.setItem('analisa_dashboard_config', JSON.stringify(widgets));
-        } catch (e) {
-            console.error("Failed to save dashboard config", e);
-        }
-    }, [widgets]);
-
     // Dialog State
     const [isAddOpen, setIsAddOpen] = useState(false);
     const [editingWidget, setEditingWidget] = useState<WidgetConfig | null>(null);

@@ -40,57 +40,14 @@ export function AIChat({ onQuotaExceeded }: AIChatProps) {
   const [savedQueries, setSavedQueries] = useState<{label: string, text: string}[]>([]);
   const scrollRef = useRef<HTMLDivElement>(null);
 
-  // Load frequent queries from local storage
+  // Load frequent queries (placeholder if needed in memory)
   useEffect(() => {
-    try {
-      const saved = localStorage.getItem(`cvskj_ai_queries_${user?.id || 'guest'}`);
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        const sorted = Object.entries(parsed)
-          .sort((a: [string, unknown], b: [string, unknown]) => (b[1] as number) - (a[1] as number))
-          .slice(0, 3) // Top 3
-          .map(([text]) => ({
-            label: `🕒 ${(text as string).length > 20 ? (text as string).substring(0, 20) + '...' : text}`,
-            text: text as string
-          }));
-        setSavedQueries(sorted);
-      }
-    } catch (e) {
-      console.error("Failed to load saved queries", e);
-    }
+    // No longer using localStorage
+    setSavedQueries([]);
   }, [user?.id]);
 
   const trackQuery = (text: string) => {
-    if (text.length < 5 || text.length > 100) return; // Ignore very short or very long queries
-    try {
-      const key = `cvskj_ai_queries_${user?.id || 'guest'}`;
-      const saved = localStorage.getItem(key);
-      let parsed: Record<string, number> = saved ? JSON.parse(saved) : {};
-      
-      parsed[text] = (parsed[text] || 0) + 1;
-
-      // Limit stored queries to top 50 to prevent localStorage from growing indefinitely
-      const entries = Object.entries(parsed);
-      if (entries.length > 50) {
-        const top50 = entries
-          .sort((a, b) => b[1] - a[1])
-          .slice(0, 50);
-        parsed = Object.fromEntries(top50);
-      }
-
-      localStorage.setItem(key, JSON.stringify(parsed));
-      
-      const sorted = Object.entries(parsed)
-        .sort((a: [string, unknown], b: [string, unknown]) => (b[1] as number) - (a[1] as number))
-        .slice(0, 3)
-        .map(([t]) => ({
-          label: `🕒 ${(t as string).length > 20 ? (t as string).substring(0, 20) + '...' : t}`,
-          text: t as string
-        }));
-      setSavedQueries(sorted);
-    } catch (e) {
-      console.error("Failed to save query", e);
-    }
+    // trackQuery disabled as we are removing localStorage usage
   };
 
   // Dynamic suggestions based on role

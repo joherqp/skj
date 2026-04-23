@@ -36,8 +36,6 @@ const timeoutFetch = async (input: RequestInfo | URL, init: RequestInit = {}) =>
   }
 };
 
-const browserStorage = typeof window !== 'undefined' ? window.localStorage : undefined;
-
 // Create and export Supabase client
 export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   global: {
@@ -45,10 +43,9 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   },
   auth: {
     persistSession: true,
+    storageKey: supabaseStorageKey,
     autoRefreshToken: true,
     detectSessionInUrl: true,
-    storageKey: supabaseStorageKey,
-    storage: browserStorage,
   },
   realtime: {
     params: {

@@ -46,7 +46,7 @@ export function ScopeFilters({
             {isAdminOrOwner && (
                 <DropdownMenu>
                     <DropdownMenuTrigger asChild>
-                        <Button variant="outline" className="h-9 text-xs justify-between bg-background font-medium px-3 border-muted-foreground/20 hover:border-primary/50 transition-all rounded-xl shadow-sm min-w-[140px]">
+                        <Button variant="outline" className="h-9 text-xs justify-between bg-background font-medium px-3 border-muted-foreground/20 hover:border-primary/50 transition-all rounded-xl shadow-sm w-full sm:min-w-[140px] sm:w-auto">
                             <div className="flex items-center gap-2 truncate">
                                 <div className="p-1.5 rounded-lg bg-primary/10 text-primary">
                                     <Building className="w-3.5 h-3.5 shrink-0" />
@@ -94,7 +94,7 @@ export function ScopeFilters({
             {showUserFilter && (isAdminOrOwner || isLeader || isFinance) && (
                 <DropdownMenu>
                     <DropdownMenuTrigger asChild>
-                        <Button variant="outline" className="h-9 text-xs justify-between bg-background font-medium px-3 border-muted-foreground/20 hover:border-primary/50 transition-all rounded-xl shadow-sm min-w-[140px]">
+                        <Button variant="outline" className="h-9 text-xs justify-between bg-background font-medium px-3 border-muted-foreground/20 hover:border-primary/50 transition-all rounded-xl shadow-sm w-full sm:min-w-[140px] sm:w-auto">
                             <div className="flex items-center gap-2 truncate">
                                 <div className="p-1.5 rounded-lg bg-orange-500/10 text-orange-600">
                                     <Users className="w-3.5 h-3.5 shrink-0" />

@@ -1,4 +1,3 @@
-const SOUND_PREF_KEY = 'sound_notifications_enabled';
 let audioContextRef: AudioContext | null = null;
 let hasUserInteracted = false;
 let interactionListenersAttached = false;
@@ -18,14 +17,14 @@ function ensureInteractionTracking(): void {
   interactionListenersAttached = true;
 }
 
+let soundEnabled = true; // Default to true in-memory
+
 export function isSoundNotificationEnabled(): boolean {
-  if (typeof window === 'undefined') return false;
-  return localStorage.getItem(SOUND_PREF_KEY) !== 'false';
+  return soundEnabled;
 }
 
 export function setSoundNotificationEnabled(enabled: boolean): void {
-  if (typeof window === 'undefined') return;
-  localStorage.setItem(SOUND_PREF_KEY, String(enabled));
+  soundEnabled = enabled;
 }
 
 export function playNotificationSound(): void {
