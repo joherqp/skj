@@ -6,6 +6,7 @@ import { Badge } from '@/components/ui/badge';
 import { useDatabase } from '@/contexts/DatabaseContext';
 import { formatRupiah, formatTanggal, formatWaktu } from '@/lib/utils';
 import { ArrowLeft, Calendar, FileText, User as UserIcon, Wallet, CheckCircle, Clock, XCircle, Image as ImageIcon } from 'lucide-react';
+import { ImagePreviewModal } from '@/components/shared/ImagePreviewModal';
 
 export default function DetailSetoran() {
   const { id } = useParams();
@@ -139,9 +140,7 @@ export default function DetailSetoran() {
                 <ImageIcon className="w-4 h-4" /> Bukti Transfer
               </p>
               {data.buktiUrl ? (
-                <div className="rounded-lg overflow-hidden border">
-                  <img src={data.buktiUrl} alt="Bukti Transfer" className="w-full h-auto object-cover max-h-[400px]" />
-                </div>
+                <ImagePreviewModal src={data.buktiUrl} alt="Bukti Transfer" title={`Bukti Transfer - ${data.nomorSetoran}`} />
               ) : (
                 <div className="h-24 bg-muted/30 rounded-lg border  border-dashed flex items-center justify-center text-muted-foreground text-sm">
                   Tidak ada bukti lampiran

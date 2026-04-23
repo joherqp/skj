@@ -2,6 +2,7 @@ import { Badge } from '@/components/ui/badge';
 import { PersetujuanPayload, Barang, Cabang } from '@/types';
 import { formatRupiah } from '@/lib/utils';
 import { ArrowLeftRight } from 'lucide-react';
+import { ImagePreviewModal } from '@/components/shared/ImagePreviewModal';
 
 export function ApprovalOpname({ 
     data, 
@@ -90,9 +91,13 @@ export function ApprovalSetoran({ data }: { data: PersetujuanPayload }) {
                              <div className="flex gap-2 chat-scroll overflow-x-auto pb-2">
                                  {data.transfers.map((t, i) => (
                                      t.proofUrl ? (
-                                         <a key={i} href={t.proofUrl} target="_blank" rel="noreferrer" className="block w-16 h-16 shrink-0 border rounded overflow-hidden">
-                                             <img src={t.proofUrl} className="w-full h-full object-cover" alt="Bukti" />
-                                         </a>
+                                         <div key={i} className="shrink-0 w-16 h-16">
+                                            <ImagePreviewModal 
+                                                src={t.proofUrl} 
+                                                alt={`Bukti ${i + 1}`} 
+                                                title={`Bukti Transfer ${i + 1}`} 
+                                            />
+                                         </div>
                                      ) : (
                                          <div key={i} className="flex items-center justify-center w-16 h-16 shrink-0 border rounded bg-gray-100 text-[10px] text-gray-500 text-center p-1">
                                              Tidak ada lampiran
@@ -112,17 +117,21 @@ export function ApprovalSetoran({ data }: { data: PersetujuanPayload }) {
         <div className="space-y-4">
             <div className="p-4 bg-blue-50 border border-blue-100 rounded-lg text-center">
                  <h4 className="font-semibold text-blue-900 mb-2">Setoran Saldo</h4>
-                 <p className="text-3xl font-bold text-blue-700 mb-2">{formatRupiah(data.amount || 0)}</p>
+                 <p className="text-3xl font-bold text-blue-700 mb-2">{formatRupiah(data.amount || data.jumlah || data.nilai || 0)}</p>
                  {data.rekeningNama && (
                      <Badge variant="outline" className="bg-white">
                          Ke: {data.rekeningNama} {data.rekeningNomor ? `(${data.rekeningNomor})` : ''}
                      </Badge>
                  )}
-                 {data.buktiGambar ? (
+                 {(data.buktiGambar || data.buktiUrl || data.bukti) ? (
                      <div className="mt-4 flex justify-center">
-                         <a href={data.buktiGambar} target="_blank" rel="noreferrer" className="block w-32 max-h-32 rounded overflow-hidden border">
-                             <img src={data.buktiGambar} className="w-full h-full object-cover" alt="Bukti Setor" />
-                         </a>
+                         <div className="w-48">
+                            <ImagePreviewModal 
+                                src={(data.buktiGambar || data.buktiUrl || data.bukti) as string} 
+                                alt="Bukti Setor" 
+                                title="Bukti Setoran Saldo" 
+                            />
+                         </div>
                      </div>
                  ) : null}
             </div>

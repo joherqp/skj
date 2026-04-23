@@ -10,6 +10,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { formatCurrency, formatTanggal } from '@/lib/utils';
 import { Plus, FileText, Clock, CheckCircle, XCircle, AlertCircle, History, User, Calendar, Info, ExternalLink } from 'lucide-react';
 import { useRouter } from 'next/navigation';
+import { ImagePreviewModal } from '@/components/shared/ImagePreviewModal';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Reimburse as ReimburseType } from '@/types';
 
@@ -158,9 +159,19 @@ export default function Reimburse() {
                                                         {formatTanggal(item.tanggal)}
                                                     </span>
                                                     {item.buktiUrl && (
-                                                        <a href={item.buktiUrl} target="_blank" rel="noreferrer" className="flex items-center gap-1.5 text-blue-600 hover:text-blue-800 hover:underline">
-                                                            <FileText className="w-3.5 h-3.5" /> Bukti
-                                                        </a>
+                                                        <ImagePreviewModal 
+                                                            src={item.buktiUrl} 
+                                                            alt="Bukti" 
+                                                            title={`Bukti - ${item.keterangan}`}
+                                                            trigger={
+                                                                <button 
+                                                                    onClick={(e) => e.stopPropagation()} 
+                                                                    className="flex items-center gap-1.5 text-blue-600 hover:text-blue-800 hover:underline focus:outline-none"
+                                                                >
+                                                                    <FileText className="w-3.5 h-3.5" /> Bukti
+                                                                </button>
+                                                            }
+                                                        />
                                                     )}
                                                 </div>
                                             </div>
@@ -219,9 +230,19 @@ export default function Reimburse() {
                                                         </span>
                                                     )}
                                                     {item.buktiUrl && (
-                                                        <a href={item.buktiUrl} target="_blank" rel="noreferrer" className="flex items-center gap-1.5 text-blue-600 hover:text-blue-800 hover:underline">
-                                                            <FileText className="w-3.5 h-3.5" /> Bukti
-                                                        </a>
+                                                        <ImagePreviewModal 
+                                                            src={item.buktiUrl} 
+                                                            alt="Bukti" 
+                                                            title={`Bukti - ${item.keterangan}`}
+                                                            trigger={
+                                                                <button 
+                                                                    onClick={(e) => e.stopPropagation()} 
+                                                                    className="flex items-center gap-1.5 text-blue-600 hover:text-blue-800 hover:underline focus:outline-none"
+                                                                >
+                                                                    <FileText className="w-3.5 h-3.5" /> Bukti
+                                                                </button>
+                                                            }
+                                                        />
                                                     )}
                                                 </div>
                                             </div>
@@ -290,9 +311,19 @@ export default function Reimburse() {
                                                     )}
 
                                                     {item.buktiUrl && (
-                                                        <a href={item.buktiUrl} target="_blank" rel="noreferrer" className="flex items-center gap-1 text-blue-500 hover:text-blue-700 hover:underline">
-                                                            <FileText className="w-3.5 h-3.5" /> Lihat Bukti
-                                                        </a>
+                                                        <ImagePreviewModal 
+                                                            src={item.buktiUrl} 
+                                                            alt="Bukti" 
+                                                            title={`Bukti - ${item.keterangan}`}
+                                                            trigger={
+                                                                <button 
+                                                                    onClick={(e) => e.stopPropagation()} 
+                                                                    className="flex items-center gap-1 text-blue-500 hover:text-blue-700 hover:underline focus:outline-none"
+                                                                >
+                                                                    <FileText className="w-3.5 h-3.5" /> Lihat Bukti
+                                                                </button>
+                                                            }
+                                                        />
                                                     )}
                                                 </div>
 
@@ -421,21 +452,11 @@ export default function Reimburse() {
                                         <p className="text-xs text-muted-foreground mb-2 flex items-center gap-1">
                                             <FileText className="w-3 h-3" /> Bukti Transaksi
                                         </p>
-                                        <div className="relative group rounded-lg overflow-hidden border border-slate-200 aspect-video bg-slate-50 flex items-center justify-center">
-                                            <img
-                                                src={selectedReimburse.buktiUrl}
-                                                alt="Bukti"
-                                                className="w-full h-full object-cover"
-                                            />
-                                            <a
-                                                href={selectedReimburse.buktiUrl}
-                                                target="_blank"
-                                                rel="noreferrer"
-                                                className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity text-white gap-2 font-medium"
-                                            >
-                                                <ExternalLink className="w-5 h-5" /> Lihat Ukuran Penuh
-                                            </a>
-                                        </div>
+                                        <ImagePreviewModal 
+                                            src={selectedReimburse.buktiUrl} 
+                                            alt="Bukti" 
+                                            title={`Bukti - ${selectedReimburse.keterangan}`} 
+                                        />
                                     </div>
                                 )}
                             </div>

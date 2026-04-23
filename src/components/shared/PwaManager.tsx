@@ -21,13 +21,59 @@ export function PwaManager() {
 
     if ('serviceWorker' in navigator) {
       if (process.env.NODE_ENV === 'production') {
-        navigator.serviceWorker.register('/sw.js').catch((error) => {
+        console.log('PWA: Registering Service Worker in production...');
+        // Register the service worker with updateViaCache: 'none' to ensure we always get the latest SW
+        navigator.serviceWorker.register('/sw.js', { updateViaCache: 'none' }).then((registration) => {
+          console.log('PWA: Service Worker registered successfully');
+          // Check for updates every hour
+          setInterval(() => {
+            registration.update();
+          }, 60 * 60 * 1000);
+
+          // Detect updates
+          registration.addEventListener('updatefound', () => {
+            const newWorker = registration.installing;
+            if (newWorker) {
+              newWorker.addEventListener('statechange', () => {
+                if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+                  // New worker is ready and there's an existing one - update is available
+                  if (confirm('Aplikasi versi terbaru tersedia. Perbarui sekarang?')) {
+                    if (newWorker) {
+                      newWorker.postMessage({ type: 'SKIP_WAITING' });
+                    }
+                  }
+                }
+              });
+            }
+          });
+        }).catch((error) => {
           console.warn('Service worker registration failed:', error);
         });
+
+        // Listen for the controlling service worker changing and reload the page
+        let refreshing = false;
+        navigator.serviceWorker.addEventListener('controllerchange', () => {
+          if (refreshing) return;
+          refreshing = true;
+          window.location.reload();
+        });
+
+        // Check for updates when the window is focused
+        const handleFocus = () => {
+          navigator.serviceWorker.ready.then((registration) => {
+            registration.update();
+          });
+        };
+        window.addEventListener('focus', handleFocus);
+        return () => window.removeEventListener('focus', handleFocus);
       } else {
-        // In dev, ensure old SW is removed to avoid stale bundle/hydration issues
+        // In dev, ensure old SW is removed
+        console.log('PWA: Unregistering Service Workers in development mode...');
         navigator.serviceWorker.getRegistrations().then((regs) => {
-          regs.forEach((reg) => void reg.unregister());
+          regs.forEach((reg) => {
+            console.log('PWA: Unregistering worker:', reg.active?.scriptURL);
+            void reg.unregister();
+          });
         });
       }
     }

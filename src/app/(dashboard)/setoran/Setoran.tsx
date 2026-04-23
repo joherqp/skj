@@ -6,9 +6,10 @@ import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { useAuth } from '@/contexts/AuthContext';
 import { useDatabase } from '@/contexts/DatabaseContext';
-import { Search, Plus, Wallet, Filter, Clock, CheckCircle, XCircle, Users, AlertCircle, Building, ChevronDown } from 'lucide-react';
+import { Search, Plus, Wallet, Filter, Clock, CheckCircle, XCircle, Users, AlertCircle, Building, ChevronDown, FileText } from 'lucide-react';
 import { formatRupiah, formatCompactRupiah, formatTanggal } from '@/lib/utils';
 import { useRouter } from 'next/navigation';
+import { ImagePreviewModal } from '@/components/shared/ImagePreviewModal';
 import {
   Select,
   SelectContent,
@@ -113,7 +114,7 @@ export default function Setoran() {
   const setoranPusat = persetujuan
     .filter(p => p.jenis === 'rencana_setoran' && targetUserIds.includes(p.diajukanOleh))
     .map(p => {
-      const pData = p.data as { amount?: number; rekeningTujuanId?: string };
+      const pData = p.data as any;
       return {
         id: p.id,
         nomorSetoran: `SP/${new Date(p.tanggalPengajuan).getFullYear()}/${p.id.substring(0, 4).toUpperCase()}`,
@@ -122,7 +123,8 @@ export default function Setoran() {
         status: p.status,
         salesId: p.diajukanOleh,
         rekeningId: pData?.rekeningTujuanId,
-        isPusat: true
+        isPusat: true,
+        buktiUrl: pData?.generalProofUrl || (pData?.transfers && pData.transfers[0]?.proofUrl)
       };
     });
 
@@ -634,6 +636,23 @@ export default function Setoran() {
                             <p className="text-[10px] text-muted-foreground mt-1">
                               {formatTanggal(new Date(item.tanggal))}
                             </p>
+                            {(item as any).buktiUrl && (
+                              <div className="mt-2">
+                                <ImagePreviewModal
+                                  src={(item as any).buktiUrl}
+                                  alt="Bukti Setoran"
+                                  title={`Bukti - ${item.nomorSetoran}`}
+                                  trigger={
+                                    <button
+                                      onClick={(e) => e.stopPropagation()}
+                                      className="text-[10px] text-primary hover:text-primary/80 flex items-center gap-1 hover:underline focus:outline-none bg-primary/5 px-2 py-0.5 rounded border border-primary/10"
+                                    >
+                                      <FileText className="w-3 h-3" /> Lihat Bukti
+                                    </button>
+                                  }
+                                />
+                              </div>
+                            )}
                           </div>
                         </div>
                         <div className="text-right shrink-0">

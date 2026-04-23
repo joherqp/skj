@@ -9,6 +9,7 @@ import { Badge } from '@/components/ui/badge';
 import { formatCurrency, formatTanggal, cn } from '@/lib/utils';
 import { ArrowUpCircle, ArrowDownCircle, History, Wallet, FileText, ArrowUp, ArrowDown, User, Calendar, Tag, Info, ExternalLink } from 'lucide-react';
 import { useRouter } from 'next/navigation';
+import { ImagePreviewModal } from '@/components/shared/ImagePreviewModal';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Label } from '@/components/ui/label';
@@ -313,9 +314,19 @@ export default function PettyCash() {
                                             {item.tipe === 'masuk' ? '+' : '-'}{formatCurrency(item.jumlah)}
                                         </span>
                                         {item.buktiUrl && (
-                                             <a href={item.buktiUrl} target="_blank" rel="noreferrer" className="text-[10px] text-blue-500 hover:text-blue-700 flex items-center gap-1 hover:underline">
-                                                 <FileText className="w-3 h-3" /> Bukti
-                                             </a>
+                                             <ImagePreviewModal 
+                                                src={item.buktiUrl} 
+                                                alt="Bukti Transaksi" 
+                                                title={`Bukti - ${item.keterangan}`}
+                                                trigger={
+                                                    <button 
+                                                        onClick={(e) => e.stopPropagation()} 
+                                                        className="text-[10px] text-blue-500 hover:text-blue-700 flex items-center gap-1 hover:underline focus:outline-none"
+                                                    >
+                                                        <FileText className="w-3 h-3" /> Bukti
+                                                    </button>
+                                                }
+                                             />
                                         )}
                                     </div>
                                 </div>
@@ -415,21 +426,11 @@ export default function PettyCash() {
                     <p className="text-xs text-muted-foreground mb-2 flex items-center gap-1">
                       <FileText className="w-3 h-3" /> Bukti Transaksi
                     </p>
-                    <div className="relative group rounded-lg overflow-hidden border border-slate-200 aspect-video bg-slate-50 flex items-center justify-center">
-                        <img 
-                            src={selectedTransaction.buktiUrl} 
-                            alt="Bukti" 
-                            className="w-full h-full object-cover"
-                        />
-                        <a 
-                            href={selectedTransaction.buktiUrl} 
-                            target="_blank" 
-                            rel="noreferrer"
-                            className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity text-white gap-2 font-medium"
-                        >
-                            <ExternalLink className="w-5 h-5" /> Lihat Ukuran Penuh
-                        </a>
-                    </div>
+                    <ImagePreviewModal 
+                        src={selectedTransaction.buktiUrl} 
+                        alt="Bukti" 
+                        title={`Bukti - ${selectedTransaction.keterangan}`} 
+                    />
                   </div>
                 )}
               </div>

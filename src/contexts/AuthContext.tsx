@@ -5,7 +5,7 @@ import { User as SupabaseUser } from '@supabase/supabase-js';
 import { User, UserRole } from '@/types';
 import { toast } from 'sonner';
 
-const AUTH_TIMEOUT_MS = 20000;
+const AUTH_TIMEOUT_MS = 40000;
 
 async function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
   let timeoutId: ReturnType<typeof setTimeout> | undefined;
@@ -171,16 +171,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     const initialize = async () => {
       try {
-
+        console.log('Starting auth initialization...');
         const { data: { session } } = await withTimeout(
           supabase.auth.getSession(),
           AUTH_TIMEOUT_MS,
           'Auth session check',
         );
         if (!isMounted) return;
+        console.log('Auth session check completed:', !!session);
         await applySessionUser(session?.user ?? null);
       } catch (err) {
-        console.warn('Auth initialization warning:', err);
+        console.warn('Auth initialization warning:', err instanceof Error ? err.message : err);
         if (isMounted) {
           setUser(null);
           setSupabaseUser(null);

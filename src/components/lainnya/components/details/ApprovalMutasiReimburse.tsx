@@ -1,6 +1,7 @@
 import { Badge } from '@/components/ui/badge';
 import { PersetujuanPayload, Barang, Satuan, Reimburse } from '@/types';
 import { formatRupiah } from '@/lib/utils';
+import { ImagePreviewModal } from '@/components/shared/ImagePreviewModal';
 
 export function ApprovalMutasi({ 
     data, 
@@ -52,24 +53,28 @@ export function ApprovalReimburse({
              <div className="p-4 bg-pink-50 border border-pink-100 rounded-lg">
                  <div className="flex justify-between items-start mb-2">
                      <span className="text-sm font-semibold text-pink-900 uppercase">Total Reimburse</span>
-                     <span className="text-xl font-bold text-pink-700">{formatRupiah(data.amount || 0)}</span>
+                      <span className="text-xl font-bold text-pink-700">{formatRupiah(data.amount || data.jumlah || data.nilai || 0)}</span>
                  </div>
                  
                  <div className="space-y-2 mt-4">
                      <div>
                          <span className="text-xs text-muted-foreground block">Keterangan/Keperluan</span>
                          <p className="text-sm text-slate-800 bg-white p-2 rounded border border-pink-100 min-h-[60px]">
-                             {data.keterangan || reference?.keterangan || '-'}
+                             {data.keterangan || data.catatan || reference?.keterangan || '-'}
                          </p>
                      </div>
                      
-                     {reference?.bukti && (
+                     {(data.buktiUrl || data.buktiGambar || data.bukti || reference?.bukti || reference?.buktiUrl) && (
                         <div>
                              <span className="text-xs text-muted-foreground block mb-1">Bukti Transaksi</span>
                              <div className="flex gap-2 overflow-x-auto pb-2">
-                                 <a href={reference.bukti} target="_blank" rel="noreferrer" className="block w-20 h-20 shrink-0 border rounded overflow-hidden hover:opacity-80">
-                                     <img src={reference.bukti} alt="Bukti" className="w-full h-full object-cover" />
-                                 </a>
+                                 <div className="w-48 h-48 shrink-0">
+                                    <ImagePreviewModal 
+                                        src={(data.buktiUrl || data.buktiGambar || data.bukti || reference?.bukti || reference?.buktiUrl) as string} 
+                                        alt="Bukti Reimburse" 
+                                        title="Detail Bukti Reimburse" 
+                                    />
+                                 </div>
                              </div>
                         </div>
                      )}

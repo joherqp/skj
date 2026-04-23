@@ -3,7 +3,7 @@ import { createClient } from '@supabase/supabase-js';
 // Get environment variables
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-const supabaseRequestTimeoutMs = Number(process.env.NEXT_PUBLIC_SUPABASE_REQUEST_TIMEOUT_MS || '20000');
+const supabaseRequestTimeoutMs = Number(process.env.NEXT_PUBLIC_SUPABASE_REQUEST_TIMEOUT_MS || '30000');
 const supabaseStorageKey = process.env.NEXT_PUBLIC_SUPABASE_STORAGE_KEY || 'cvskj-auth-token';
 
 // Validate environment variables
@@ -30,7 +30,11 @@ const timeoutFetch = async (input: RequestInfo | URL, init: RequestInit = {}) =>
   }
 
   try {
-    return await fetch(input, { ...init, signal: controller.signal });
+    return await fetch(input, { 
+      ...init, 
+      signal: controller.signal,
+      cache: 'no-store',
+    });
   } finally {
     clearTimeout(timeoutId);
   }

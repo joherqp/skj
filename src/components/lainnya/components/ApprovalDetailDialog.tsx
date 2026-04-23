@@ -53,9 +53,9 @@ export function ApprovalDetailDialog({
             case 'permintaan':
             case 'restock':
             case 'mutasi_stok': {
-               // Combine data items or mutasiData (pending items)
-               const mData = item.data ? item.data as PersetujuanPayload : mutasiData;
-               const finalData = { ...data, ...mData };
+               // Use mutasiData as base, then override with item.data
+               const finalData = { ...(mutasiData || {}), ...(item.data || {}) } as PersetujuanPayload;
+               const requesterUser = users.find(u => u.id === item.diajukanOleh);
                
                return (
                     <div className="space-y-4">
@@ -64,7 +64,7 @@ export function ApprovalDetailDialog({
                                   <div className="flex flex-col">
                                       <span className="text-xs text-muted-foreground">Dari Cabang</span>
                                       <span className="font-semibold text-slate-700">
-                                          {cabang.find(c => c.id === (finalData.dariCabangId || item.diajukanOleh))?.nama || 'Pusat/Gudang'}
+                                          {cabang.find(c => c.id === (finalData.dariCabangId || requesterUser?.cabangId))?.nama || 'Pusat/Gudang'}
                                       </span>
                                   </div>
                                   <ArrowLeftRight className="text-indigo-300 w-5 h-5 mx-2" />
@@ -76,9 +76,9 @@ export function ApprovalDetailDialog({
                                   </div>
                               </div>
                               <div className='pt-2 border-t border-indigo-200 flex justify-between items-center'>
-                                   <span className="text-xs text-muted-foreground">Terima Barang Dari:</span>
+                                   <span className="text-xs text-muted-foreground">Diajukan Oleh:</span>
                                    <span className="text-sm font-medium text-foreground">
-                                       {users.find(u => u.id === item.diajukanOleh)?.nama || 'Unknown'}
+                                       {requesterUser?.nama || 'Unknown'}
                                    </span>
                               </div>
                         </div>
@@ -158,6 +158,55 @@ export function ApprovalDetailDialog({
                 </DialogHeader>
 
                 <div className="py-2">
+                    {/* Requester Info */}
+                    <div className="flex items-center gap-3 p-3 mb-4 bg-slate-50 border rounded-lg">
+                        <div className="p-2 bg-white rounded-full border shadow-sm">
+                            <UserIcon size={20} className="text-slate-500" />
+                        </div>
+                        <div className="flex-1">
+                            <p className="text-xs text-muted-foreground leading-none mb-1">Diajukan Oleh</p>
+                            <p className="font-semibold text-slate-900 flex items-center gap-2">
+                                {(() => {
+                                    const u = users.find(u => u.id === item.diajukanOleh);
+                                    if (u?.nama && u.nama !== 'Unknown') return u.nama;
+                                    if (u?.username && u.username !== 'Unknown') return u.username;
+                                    
+                                    const payload = item.data as PersetujuanPayload;
+                                    const payloadName = payload?.userName || payload?.namaUser || payload?.nama || payload?.operator || payload?.karyawanNama || (payload as any)?.diajukanOlehName;
+                                    if (payloadName && payloadName !== 'Unknown') return payloadName;
+                                    
+                                    if (item.diajukanOleh === 'Unknown' || !item.diajukanOleh) return 'Sistem/Karyawan';
+                                    return item.diajukanOleh.length > 15 ? `User ${item.diajukanOleh.substring(0, 8)}` : item.diajukanOleh;
+                                })()} 
+                                {users.find(u => u.id === item.diajukanOleh)?.roles?.[0] && (
+                                    <span className="text-[10px] font-normal px-1.5 py-0.5 bg-slate-200 text-slate-700 rounded-md uppercase">
+                                        {users.find(u => u.id === item.diajukanOleh)?.roles[0]}
+                                    </span>
+                                )}
+                            </p>
+                            {(() => {
+                                const u = users.find(u => u.id === item.diajukanOleh);
+                                const cId = u?.cabangId || (item.data as any)?.dariCabangId || (item.data as any)?.senderCabangId || (item.data as any)?.dari_cabang_id;
+                                const c = cabang.find(c => c.id === cId);
+                                if (c) return (
+                                    <p className="text-xs text-muted-foreground mt-0.5">
+                                        Unit Kerja: <span className="font-medium text-slate-700">{c.nama}</span>
+                                    </p>
+                                );
+                                return null;
+                            })()}
+                        </div>
+                        <div className="text-right">
+                             <p className="text-xs text-muted-foreground leading-none mb-1">Waktu Pengajuan</p>
+                             <p className="text-xs font-medium text-slate-700">
+                                 {new Date(item.tanggalPengajuan).toLocaleString('id-ID', {
+                                     day: 'numeric', month: 'short', year: 'numeric',
+                                     hour: '2-digit', minute: '2-digit'
+                                 })}
+                             </p>
+                        </div>
+                    </div>
+
                     {renderDetailContent()}
                 </div>
 

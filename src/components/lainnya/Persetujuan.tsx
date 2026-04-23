@@ -96,6 +96,7 @@ export default function Persetujuan() {
         id: string;
         type: string;
         refId: string;
+        diajukanOleh?: string;
         data?: Record<string, unknown>;
     }>({ isOpen: false, action: 'approve', id: '', type: '', refId: '' });
 
@@ -109,19 +110,41 @@ export default function Persetujuan() {
     };
 
     // Trigger handlers
-    const handleApprove = (id: string, type: string, refId: string, data?: PersetujuanPayload) => {
+    const handleApprove = (id: string, type: string, refId: string, data?: PersetujuanPayload, diajukanOleh?: string) => {
+        // Merge mutation data if applicable to ensure details are available in confirmation dialog
+        let mergedData = { ...(data || {}) } as any;
+        if (['mutasi', 'mutasi_stok', 'permintaan', 'restock'].includes(type) && refId) {
+            const extraData = mutasiBarang.find(m => m.id === refId);
+            if (extraData) {
+                mergedData = { ...extraData, ...mergedData };
+            }
+        }
+
         setConfirmDialog({
             isOpen: true,
             action: 'approve',
-            id, type, refId, data: data as Record<string, unknown>
+            id, type, refId, 
+            data: mergedData as Record<string, unknown>,
+            diajukanOleh
         });
     };
 
-    const handleReject = (id: string, type: string, refId: string, data?: PersetujuanPayload) => {
+    const handleReject = (id: string, type: string, refId: string, data?: PersetujuanPayload, diajukanOleh?: string) => {
+        // Merge mutation data if applicable
+        let mergedData = { ...(data || {}) } as any;
+        if (['mutasi', 'mutasi_stok', 'permintaan', 'restock'].includes(type) && refId) {
+            const extraData = mutasiBarang.find(m => m.id === refId);
+            if (extraData) {
+                mergedData = { ...extraData, ...mergedData };
+            }
+        }
+
         setConfirmDialog({
             isOpen: true,
             action: 'reject',
-            id, type, refId, data: data as Record<string, unknown>
+            id, type, refId, 
+            data: mergedData as Record<string, unknown>,
+            diajukanOleh
         });
     };
 
@@ -293,7 +316,7 @@ export default function Persetujuan() {
                                         pelanggan={pelanggan}
                                         kategoriPelanggan={kategoriPelanggan}
                                         reimburse={reimburse}
-                                        mutasiData={item.jenis === 'mutasi' ? mutasiBarang.find(m => m.id === item.referensiId) as unknown as PersetujuanPayload : undefined}
+                                        mutasiData={['mutasi', 'mutasi_stok'].includes(item.jenis) ? mutasiBarang.find(m => m.id === item.referensiId) as unknown as PersetujuanPayload : undefined}
                                         onViewDetail={handleViewDetail}
                                     />
                                 ))}
@@ -326,7 +349,7 @@ export default function Persetujuan() {
                                         pelanggan={pelanggan}
                                         kategoriPelanggan={kategoriPelanggan}
                                         reimburse={reimburse}
-                                        mutasiData={item.jenis === 'mutasi' ? mutasiBarang.find(m => m.id === item.referensiId) as unknown as PersetujuanPayload : undefined}
+                                        mutasiData={['mutasi', 'mutasi_stok'].includes(item.jenis) ? mutasiBarang.find(m => m.id === item.referensiId) as unknown as PersetujuanPayload : undefined}
                                         onViewDetail={handleViewDetail}
                                     />
                                 ))}
@@ -354,6 +377,8 @@ export default function Persetujuan() {
                 setReimburseMode={setReimburseMode}
                 users={users}
                 reimburse={reimburse}
+                barang={barang}
+                cabang={cabang}
             />
 
             <ApprovalDetailDialog
@@ -369,11 +394,11 @@ export default function Persetujuan() {
                         setReimburseMode(isWaitingPayment ? 'pay_now' : 'pay_later');
                     }
                     setDetailDialog(prev => ({ ...prev, isOpen: false }));
-                    handleApprove(item.id, item.jenis, item.referensiId as string, item.data as PersetujuanPayload);
+                    handleApprove(item.id, item.jenis, item.referensiId as string, item.data as PersetujuanPayload, item.diajukanOleh);
                 }}
                 onReject={(item) => {
                     setDetailDialog(prev => ({ ...prev, isOpen: false }));
-                    handleReject(item.id, item.jenis, item.referensiId as string, item.data as PersetujuanPayload);
+                    handleReject(item.id, item.jenis, item.referensiId as string, item.data as PersetujuanPayload, item.diajukanOleh);
                 }}
                 onPrintReport={handleDownloadReport}
                 user={user}
@@ -384,7 +409,7 @@ export default function Persetujuan() {
                 pelanggan={pelanggan}
                 reimburse={reimburse}
                 penjualan={penjualan}
-                mutasiData={detailDialog.item?.jenis === 'mutasi' ? mutasiBarang.find(m => m.id === detailDialog.item.referensiId) as unknown as PersetujuanPayload : undefined}
+                mutasiData={['mutasi', 'mutasi_stok', 'permintaan', 'restock'].includes(detailDialog.item?.jenis || '') ? mutasiBarang.find(m => m.id === detailDialog.item?.referensiId) as unknown as PersetujuanPayload : undefined}
             />
         </div>
     );

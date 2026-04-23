@@ -4,6 +4,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { PersetujuanPayload, Persetujuan as PersetujuanType, User, Cabang, Barang, Satuan, KategoriPelanggan, Pelanggan, Reimburse } from '@/types';
 import { formatRupiah } from '@/lib/utils';
 import { ArrowLeftRight, ArrowRight, Calendar, CheckCircle, Clock, Coins, Eye, FileText, PackagePlus, User as UserIcon, Users } from 'lucide-react';
+import { ImagePreviewModal } from '@/components/shared/ImagePreviewModal';
 
 // Helper to get icon based on approval type
 export const getIcon = (jenis: string) => {
@@ -43,32 +44,81 @@ interface ApprovalCardProps {
     onViewDetail: (item: PersetujuanType) => void;
 }
 
-export function ApprovalCard({ 
-    item, 
-    isHistory, 
-    users, 
-    cabang, 
-    barang, 
+export function ApprovalCard({
+    item,
+    isHistory,
+    users,
+    cabang,
+    barang,
     satuan,
     pelanggan,
     reimburse,
     mutasiData,
-    onViewDetail 
+    onViewDetail
 }: ApprovalCardProps) {
-    
+
     // Derived Data
-    const reimburseData = item.jenis === 'reimburse' ? reimburse.find(r => r.id === item.referensiId) : null;
-    const setoranData = item.jenis === 'setoran' && item.data ? (item.data as PersetujuanPayload) : null;
-    const customer = item.jenis === 'perubahan_data_pelanggan' && item.referensiId 
+    const setoranData = (item.jenis === 'setoran' || item.jenis === 'rencana_setoran') && item.data ? (item.data as PersetujuanPayload) : null;
+    const setoranAmount = setoranData ? (Number(setoranData.amount || setoranData.jumlah || setoranData.nilai || setoranData.total || setoranData.totalSetoran || setoranData.totalNominal || setoranData.realisasiAmount || setoranData.total_realisasi || 0)) : 0;
+
+    // Derived Reimburse Data
+    const reimburseData = item.jenis === 'reimburse' ? reimburse?.find(r => r.id === item.referensiId || r.persetujuanId === item.id) : null;
+    const reimburseAmount = Number((item.data as PersetujuanPayload)?.amount || (item.data as PersetujuanPayload)?.jumlah || (item.data as PersetujuanPayload)?.nilai || (item.data as PersetujuanPayload)?.total || (item.data as PersetujuanPayload)?.totalNominal || reimburseData?.jumlah || 0);
+
+    const customer = item.jenis === 'perubahan_data_pelanggan' && item.referensiId
         ? pelanggan?.find(p => p.id === item.referensiId)
-        : (item.data as PersetujuanPayload)?.pelangganId 
+        : (item.data as PersetujuanPayload)?.pelangganId
             ? pelanggan?.find(p => p.id === (item.data as PersetujuanPayload).pelangganId)
             : null;
 
-    const formatUserDetail = (userId?: string) => {
-        if (!userId) return '-';
-        const u = users.find(u => u.id === userId);
-        return u ? `${u.nama} (${u.roles[0]})` : 'Unknown User';
+    const formatUserDetail = (userId?: string, payload?: PersetujuanPayload) => {
+        if (!userId || userId === 'Unknown') {
+            // Try to find name in payload
+            const payloadName = payload?.userName || payload?.namaUser || payload?.nama || payload?.operator || payload?.karyawanNama || (payload as any)?.diajukanOlehName;
+            if (payloadName && payloadName !== 'Unknown') return payloadName;
+            if (userId === 'Unknown') return 'Sistem/Karyawan';
+            return '-';
+        }
+        
+        if (userId === 'pusat' || userId === 'system' || userId === 'admin') return 'Sistem/Pusat';
+        
+        let u = users.find(u => u.id === userId);
+        if (!u && typeof userId === 'string') {
+            u = users.find(u => u.id === userId.trim());
+        }
+
+        if (!u) {
+            // Last ditch effort: check if userId itself is a name (non-UUID-like)
+            if (userId.length < 20 && !userId.includes('-') && isNaN(Number(userId))) return userId;
+            
+            // Check payload fallbacks
+            const payloadName = payload?.userName || payload?.namaUser || payload?.nama || payload?.operator || payload?.karyawanNama;
+            if (payloadName && payloadName !== 'Unknown') return payloadName;
+
+            return userId.length > 15 ? `User ${userId.substring(0, 8)}` : `User ${userId}`;
+        }
+        
+        // Robust name check
+        const name = (u.nama && u.nama !== 'Unknown' && u.nama.trim() !== '') 
+            ? u.nama 
+            : (u.username && u.username !== 'Unknown' && u.username.trim() !== '') 
+                ? u.username 
+                : (userId.length > 15 ? `User ${userId.substring(0, 8)}` : userId);
+                
+        const c = cabang.find(c => c.id === u.cabangId);
+        const role = u.roles?.[0] ? ` (${u.roles[0]})` : '';
+        return `${name}${role}${c ? ` @ ${c.nama}` : ''}`;
+    };
+
+    const getCabangName = (id?: string) => {
+        if (!id || id === 'pusat' || id === 'Pusat' || id === 'system') return 'Pusat/Gudang';
+        const c = cabang.find(item => item.id === id || item.id === id.trim() || item.id === (id as any).id);
+        if (c) return c.nama;
+        
+        // Handle names that might be passed as IDs
+        if (id.length < 15 && isNaN(Number(id)) && !id.includes('-')) return id;
+        
+        return id.length > 15 ? `Cabang ${id.substring(0, 5)}` : id;
     };
 
     const formatDateTime = (date: Date | string) => {
@@ -136,110 +186,167 @@ export function ApprovalCard({
 
     return (
         <Card className={`overflow-hidden transition-all duration-200 mb-4 ${isHistory ? 'opacity-80 hover:opacity-100' : 'border-l-4 border-l-blue-500 shadow-sm hover:shadow-md'}`}>
-             <CardContent className="p-4">
-                  <div className="flex items-start gap-4">
-                      <div className="p-2 bg-blue-100 rounded-lg shrink-0">
-                          {getIcon(item.jenis)}
-                      </div>
-                      
-                      <div className="flex-1 min-w-0">
-                          {/* Header Info */}
-                          <div className="flex justify-between items-start mb-2">
-                              <div className="min-w-0 pr-2">
-                                  <p className="font-semibold capitalize truncate">
-                                      {item.jenis === 'rencana_setoran' ? 'Setoran Kepusat' : `Pengajuan ${item.jenis.replace(/_/g, ' ')}`}
-                                  </p>
-                                  {customer && (
-                                     <div className="flex items-center gap-1 mt-0.5 text-blue-700 bg-blue-50 w-fit px-1.5 py-0.5 rounded text-xs font-medium border border-blue-200">
-                                         <UserIcon size={12} />
-                                         {customer.nama} ({customer.kode})
-                                     </div>
-                                  )}
-                                  <div className="mt-1 space-y-0.5">
-                                      <p className="text-sm text-muted-foreground truncate">
-                                         Oleh: <span className="font-medium text-foreground">{formatUserDetail(item.diajukanOleh)}</span>
-                                      </p>
-                                      {item.targetUserId && (
-                                          <p className="text-xs text-muted-foreground truncate">
-                                              Kepada: <span className="font-medium text-foreground">{formatUserDetail(item.targetUserId)}</span>
-                                          </p>
-                                      )}
-                                      <p className="text-xs text-muted-foreground">{formatDateTime(item.tanggalPengajuan)}</p>
-                                  </div>
-                              </div>
-                              
-                              <div className="text-right shrink-0">
-                                  {renderStatus()}
-                                  
-                                  {isHistory && item.tanggalPersetujuan && (
-                                      <div className='mt-1 space-y-0.5 text-right'>
-                                          <p className="text-[10px] text-muted-foreground">
-                                              {formatDateTime(item.tanggalPersetujuan)}
-                                          </p>
-                                          {item.disetujuiOleh && (
-                                              <p className="text-[10px] text-muted-foreground">
-                                                  Disetujui: {formatUserDetail(item.disetujuiOleh)}
-                                              </p>
-                                          )}
-                                          {reimburseData?.status === 'dibayar' && (
-                                              <div className="mt-1 pt-1 border-t border-border/50">
-                                                  <p className="text-[10px] text-green-600 font-medium">
-                                                      Dibayar pada: {reimburseData.dibayarPada ? formatDateTime(reimburseData.dibayarPada) : '-'}
-                                                  </p>
-                                                  <p className="text-[10px] text-muted-foreground italic">
-                                                      Via: <span className="capitalize">{reimburseData.metodePembayaran || '-'}</span>
-                                                  </p>
-                                              </div>
-                                          )}
-                                      </div>
-                                  )}
-                              </div>
-                          </div>
+            <CardContent className="p-4">
+                <div className="flex items-start gap-4">
+                    <div className="p-2 bg-blue-100 rounded-lg shrink-0">
+                        {getIcon(item.jenis)}
+                    </div>
 
-                          {/* Dynamic Content */}
-                          {setoranData && (
-                              <div className="mt-2 p-3 bg-muted/50 rounded text-sm">
-                                  <p>Jumlah Setoran: <span className="font-bold">{formatRupiah(setoranData.jumlah || 0)}</span></p>
-                                  <p className="text-xs text-muted-foreground mt-1">Ref: {setoranData.nomorSetoran}</p>
-                              </div>
-                          )}
+                    <div className="flex-1 min-w-0">
+                        {/* Header Info */}
+                        <div className="flex justify-between items-start mb-2">
+                            <div className="min-w-0 pr-2">
+                                <p className="font-semibold capitalize truncate">
+                                    {item.jenis === 'rencana_setoran' ? 'Setoran Kepusat' : `Pengajuan ${item.jenis.replace(/_/g, ' ')}`}
+                                </p>
+                                {customer && (
+                                    <div className="flex items-center gap-1 mt-0.5 text-blue-700 bg-blue-50 w-fit px-1.5 py-0.5 rounded text-xs font-medium border border-blue-200">
+                                        <UserIcon size={12} />
+                                        {customer.nama} ({customer.kode})
+                                    </div>
+                                )}
+                                <div className="mt-1 space-y-0.5">
+                                    <p className="text-sm text-muted-foreground truncate">
+                                        Oleh: <span className="font-medium text-foreground">{formatUserDetail(item.diajukanOleh, item.data as PersetujuanPayload)}</span>
+                                    </p>
+                                    {item.targetUserId && (
+                                        <p className="text-xs text-muted-foreground truncate">
+                                            Kepada: <span className="font-medium text-foreground">{formatUserDetail(item.targetUserId, item.data as PersetujuanPayload)}</span>
+                                        </p>
+                                    )}
+                                    <p className="text-xs text-muted-foreground">{formatDateTime(item.tanggalPengajuan)}</p>
+                                </div>
+                            </div>
 
-                          {renderContent()}
+                            <div className="text-right shrink-0">
+                                {renderStatus()}
 
-                          <div className="flex gap-2 mt-4 justify-end">
-                              <Button 
-                                size="sm" 
-                                variant={isHistory ? "outline" : "default"} 
+                                {isHistory && item.tanggalPersetujuan && (
+                                    <div className='mt-1 space-y-0.5 text-right'>
+                                        <p className="text-[10px] text-muted-foreground">
+                                            {formatDateTime(item.tanggalPersetujuan)}
+                                        </p>
+                                        {item.disetujuiOleh && (
+                                            <p className="text-[10px] text-muted-foreground">
+                                                Disetujui: {formatUserDetail(item.disetujuiOleh, item.data as PersetujuanPayload)}
+                                            </p>
+                                        )}
+                                        {reimburseData?.status === 'dibayar' && (
+                                            <div className="mt-1 pt-1 border-t border-border/50">
+                                                <p className="text-[10px] text-green-600 font-medium">
+                                                    Dibayar pada: {reimburseData.dibayarPada ? formatDateTime(reimburseData.dibayarPada) : '-'}
+                                                </p>
+                                                <p className="text-[10px] text-muted-foreground italic">
+                                                    Via: <span className="capitalize">{reimburseData.metodePembayaran || '-'}</span>
+                                                </p>
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+
+                        {/* Dynamic Content */}
+                        {((item.jenis === 'setoran' || item.jenis === 'rencana_setoran') && setoranData) && (
+                            <div className="mt-2 p-3 bg-blue-50/50 rounded-lg text-sm border border-blue-100/50">
+                                <div className="flex justify-between items-start">
+                                    <div className="space-y-1">
+                                        <p className="text-[10px] text-muted-foreground uppercase font-bold">{item.jenis === 'rencana_setoran' ? 'Rencana Setoran' : 'Setoran Saldo'}</p>
+                                        <p>Jumlah: <span className="font-bold text-blue-700 text-lg">{formatRupiah(setoranAmount)}</span></p>
+                                        {setoranData.nomorSetoran && <p className="text-xs text-muted-foreground">Ref: {setoranData.nomorSetoran}</p>}
+                                        {item.jenis === 'rencana_setoran' && (setoranData.cashAmount !== undefined || setoranData.transferAmount !== undefined) && (
+                                            <div className="flex gap-3 text-[10px] mt-1 pt-1 border-t border-blue-100">
+                                                <span>Tunai: <b>{formatRupiah(setoranData.cashAmount || 0)}</b></span>
+                                                <span>Transfer: <b>{formatRupiah(setoranData.transferAmount || 0)}</b></span>
+                                            </div>
+                                        )}
+                                    </div>
+                                    
+                                    {/* Proofs */}
+                                    <div className="flex flex-col gap-2 items-end">
+                                        {(setoranData.buktiUrl || setoranData.buktiGambar || setoranData.bukti || setoranData.proofUrl) && (
+                                            <div className="w-12 h-12 shrink-0 border rounded overflow-hidden bg-white shadow-sm">
+                                                <ImagePreviewModal
+                                                    src={(setoranData.buktiUrl || setoranData.buktiGambar || setoranData.bukti || setoranData.proofUrl) as string}
+                                                    alt="Bukti Setor"
+                                                    title="Bukti Setoran"
+                                                />
+                                            </div>
+                                        )}
+                                        {/* Multi transfer proofs for rencana_setoran */}
+                                        {item.jenis === 'rencana_setoran' && (setoranData.transfers as any[])?.length > 0 && (
+                                            <div className="flex -space-x-4">
+                                                {(setoranData.transfers as any[]).slice(0, 3).map((t, idx) => t.proofUrl && (
+                                                    <div key={idx} className="w-8 h-8 rounded-full border-2 border-white overflow-hidden bg-slate-100 shadow-sm hover:scale-110 transition-transform cursor-pointer relative z-[5]">
+                                                        <ImagePreviewModal src={t.proofUrl} alt={`Bukti ${idx+1}`} title={`Bukti Transfer ${idx+1}`} />
+                                                    </div>
+                                                ))}
+                                                {(setoranData.transfers as any[]).length > 3 && (
+                                                    <div className="w-8 h-8 rounded-full border-2 border-white bg-slate-200 flex items-center justify-center text-[8px] font-bold z-0">
+                                                        +{(setoranData.transfers as any[]).length - 3}
+                                                    </div>
+                                                )}
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+
+                        {item.jenis === 'reimburse' && (
+                            <div className="mt-2 p-3 bg-pink-50/50 rounded-lg text-sm flex justify-between items-center border border-pink-100/50">
+                                <div className="space-y-1">
+                                    <p>Total Reimburse: <span className="font-bold text-pink-700 text-lg">{formatRupiah(reimburseAmount)}</span></p>
+                                    <p className="text-xs text-muted-foreground line-clamp-1 italic">{(item.data as PersetujuanPayload)?.keterangan || (item.data as PersetujuanPayload)?.catatan || reimburseData?.keterangan || 'Tanpa keterangan'}</p>
+                                </div>
+                                {((item.data as PersetujuanPayload)?.buktiUrl || (item.data as PersetujuanPayload)?.buktiGambar || (item.data as PersetujuanPayload)?.bukti || (item.data as PersetujuanPayload)?.proofUrl || reimburseData?.buktiUrl || reimburseData?.bukti) && (
+                                    <div className="w-12 h-12 shrink-0 border rounded overflow-hidden bg-white shadow-sm">
+                                        <ImagePreviewModal
+                                            src={((item.data as PersetujuanPayload)?.buktiUrl || (item.data as PersetujuanPayload)?.buktiGambar || (item.data as PersetujuanPayload)?.bukti || (item.data as PersetujuanPayload)?.proofUrl || reimburseData?.buktiUrl || reimburseData?.bukti) as string}
+                                            alt="Bukti Reimburse"
+                                            title="Bukti Reimbursement"
+                                        />
+                                    </div>
+                                )}
+                            </div>
+                        )}
+
+                        {renderContent()}
+
+                        <div className="flex gap-2 mt-4 justify-end">
+                            <Button
+                                size="sm"
+                                variant={isHistory ? "outline" : "default"}
                                 className={!isHistory ? "bg-blue-600 hover:bg-blue-700" : ""}
                                 onClick={() => onViewDetail(item)}
-                              >
-                                  <Eye className="w-4 h-4 mr-1" /> 
-                                  {isHistory ? 'Lihat Detail' : 'Tinjau & Setujui'}
-                              </Button>
-                          </div>
-                      </div>
-                  </div>
-              </CardContent>
+                            >
+                                <Eye className="w-4 h-4 mr-1" />
+                                {isHistory ? 'Lihat Detail' : 'Tinjau & Setujui'}
+                            </Button>
+                        </div>
+                    </div>
+                </div>
+            </CardContent>
         </Card>
     );
 
     function renderContent() {
         if (!item.data) return null;
         const d = item.data as PersetujuanPayload;
-        
+
         switch (item.jenis) {
             case 'diskon_manual':
                 return (
                     <div className="mt-2 space-y-1 text-sm border p-3 rounded bg-orange-50/50 border-orange-100">
-                         <div className="flex justify-between items-start">
-                              <span className="text-muted-foreground">Total Transaksi (Draft):</span>
-                              <span className="font-mono font-medium">{formatRupiah(d.amount || 0)}</span>
-                         </div>
-                         <div className="flex justify-between items-center p-2 bg-orange-50 rounded border border-orange-100 mt-2">
-                              <span className="text-orange-800 font-medium">Diskon Diajukan:</span>
-                              <span className="font-bold text-lg text-orange-600">{formatRupiah(d.nilai || 0)}</span>
-                         </div>
-                         {item.keterangan && <p className="text-xs text-muted-foreground mt-2 italic">"{item.keterangan}"</p>}
+                        <div className="flex justify-between items-start">
+                            <span className="text-muted-foreground">Total Transaksi (Draft):</span>
+                            <span className="font-mono font-medium">{formatRupiah(d.amount || 0)}</span>
+                        </div>
+                        <div className="flex justify-between items-center p-2 bg-orange-50 rounded border border-orange-100 mt-2">
+                            <span className="text-orange-800 font-medium">Diskon Diajukan:</span>
+                            <span className="font-bold text-lg text-orange-600">{formatRupiah(d.nilai || 0)}</span>
+                        </div>
+                        {item.keterangan && <p className="text-xs text-muted-foreground mt-2 italic">"{item.keterangan}"</p>}
                     </div>
                 );
 
@@ -247,25 +354,25 @@ export function ApprovalCard({
                 return (
                     <div className="mt-2 space-y-1 text-sm border p-3 rounded bg-red-50/50 border-red-100">
                         <p className="text-red-800 font-medium flex items-center gap-2">
-                             Penghapusan Transaksi
+                            Penghapusan Transaksi
                         </p>
                         <p className="font-mono bg-white p-1 px-2 rounded border border-red-100 w-fit">{d.nomorNota}</p>
                         <div className="flex justify-between mt-1 text-xs">
-                             <span className="text-muted-foreground">Nilai:</span>
-                             <span className="font-bold">{formatRupiah(d.amount || 0)}</span>
+                            <span className="text-muted-foreground">Nilai:</span>
+                            <span className="font-bold">{formatRupiah(d.amount || 0)}</span>
                         </div>
                         {d.keterangan && <p className="text-xs text-muted-foreground mt-1 italic">Alasan: "{d.keterangan}"</p>}
                     </div>
                 );
-            
+
             case 'restock':
                 return (
                     <div className="mt-2 p-3 bg-emerald-50/30 rounded text-sm border border-emerald-100">
                         <p className="font-medium text-emerald-900">{d.namaBarang}</p>
                         <div className="flex justify-between items-center mt-1">
                             <p>
-                               Jumlah: <span className="font-bold">{(d.jumlah || 0).toLocaleString('id-ID')}</span> 
-                               {' '}<span className="text-xs font-medium bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded">{getUnitName(d.satuanId)}</span>
+                                Jumlah: <span className="font-bold">{(d.jumlah || 0).toLocaleString('id-ID')}</span>
+                                {' '}<span className="text-xs font-medium bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded">{getUnitName(d.satuanId)}</span>
                             </p>
                         </div>
                         {item.catatan && <p className="text-xs text-muted-foreground mt-1 italic">"{item.catatan}"</p>}
@@ -298,45 +405,71 @@ export function ApprovalCard({
                     <div className="mt-2 p-3 bg-indigo-50 border border-indigo-100 rounded text-sm">
                         <p className="font-semibold text-indigo-800 text-xs uppercase mb-1">Perubahan Data Karyawan</p>
                         {d.isCabangChanged && (
-                            <p>Cabang: <span className="line-through text-red-400 mr-2">{cabang.find(c => c.id === d.oldCabangId)?.nama || '-'}</span> 
-                            <ArrowLeftRight className="inline w-3 h-3 mx-1"/> 
-                            <span className="font-bold text-green-600">{cabang.find(c => c.id === d.cabangId)?.nama || '-'}</span></p>
+                            <p>Cabang: <span className="line-through text-red-400 mr-2">{cabang.find(c => c.id === d.oldCabangId)?.nama || '-'}</span>
+                                <ArrowLeftRight className="inline w-3 h-3 mx-1" />
+                                <span className="font-bold text-green-600">{cabang.find(c => c.id === d.cabangId)?.nama || '-'}</span></p>
                         )}
                         {d.isStatusChanged && (
-                            <p>Status: <span className="line-through text-red-400 mr-2 capitalize">{d.oldStatus}</span> 
-                            <ArrowLeftRight className="inline w-3 h-3 mx-1"/> 
-                            <span className="font-bold text-green-600 capitalize">{d.status}</span></p>
+                            <p>Status: <span className="line-through text-red-400 mr-2 capitalize">{d.oldStatus}</span>
+                                <ArrowLeftRight className="inline w-3 h-3 mx-1" />
+                                <span className="font-bold text-green-600 capitalize">{d.status}</span></p>
                         )}
                     </div>
                 );
 
-            case 'mutasi': {
-                const items = (d.items || mutasiData?.items || []) as { barangId: string; jumlah: number; satuanId?: string }[];
-                if (!items.length) return null;
+            case 'mutasi':
+            case 'mutasi_stok': {
+                let items = (d.items || mutasiData?.items || []) as { barangId: string; jumlah: number; satuanId?: string }[];
                 
-                const mItem = items[0];
-                const barangInfo = barang.find(b => b.id === mItem.barangId);
-                const unitName = getUnitName(mItem.satuanId || barangInfo?.satuanId);
-                const totalItems = items.length;
+                // Fallback for single item mutasi
+                if (!items.length && d.barangId) {
+                    items = [{ barangId: d.barangId, jumlah: (d.jumlah || 1) as number, satuanId: d.satuanId }];
+                }
+
+                if (!items.length) return (
+                    <div className="mt-2 p-3 bg-indigo-50/30 rounded text-sm border border-indigo-100/50 italic text-muted-foreground">
+                        Data mutasi tidak lengkap
+                    </div>
+                );
 
                 return (
-                    <div className="p-3 bg-muted/30 rounded text-sm border border-border/50 mt-2">
-                        <div className="flex justify-between items-start mb-1">
-                             <p className="font-medium text-foreground">{barangInfo?.nama || mItem.barangId}</p>
+                    <div className="p-3 bg-indigo-50/30 rounded text-sm border border-indigo-100/50 mt-2">
+                        <div className="flex justify-between items-center mb-2 pb-2 border-b border-indigo-100/30">
+                            <div className="flex flex-col">
+                                <span className="text-[10px] text-muted-foreground uppercase">Dari</span>
+                                <span className="font-bold text-indigo-900 text-xs">
+                                    {getCabangName(d.dariCabangId || mutasiData?.dariCabangId || d.senderCabangId || (d as any).dari_cabang_id || users.find(u => u.id === item.diajukanOleh)?.cabangId)}
+                                </span>
+                            </div>
+                            <ArrowLeftRight size={14} className="text-indigo-400" />
+                            <div className="flex flex-col text-right">
+                                <span className="text-[10px] text-muted-foreground uppercase">Ke</span>
+                                <span className="font-bold text-indigo-700 text-xs">
+                                    {getCabangName(d.keCabangId || mutasiData?.keCabangId || d.targetCabangId || d.destinationCabangId || (d as any).ke_cabang_id || (d as any).cabangId)}
+                                </span>
+                            </div>
                         </div>
-                         <div className="flex items-center gap-2 text-xs">
-                             <span className="font-bold">{mItem.jumlah.toLocaleString('id-ID')}</span> 
-                             <span className="text-[10px] bg-secondary px-1 rounded">{unitName}</span>
-                         </div>
-                         {totalItems > 1 && (
-                             <p className="text-[10px] text-muted-foreground mt-1 italic">...dan {totalItems - 1} barang lainnya</p>
-                         )}
+                        <p className="font-semibold text-[10px] uppercase text-muted-foreground mb-2">Daftar Barang Mutasi:</p>
+                        <div className="space-y-1.5 max-h-[150px] overflow-y-auto pr-1 chat-scroll">
+                            {items.map((mItem, idx) => {
+                                const barangInfo = barang.find(b => b.id === mItem.barangId);
+                                const unitName = getUnitName(mItem.satuanId || barangInfo?.satuanId);
+                                return (
+                                    <div key={idx} className="flex justify-between items-center text-xs border-b border-border/20 pb-1.5 last:border-0 last:pb-0">
+                                        <span className="font-medium truncate pr-2 text-foreground/80">{barangInfo?.nama || mItem.barangId}</span>
+                                        <span className="shrink-0 font-mono bg-white border px-1.5 py-0.5 rounded text-[10px] font-bold text-indigo-700">
+                                            {mItem.jumlah.toLocaleString('id-ID')} {unitName}
+                                        </span>
+                                    </div>
+                                );
+                            })}
+                        </div>
                     </div>
                 );
             }
 
             case 'permintaan':
-                 return (
+                return (
                     <div className="mt-2 text-sm border border-blue-200 rounded-lg w-full bg-blue-50/50">
                         <div className="p-2 flex justify-between items-center border-b border-blue-100">
                             <span className="font-semibold text-blue-800 text-xs">Permintaan Stok</span>
@@ -346,15 +479,15 @@ export function ApprovalCard({
                             <p className="text-xs text-muted-foreground italic">{(d.items as Record<string, unknown>[])?.length || 0} Barang diminta</p>
                         </div>
                     </div>
-                 );
+                );
 
             case 'perubahan_harga':
                 return (
                     <div className="mt-2 text-sm border border-orange-200 rounded-lg w-full bg-orange-50/50 p-3">
                         <p className="font-semibold text-orange-800 text-xs uppercase tracking-wide mb-2">Rincian Perubahan Harga</p>
                         <div className="flex justify-between items-center mb-1">
-                                <span className="font-medium">{barang.find(b => b.id === d.barangId)?.nama || d.barangId}</span>
-                                <Badge variant="outline" className="text-[10px]">{getUnitName(d.satuanId)}</Badge>
+                            <span className="font-medium">{barang.find(b => b.id === d.barangId)?.nama || d.barangId}</span>
+                            <Badge variant="outline" className="text-[10px]">{getUnitName(d.satuanId)}</Badge>
                         </div>
                         <div className="flex items-center gap-2 mt-2">
                             <div className="flex-1">
@@ -397,9 +530,9 @@ export function ApprovalCard({
                                 <ArrowRight className="w-3 h-3 text-purple-300" />
                                 <span className="font-bold text-purple-700">
                                     {['nomimal', 'nominal'].includes(d.tipe || '')
-                                        ? formatRupiah(d.nilai || 0) 
-                                        : d.tipe === 'persen' 
-                                            ? `${d.nilai}%` 
+                                        ? formatRupiah(d.nilai || 0)
+                                        : d.tipe === 'persen'
+                                            ? `${d.nilai}%`
                                             : `Free Bonus`}
                                 </span>
                             </div>
@@ -415,8 +548,8 @@ export function ApprovalCard({
                                 <div className="flex items-center gap-1">
                                     <Calendar className="w-3 h-3" />
                                     <span>
-                                        {d.tanggalMulai ? new Date(d.tanggalMulai).toLocaleDateString('id-ID') : 'Now'} 
-                                        {' - '} 
+                                        {d.tanggalMulai ? new Date(d.tanggalMulai).toLocaleDateString('id-ID') : 'Now'}
+                                        {' - '}
                                         {d.tanggalBerakhir ? new Date(d.tanggalBerakhir).toLocaleDateString('id-ID') : 'Seterusnya'}
                                     </span>
                                 </div>
@@ -426,10 +559,10 @@ export function ApprovalCard({
                 );
 
             case 'mutasi_pelanggan':
-                 return (
+                return (
                     <div className="mt-2 text-sm border border-orange-200 rounded-lg w-full bg-orange-50/50 p-3">
                         <p className="font-semibold text-orange-800 text-xs uppercase tracking-wide mb-2">Mutasi Pelanggan</p>
-                        
+
                         {d.items && Array.isArray(d.items) ? (
                             <div className="mb-2">
                                 <div className="flex items-center gap-2 mb-1">
@@ -443,20 +576,20 @@ export function ApprovalCard({
                             </div>
                         ) : (
                             <div className="flex items-center gap-2 mb-2">
-                                    <UserIcon size={16} className="text-orange-600" />
-                                    <span className="font-medium text-lg">{d.pelangganNama}</span>
+                                <UserIcon size={16} className="text-orange-600" />
+                                <span className="font-medium text-lg">{d.pelangganNama}</span>
                             </div>
                         )}
 
                         <div className="flex items-center gap-2 text-xs">
                             <div className="flex-1 p-2 bg-white rounded border border-orange-100">
                                 <p className="text-muted-foreground">Dari Sales</p>
-                                <p className="font-medium">{formatUserDetail(d.dariSalesId)}</p>
+                                <p className="font-medium">{formatUserDetail(d.dariSalesId, d)}</p>
                             </div>
                             <ArrowRight className="text-orange-400 w-4 h-4" />
                             <div className="flex-1 p-2 bg-white rounded border border-orange-100">
                                 <p className="text-muted-foreground">Ke Sales</p>
-                                <p className="font-medium font-bold text-orange-700">{formatUserDetail(d.keSalesId)}</p>
+                                <p className="font-medium font-bold text-orange-700">{formatUserDetail(d.keSalesId, d)}</p>
                             </div>
                         </div>
                         {d.catatan && (
@@ -465,11 +598,11 @@ export function ApprovalCard({
                             </div>
                         )}
                     </div>
-                 );
-            
+                );
+
             case 'opname': {
-                 const b = barang.find(x => x.id === d.barangId);
-                 return (
+                const b = barang.find(x => x.id === d.barangId);
+                return (
                     <div className="mt-2 p-3 bg-rose-50 border border-rose-100 rounded text-sm space-y-1">
                         <p className="font-semibold text-rose-800 text-xs uppercase tracking-wide">Hasil Opname</p>
                         <p className="font-medium">{b?.nama || 'Unknown Item'}</p>
@@ -487,53 +620,14 @@ export function ApprovalCard({
                                 <span className="font-bold">{(d.selisih || 0) > 0 ? '+' : ''}{d.selisih}</span>
                             </div>
                         </div>
-                            {item.catatan && <p className="text-xs text-muted-foreground mt-1 italic">"{item.catatan}"</p>}
+                        {item.catatan && <p className="text-xs text-muted-foreground mt-1 italic">"{item.catatan}"</p>}
                     </div>
-                 );
+                );
             }
 
             case 'rencana_setoran':
-                return (
-                    <div className="mt-2 text-sm border border-indigo-200 rounded-lg w-full bg-indigo-50/50 p-3">
-                        <div className="flex justify-between items-center mb-2">
-                                <span className="font-semibold text-indigo-800 text-xs uppercase tracking-wide">Penerimaan Uang Setoran</span>
-                                <Badge variant="outline" className="bg-white text-indigo-700 border-indigo-200">Ke Pusat</Badge>
-                        </div>
-                        <div className="flex justify-between items-center mb-2">
-                            <span className="text-xs text-muted-foreground mr-2">Total</span>
-                            <span className="font-bold text-lg text-indigo-700">{formatRupiah(d.amount)}</span>
-                        </div>
-                        
-                        {/* Breakdown Mini View */}
-                        <div className="grid grid-cols-2 gap-2 text-xs mb-2">
-                            <div className="bg-white/60 p-1.5 rounded border border-indigo-100/50">
-                                <span className="block text-[10px] text-muted-foreground">Tunai</span>
-                                <span className="font-medium text-indigo-900">{formatRupiah(d.cashAmount || 0)}</span>
-                            </div>
-                            <div className="bg-white/60 p-1.5 rounded border border-indigo-100/50">
-                                <span className="block text-[10px] text-muted-foreground">Transfer</span>
-                                <span className="font-medium text-indigo-900">{formatRupiah(d.transferAmount || 0)}</span>
-                            </div>
-                        </div>
+                return null; // Handled in main card body now
 
-                        {(d.transfers && d.transfers.length > 1) && (
-                                <div className="text-[10px] text-right text-indigo-500 italic">
-                                    {d.transfers.length} Bukti Transfer terlampir
-                                </div>
-                        )}
-                    </div>
-                );
-
-            case 'reimburse':
-                return (
-                    <div className="mt-2 text-sm p-3 bg-pink-50 border border-pink-100 rounded-lg">
-                         <div className="flex justify-between items-start">
-                             <span className="font-semibold text-pink-900 uppercase text-xs">Reimbursement</span>
-                             <span className="font-bold text-pink-700">{formatRupiah(d.amount || 0)}</span>
-                         </div>
-                         <p className="text-xs text-muted-foreground mt-1 line-clamp-2">{d.keterangan || 'Tanpa keterangan'}</p>
-                    </div>
-                );
 
             default:
                 return null;
