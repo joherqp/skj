@@ -27,6 +27,7 @@ CREATE TABLE IF NOT EXISTS public.users (
   roles text[],
   cabang_id uuid,
   karyawan_id uuid,
+  kode_unik text,
   avatar_url text,
   is_active boolean,
   created_at timestamp with time zone,

@@ -1117,8 +1117,8 @@ export default function TambahPenjualan() {
                                             aria-expanded={isCustomerOpen}
                                             className="w-full justify-between"
                                         >
-                                            {formData.pelangganId
-                                                ? pelanggan.find((p) => p.id === formData.pelangganId)?.nama
+                                            {selectedCustomer
+                                                ? selectedCustomer.nama
                                                 : "Pilih Pelanggan..."}
                                             <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                                         </Button>
@@ -1152,7 +1152,7 @@ export default function TambahPenjualan() {
                                                     .map((p) => (
                                                         <CommandItem
                                                             key={p.id}
-                                                            value={p.nama}
+                                                            value={`${p.nama} ${p.kode || ''}`}
                                                             onSelect={() => {
                                                                 setFormData(prev => ({ ...prev, pelangganId: p.id }));
                                                                 setIsCustomerOpen(false);
@@ -1165,8 +1165,13 @@ export default function TambahPenjualan() {
                                                                 )}
                                                             />
                                                             <div className="flex flex-col">
-                                                                <span>{p.nama}</span>
-                                                                <span className="text-xs text-muted-foreground">{p.alamat}</span>
+                                                                <div className="flex items-center gap-2">
+                                                                    <span className="font-medium">{p.nama}</span>
+                                                                    {p.kode && (
+                                                                        <span className="text-[10px] font-mono bg-muted px-1 rounded text-muted-foreground">{p.kode}</span>
+                                                                    )}
+                                                                </div>
+                                                                <span className="text-xs text-muted-foreground truncate max-w-[240px]">{p.alamat}</span>
                                                             </div>
                                                         </CommandItem>
                                                     ))}

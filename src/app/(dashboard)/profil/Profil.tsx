@@ -6,7 +6,7 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { useAuth } from '@/contexts/AuthContext';
 import {
   User, Mail, Phone, MapPin, Shield,
-  LogOut, ChevronRight, Beaker, BellRing
+  LogOut, ChevronRight, Beaker, BellRing, Key, Edit2, Check, X
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
@@ -14,6 +14,7 @@ import { useDatabase } from '@/contexts/DatabaseContext';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import { isSoundNotificationEnabled, setSoundNotificationEnabled } from '@/lib/notificationSound';
 import {
   setSystemPushEnabled,
@@ -32,8 +33,8 @@ const roleLabels: Record<string, string> = {
 };
 
 export default function Profil() {
-  const { user, logout } = useAuth();
-  const { karyawan, cabang: listCabang, dbMode, setDbMode } = useDatabase();
+  const { user, logout, refreshUser } = useAuth();
+  const { karyawan, cabang: listCabang, dbMode, setDbMode, updateUser, users } = useDatabase();
   const router = useRouter();
 
   const linkedKaryawan = karyawan.find(k => k.userAccountId === user?.id);
@@ -42,6 +43,8 @@ export default function Profil() {
   const [notificationEnabled, setNotificationEnabled] = useState(false);
   const [isSystemPushLoading, setIsSystemPushLoading] = useState(false);
   const [isTestingNotification, setIsTestingNotification] = useState(false);
+  const [isEditingKode, setIsEditingKode] = useState(false);
+  const [newKode, setNewKode] = useState(user?.kodeUnik || '');
 
   // Helper functions
   const getInitials = (name: string) => {
@@ -61,7 +64,48 @@ export default function Profil() {
   useEffect(() => {
     setMounted(true);
     setNotificationEnabled(isSoundNotificationEnabled());
-  }, []);
+    if (user?.kodeUnik) setNewKode(user.kodeUnik);
+  }, [user?.kodeUnik]);
+
+  const handleUpdateKode = async () => {
+    if (!user) return;
+    
+    if (!user.roles.includes('admin')) {
+      toast.error('Hanya Administrator yang dapat mengubah kode unik.');
+      return;
+    }
+    const cleanKode = newKode.toUpperCase().trim();
+    if (cleanKode.length !== 3) {
+      toast.error('Kode unik harus tepat 3 karakter huruf.');
+      return;
+    }
+
+    if (!/^[A-Z]{3}$/.test(cleanKode)) {
+      toast.error('Kode unik hanya boleh berisi huruf A-Z.');
+      return;
+    }
+
+    // Local uniqueness check
+    const isUsed = users.some(u => u.id !== user.id && u.kodeUnik?.toUpperCase() === cleanKode);
+    if (isUsed) {
+      toast.error(`Kode "${cleanKode}" sudah digunakan oleh user lain. Silakan pilih kode lain.`);
+      return;
+    }
+
+    try {
+      await updateUser(user.id, { kodeUnik: cleanKode });
+      await refreshUser();
+      toast.success('Kode unik sales berhasil diperbarui');
+      setIsEditingKode(false);
+    } catch (error: any) {
+      console.error('Error updating kode unik:', error);
+      if (error?.message?.includes('unique constraint') || error?.code === '23505') {
+        toast.error(`Kode "${cleanKode}" sudah terdaftar di sistem. Pilih kombinasi lain.`);
+      } else {
+        toast.error('Gagal memperbarui kode unik');
+      }
+    }
+  };
 
   // Get Cabang from Karyawan data (priority) or User data
   const displayCabangId = linkedKaryawan?.cabangId || user?.cabangId;
@@ -227,7 +271,6 @@ export default function Profil() {
           <CardHeader className="pb-2">
             <div className="flex items-center justify-between">
               <CardTitle className="text-base">Informasi Akun</CardTitle>
-              {/* Edit disallowed as per requirement: "Informasi Akun tidak bisa di ubah" */}
               <div className="text-xs text-muted-foreground flex items-center gap-1">
                 <Shield className="w-3 h-3" />
                 Terproteksi
@@ -235,6 +278,49 @@ export default function Profil() {
             </div>
           </CardHeader>
           <CardContent className="space-y-4">
+            {/* Custom Unique Code Field */}
+            <div className="flex items-center gap-3 py-2 border-b border-dashed">
+              <div className="p-2 rounded-lg bg-primary/10">
+                <Key className="w-4 h-4 text-primary" />
+              </div>
+              <div className="flex-1">
+                <p className="text-xs text-muted-foreground">Kode Unik Sales (untuk Penomoran)</p>
+                {isEditingKode ? (
+                  <div className="flex items-center gap-2 mt-1">
+                    <Input
+                      value={newKode}
+                      onChange={(e) => setNewKode(e.target.value.toUpperCase().slice(0, 3))}
+                      className="h-8 w-24 text-sm font-bold uppercase"
+                      placeholder="ABC"
+                      maxLength={3}
+                      autoFocus
+                    />
+                    <Button size="sm" variant="ghost" onClick={() => setIsEditingKode(false)} className="h-8 w-8 p-0">
+                      <X className="w-4 h-4 text-destructive" />
+                    </Button>
+                    <Button size="sm" variant="ghost" onClick={handleUpdateKode} className="h-8 w-8 p-0">
+                      <Check className="w-4 h-4 text-primary" />
+                    </Button>
+                  </div>
+                ) : (
+                  <div className="flex items-center justify-between">
+                    <p className="text-sm font-bold text-primary">{user?.kodeUnik || '-'}</p>
+                    {user?.roles.includes('admin') && (
+                      <Button 
+                        variant="ghost" 
+                        size="sm" 
+                        onClick={() => setIsEditingKode(true)}
+                        className="h-7 text-xs flex items-center gap-1 hover:text-primary"
+                      >
+                        <Edit2 className="w-3 h-3" />
+                        Ubah
+                      </Button>
+                    )}
+                  </div>
+                )}
+              </div>
+            </div>
+
             {profileItems.map((item, index) => {
               const Icon = item.icon;
               return (

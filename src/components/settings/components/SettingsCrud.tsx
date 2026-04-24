@@ -20,7 +20,7 @@ interface SettingsCrudProps<T> {
     label: string;
     render?: (item: T) => React.ReactNode;
   }>;
-  onSave: (item: T) => void;
+  onSave: (item: T) => void | boolean | Promise<void | boolean>;
   onDelete: (id: string) => void;
   renderForm: (
     formData: Partial<T>,
@@ -81,9 +81,11 @@ export function SettingsCrud<T extends CrudItem>({
     });
   });
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    onSave({ ...formData, id: editingId || "" } as T);
+    const result = await onSave({ ...formData, id: editingId || "" } as T);
+    if (result === false) return;
+    
     setIsAdding(false);
     setEditingId(null);
     toast.success("Data berhasil disimpan");

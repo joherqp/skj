@@ -33,6 +33,7 @@ interface AuthContextType {
   updatePassword: (password: string) => Promise<void>;
   hasRole: (roles: UserRole[]) => boolean;
   loginWithGoogle: () => Promise<void>;
+  refreshUser: () => Promise<void>;
 }
 
 
@@ -53,6 +54,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     cabang_id: string;
     karyawan_id?: string | null;
     avatar_url?: string | null;
+    kode_unik?: string | null;
     is_active: boolean;
     created_at: string;
   }): User => ({
@@ -65,6 +67,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     cabangId: data.cabang_id,
     karyawanId: data.karyawan_id,
     avatarUrl: data.avatar_url,
+    kodeUnik: data.kode_unik || undefined,
     isActive: data.is_active,
     createdAt: new Date(data.created_at),
   });
@@ -172,6 +175,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     setUser(profile);
   }, [loadUserProfile]);
+
+  const refreshUser = useCallback(async () => {
+    if (supabaseUser) {
+      await applySessionUser(supabaseUser);
+    }
+  }, [supabaseUser, applySessionUser]);
 
   // Initialize auth state
   useEffect(() => {
@@ -304,6 +313,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         supabaseUser,
         updatePassword,
         loginWithGoogle,
+        refreshUser,
         hasRole: (roles: UserRole[]) => {
           if (!user || !user.isActive) return false;
           return roles.some(role => user.roles.includes(role));

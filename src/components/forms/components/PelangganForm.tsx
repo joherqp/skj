@@ -55,7 +55,7 @@ export function PelangganForm({ onSuccess, onCancel, className, isDialog = false
   const [formData, setFormData] = useState({
     nama: initialName,
     namaPemilik: '',
-    kode: `CUST-${Date.now().toString().slice(-4)}`,
+    kode: '', // Initialized empty, set by useEffect
     alamat: '',
     telepon: '',
     email: '',
@@ -66,6 +66,116 @@ export function PelangganForm({ onSuccess, onCancel, className, isDialog = false
     latitude: 0,
     longitude: 0
   });
+
+  // Automated Code Generation logic
+  useEffect(() => {
+    if (!user || !pelanggan) return;
+    
+    // Only generate if kode is empty (initial state)
+    if (formData.kode) return;
+
+    // 1. Determine the Prefix (3 letters)
+    let prefix = '';
+    
+    // PRIORITY 1: Use user.kodeUnik from the new database column
+    if (user.kodeUnik && user.kodeUnik.length === 3) {
+      prefix = user.kodeUnik.toUpperCase();
+    } 
+    // PRIORITY 2: Check if this user already has customers and an established prefix
+    else {
+      const userCustomers = pelanggan.filter(p => p.salesId === user.id && p.kode && p.kode.includes('-'));
+      
+      if (userCustomers.length > 0) {
+        // Use their existing prefix
+        const existingPrefix = userCustomers[0].kode.split('-')[0];
+        if (existingPrefix && existingPrefix.length === 3) {
+          prefix = existingPrefix;
+        }
+      }
+    }
+
+    // PRIORITY 3: Fallback generation if no prefix found yet
+    if (!prefix) {
+      // Generate new unique prefix based on name
+      const name = user.nama.toUpperCase().replace(/[^A-Z]/g, '');
+      const allUsedPrefixes = new Set(
+        pelanggan
+          .map(p => p.kode?.split('-')[0])
+          .filter(p => p && p.length === 3)
+      );
+
+      const generateCandidates = (n: string) => {
+        const c = [];
+        if (n.length >= 3) {
+          const consonants = n.replace(/[AEIOU]/g, '');
+          
+          // User's specific examples
+          if (n.includes('IRFAN')) c.push('IRN');
+          if (n.includes('IRVAN')) c.push('IVN');
+          if (n.includes('IVAN')) c.push('IAN');
+          
+          // Strategy: First + Middle + Last
+          c.push(n[0] + n[Math.floor(n.length / 2)] + n[n.length - 1]);
+          
+          // Strategy: First + next 2 consonants
+          if (consonants.length >= 2) c.push(n[0] + consonants.substring(0, 2));
+          
+          // Strategy: First 3 consonants
+          if (consonants.length >= 3) c.push(consonants.substring(0, 3));
+          
+          // Strategy: First 3 letters
+          c.push(n.substring(0, 3));
+        } else {
+          c.push((n + 'XXX').substring(0, 3));
+        }
+        return c;
+      };
+
+      const candidates = generateCandidates(name);
+      let found = false;
+      for (const cand of candidates) {
+        if (!allUsedPrefixes.has(cand)) {
+          prefix = cand;
+          found = true;
+          break;
+        }
+      }
+
+      // If still not found, brute force combinations of name letters
+      if (!found && name.length >= 3) {
+        for (let i = 1; i < name.length - 1 && !found; i++) {
+          for (let j = i + 1; j < name.length && !found; j++) {
+            const cand = name[0] + name[i] + name[j];
+            if (!allUsedPrefixes.has(cand)) {
+              prefix = cand;
+              found = true;
+            }
+          }
+        }
+      }
+
+      // Final fallback if absolutely nothing works
+      if (!prefix) prefix = 'CST';
+    }
+
+    // 2. Generate a unique full code (Prefix + 4 digits)
+    const generateUniqueFullKode = (pfx: string) => {
+      let attempts = 0;
+      while (attempts < 50) {
+        const suffix = Math.floor(1000 + Math.random() * 9000).toString();
+        const full = `${pfx}-${suffix}`;
+        if (!pelanggan.some(p => p.kode === full)) {
+          return full;
+        }
+        attempts++;
+      }
+      // Ultimate fallback with timestamp if random fails many times
+      return `${pfx}-${Date.now().toString().slice(-4)}`;
+    };
+
+    const finalKode = generateUniqueFullKode(prefix);
+    setFormData(prev => ({ ...prev, kode: finalKode }));
+  }, [user, pelanggan, formData.kode]);
 
   useEffect(() => {
     if (kategoriPelanggan.length > 0 && !formData.kategoriId) {
@@ -353,11 +463,12 @@ export function PelangganForm({ onSuccess, onCancel, className, isDialog = false
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label>Kode Pelanggan</Label>
-                <Input
-                  value={formData.kode}
-                  readOnly
-                  className="bg-muted"
-                />
+                  <Input
+                    value={formData.kode}
+                    readOnly
+                    className="bg-muted"
+                    placeholder="Generating code..."
+                  />
               </div>
 
               <div className="space-y-2">

@@ -11,6 +11,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Search } from "lucide-react";
 import { useState } from 'react';
+import { toast } from 'sonner';
 
 // Local UserRole removed, using imported one
 
@@ -19,7 +20,7 @@ import { useState } from 'react';
 
 
 export default function Pengguna() {
-  const { users, addUser, updateUser, deleteUser, addKaryawan, karyawan } = useDatabase();
+  const { users, addUser, updateUser, deleteUser, addKaryawan, karyawan, isAdminOrOwner } = useDatabase();
 
   const roleLabels: Record<UserRole, string> = {
     admin: 'Administrator',
@@ -102,13 +103,39 @@ export default function Pengguna() {
               ))}
             </div>
           )
+        },
+        {
+          key: 'kodeUnik',
+          label: 'Kode Unik',
+          render: (item) => (
+            <span className="font-mono font-bold text-primary">{item.kodeUnik || '-'}</span>
+          )
         }
       ]}
-      initialFormState={{ username: '', email: '', roles: ['staff'], cabangId: '', isActive: true, startDate: undefined, endDate: undefined } as unknown as UserType}
+      initialFormState={{ username: '', email: '', roles: ['staff'], cabangId: '', isActive: true, kodeUnik: '', startDate: undefined, endDate: undefined } as unknown as UserType}
       onSave={(item) => {
+        // Validation: Kode Unik must be unique
+        if (item.kodeUnik) {
+          const kodeToCheck = item.kodeUnik.toUpperCase().trim();
+          const duplicate = users.find(u => 
+            u.id !== item.id && 
+            u.kodeUnik?.toUpperCase() === kodeToCheck
+          );
+          
+          if (duplicate) {
+            toast.error(`Kode Unik "${kodeToCheck}" sudah digunakan oleh ${duplicate.username}!`);
+            return false;
+          }
+        }
+
         const exists = users.find(u => u.id === item.id);
         if (exists) {
-          updateUser(item.id, item);
+          // Convert to snake_case for DB
+          const updateData = {
+            ...item,
+            kode_unik: item.kodeUnik?.toUpperCase().trim()
+          };
+          updateUser(item.id, updateData);
         } else {
           // Auto-create Karyawan logic
           const newUserId = self.crypto.randomUUID();
@@ -122,6 +149,7 @@ export default function Pengguna() {
           addUser({
             ...userData,
             id: newUserId,
+            kode_unik: item.kodeUnik?.toUpperCase().trim(),
             // Ensure mandatory fields for users table
             nama: item.username, // Default name to username if not provided
             telepon: '-',
@@ -129,8 +157,6 @@ export default function Pengguna() {
             isActive: true,
             karyawanId: newKaryawanId
           } as any); // eslint-disable-line @typescript-eslint/no-explicit-any
-
-
 
           // Create Karyawan linked to User
           addKaryawan({
@@ -173,16 +199,38 @@ export default function Pengguna() {
               </p>
             </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="username">Username</Label>
-              <Input
-                id="username"
-                name="username"
-                value={formData.username}
-                onChange={handleChange}
-                placeholder="Username (contoh: sales1)"
-                required
-              />
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="username">Username</Label>
+                <Input
+                  id="username"
+                  name="username"
+                  value={formData.username}
+                  onChange={handleChange}
+                  placeholder="Username (contoh: sales1)"
+                  required
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="kodeUnik">
+                  Kode Unik Sales (3 Huruf) {!isAdminOrOwner && <span className="text-[10px] text-muted-foreground">(Hanya Admin)</span>}
+                </Label>
+                <Input
+                  id="kodeUnik"
+                  name="kodeUnik"
+                  value={formData.kodeUnik || ''}
+                  onChange={(e) => {
+                    const value = e.target.value.replace(/[^A-Za-z]/g, '').toUpperCase().slice(0, 3);
+                    handleChange({
+                      target: { name: 'kodeUnik', value }
+                    } as any);
+                  }}
+                  placeholder="ABC"
+                  maxLength={3}
+                  disabled={!isAdminOrOwner}
+                  className="font-mono font-bold uppercase disabled:opacity-75 disabled:bg-muted"
+                />
+              </div>
             </div>
             
             <div className="space-y-2">

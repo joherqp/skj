@@ -12,6 +12,7 @@ export interface User {
   cabangId: string;
   karyawanId?: string;
   avatarUrl?: string;
+  kodeUnik?: string;
   isActive: boolean;
   createdAt: Date;
   startDate?: Date;
