@@ -6,8 +6,8 @@ import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
 import { useDatabase } from '@/contexts/DatabaseContext';
 import { useAuth } from '@/contexts/AuthContext'; // Import useAuth
-import { formatRupiah, formatCompactRupiah, formatKarton, formatNumber } from '@/lib/utils';
-import { ArrowLeft, User, Phone, Mail, MapPin, Store, Calendar, CreditCard, Edit, Power, Trash2, ShoppingCart, TrendingUp, TrendingDown, Minus, BarChart2, MapPin as MapPinIcon } from 'lucide-react';
+import { formatRupiah, formatCompactRupiah, formatKarton, formatNumber, formatWhatsAppNumber } from '@/lib/utils';
+import { ArrowLeft, User, Phone, Mail, MapPin, Store, Calendar, CreditCard, Edit, Power, Trash2, ShoppingCart, TrendingUp, TrendingDown, Minus, BarChart2, MapPin as MapPinIcon, MessageCircle, Share2 } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { toast } from 'sonner';
 import { useState, useEffect } from 'react';
@@ -44,12 +44,53 @@ export default function DetailPelanggan() {
   const idStr = Array.isArray(id) ? id[0] : (id as string);
   const router = useRouter();
   const { user } = useAuth(); // Get user for diagnosis
-  const { pelanggan, penjualan, kategoriPelanggan, users, riwayatPelanggan, updatePelanggan, addRiwayatPelanggan, addKunjungan } = useDatabase(); // Destructure addPersetujuan
+  const { pelanggan, penjualan, kategoriPelanggan, users, riwayatPelanggan, updatePelanggan, addRiwayatPelanggan, addKunjungan, profilPerusahaan } = useDatabase(); // Destructure addPersetujuan
 
   const [showStatusConfirm, setShowStatusConfirm] = useState(false);
   const [historyLimit, setHistoryLimit] = useState(10);
   const [riwayatLimit, setRiwayatLimit] = useState(5);
   const [showDetailedFormat, setShowDetailedFormat] = useState(false);
+
+  const handleShare = async () => {
+    if (!customer) return;
+    const text = `👤 *DATA PELANGGAN*
+━━━━━━━━━━━━━━━━━━
+📌 Nama: ${customer.nama}
+🔑 Kode: ${customer.kode}
+📍 Alamat: ${customer.alamat}
+📞 Telp: ${customer.telepon}
+━━━━━━━━━━━━━━━━━━
+${profilPerusahaan?.nama || ''}`;
+
+    // If customer has phone, send directly to WA
+    if (customer.telepon && customer.telepon !== '-') {
+      const waUrl = `https://wa.me/${formatWhatsAppNumber(customer.telepon)}?text=${encodeURIComponent(text)}`;
+      window.open(waUrl, '_blank');
+      toast.success('Membuka WhatsApp...');
+      return;
+    }
+
+    if (navigator.share) {
+      try {
+        await navigator.share({
+          title: `Data Pelanggan: ${customer.nama}`,
+          text: text,
+          url: window.location.origin + `/pelanggan/${customer.id}`
+        });
+      } catch (err) {
+        if ((err as Error).name !== 'AbortError') {
+          toast.error('Gagal membagikan data');
+        }
+      }
+    } else {
+      try {
+        await navigator.clipboard.writeText(text);
+        toast.success('Data pelanggan disalin ke clipboard');
+      } catch (err) {
+        toast.error('Gagal menyalin data');
+      }
+    }
+  };
 
   // Visit States
   const [showVisitDialog, setShowVisitDialog] = useState(false);
@@ -305,12 +346,42 @@ export default function DetailPelanggan() {
                         )}
                       </div>
                     </div>
-                    <div className="flex items-center gap-3">
-                      <Phone className="w-4 h-4 text-muted-foreground" />
-                      <div>
-                        <p className="font-medium">Telepon</p>
-                        <p className="text-muted-foreground">{customer.telepon}</p>
+                    <div className="flex items-start justify-between">
+                      <div className="flex items-center gap-3">
+                        <Phone className="w-4 h-4 text-muted-foreground" />
+                        <div>
+                          <p className="font-medium">Telepon</p>
+                          <p className="text-muted-foreground">{customer.telepon}</p>
+                        </div>
                       </div>
+                      {customer.telepon && (
+                        <div className="flex gap-2">
+                          <Button
+                            variant="outline"
+                            size="icon"
+                            className="h-8 w-8 text-green-600 border-green-200 hover:bg-green-50"
+                            onClick={() => window.open(`https://wa.me/${formatWhatsAppNumber(customer.telepon)}`, '_blank')}
+                          >
+                            <MessageCircle className="w-4 h-4" />
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="icon"
+                            className="h-8 w-8 text-blue-600 border-blue-200 hover:bg-blue-50"
+                            onClick={() => window.open(`tel:${customer.telepon}`, '_self')}
+                          >
+                            <Phone className="w-4 h-4" />
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="icon"
+                            className="h-8 w-8 text-muted-foreground"
+                            onClick={handleShare}
+                          >
+                            <Share2 className="w-4 h-4" />
+                          </Button>
+                        </div>
+                      )}
                     </div>
                   </div>
 

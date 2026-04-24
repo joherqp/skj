@@ -5,8 +5,8 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useDatabase } from '@/contexts/DatabaseContext';
 import { useAuth } from '@/contexts/AuthContext';
-import { formatRupiah } from '@/lib/utils';
-import { ArrowLeft, TrendingUp, FileSpreadsheet, Search, ArrowUpDown, AlertTriangle } from 'lucide-react';
+import { ArrowLeft, TrendingUp, FileSpreadsheet, Search, ArrowUpDown, AlertTriangle, MessageCircle, Phone, Share2 } from 'lucide-react';
+import { formatRupiah, formatWhatsAppNumber } from '@/lib/utils';
 import { useRouter } from 'next/navigation';
 import * as XLSX from 'xlsx';
 import { toast } from 'sonner';
@@ -172,6 +172,42 @@ export default function LaporanPiutang() {
   });
 
   const totalPiutang = sortedList.reduce((sum, p) => sum + p.totalHutang, 0);
+
+  const handleShare = async (customer: any) => {
+    const shareText = `📄 *INFORMASI PIUTANG PELANGGAN*
+━━━━━━━━━━━━━━━━━━
+👤 Pelanggan: ${customer.nama}
+💰 Total Hutang: ${formatRupiah(customer.totalHutang)}
+⚠️ Jatuh Tempo: ${customer.overdueInvoices} Nota
+
+Mohon segera melakukan penyelesaian pembayaran. Terima kasih.
+━━━━━━━━━━━━━━━━━━
+${profilPerusahaan.nama}`;
+
+    if (customer.telepon && customer.telepon !== '-') {
+      const waUrl = `https://wa.me/${formatWhatsAppNumber(customer.telepon)}?text=${encodeURIComponent(shareText)}`;
+      window.open(waUrl, '_blank');
+      return;
+    }
+
+    if (navigator.share) {
+      try {
+        await navigator.share({
+          title: `Piutang ${customer.nama}`,
+          text: shareText,
+        });
+      } catch (err) {
+        if ((err as Error).name !== 'AbortError') console.error('Share failed:', err);
+      }
+    } else {
+      try {
+        await navigator.clipboard.writeText(shareText);
+        toast.success('Teks disalin ke clipboard');
+      } catch (err) {
+        toast.error('Gagal menyalin teks');
+      }
+    }
+  };
 
   const handleExportExcel = () => {
     if (sortedList.length === 0) {
@@ -400,14 +436,44 @@ export default function LaporanPiutang() {
                                                 )}
                                             </TableCell>
                                             <TableCell>
-                                                <Button 
-                                                    size="sm" 
-                                                    variant="default" 
-                                                    className="h-7 text-xs bg-green-600 hover:bg-green-700 text-white"
-                                                    onClick={() => handlePayClick(item.id, item.nama)}
-                                                >
-                                                    Bayar
-                                                </Button>
+                                                <div className="flex items-center gap-1">
+                                                    <Button 
+                                                        size="sm" 
+                                                        variant="default" 
+                                                        className="h-7 text-xs bg-green-600 hover:bg-green-700 text-white"
+                                                        onClick={() => handlePayClick(item.id, item.nama)}
+                                                    >
+                                                        Bayar
+                                                    </Button>
+                                                    {item.telepon && item.telepon !== '-' && (
+                                                        <>
+                                                            <Button
+                                                                variant="outline"
+                                                                size="icon"
+                                                                className="h-7 w-7 rounded-full border-green-200 text-green-600 hover:bg-green-50"
+                                                                onClick={() => window.open(`https://wa.me/${formatWhatsAppNumber(item.telepon)}`, '_blank')}
+                                                            >
+                                                                <MessageCircle className="w-3.5 h-3.5" />
+                                                            </Button>
+                                                            <Button
+                                                                variant="outline"
+                                                                size="icon"
+                                                                className="h-7 w-7 rounded-full border-blue-200 text-blue-600 hover:bg-blue-50"
+                                                                onClick={() => window.open(`tel:${item.telepon}`, '_self')}
+                                                            >
+                                                                <Phone className="w-3.5 h-3.5" />
+                                                            </Button>
+                                                            <Button
+                                                                variant="outline"
+                                                                size="icon"
+                                                                className="h-7 w-7 rounded-full border-muted-foreground/20 text-muted-foreground hover:bg-muted/50"
+                                                                onClick={() => handleShare(item)}
+                                                            >
+                                                                <Share2 className="w-3.5 h-3.5" />
+                                                            </Button>
+                                                        </>
+                                                    )}
+                                                </div>
                                             </TableCell>
                                         </TableRow>
                                     );

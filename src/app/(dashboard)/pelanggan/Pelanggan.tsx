@@ -5,9 +5,10 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { useDatabase } from '@/contexts/DatabaseContext';
-import { Search, Plus, Users, MapPin, Phone, Filter, ArrowLeftRight, UserCheck, Store, Building, ChevronDown } from 'lucide-react';
-import { formatRupiah, formatCompactRupiah } from '@/lib/utils';
+import { Search, Plus, Users, MapPin, Phone, Filter, ArrowLeftRight, UserCheck, Store, Building, ChevronDown, MessageCircle, Share2 } from 'lucide-react';
+import { formatRupiah, formatCompactRupiah, formatWhatsAppNumber } from '@/lib/utils';
 import { useRouter } from 'next/navigation';
+import { toast } from 'sonner';
 
 import { useAuth } from '@/contexts/AuthContext';
 import {
@@ -45,6 +46,46 @@ export default function Pelanggan() {
   const [showVisitsDialog, setShowVisitsDialog] = useState(false);
 
   const router = useRouter();
+
+  const handleShare = async (p: any) => {
+    const text = `👤 *DATA PELANGGAN*
+━━━━━━━━━━━━━━━━━━
+📌 Nama: ${p.nama}
+🔑 Kode: ${p.kode}
+📍 Alamat: ${p.alamat}
+📞 Telp: ${p.telepon}
+━━━━━━━━━━━━━━━━━━
+${profilPerusahaan?.nama || ''}`;
+
+    // If customer has phone, send directly to WA
+    if (p.telepon && p.telepon !== '-') {
+      const waUrl = `https://wa.me/${formatWhatsAppNumber(p.telepon)}?text=${encodeURIComponent(text)}`;
+      window.open(waUrl, '_blank');
+      toast.success('Membuka WhatsApp...');
+      return;
+    }
+
+    if (navigator.share) {
+      try {
+        await navigator.share({
+          title: `Data Pelanggan: ${p.nama}`,
+          text: text,
+          url: window.location.origin + `/pelanggan/${p.id}`
+        });
+      } catch (err) {
+        if ((err as Error).name !== 'AbortError') {
+          toast.error('Gagal membagikan data');
+        }
+      }
+    } else {
+      try {
+        await navigator.clipboard.writeText(text);
+        toast.success('Data pelanggan disalin ke clipboard');
+      } catch (err) {
+        toast.error('Gagal menyalin data');
+      }
+    }
+  };
 
   const activeFiltersCount = (filterKategori.length > 0 ? 1 : 0) + (filterStatus !== 'all' ? 1 : 0) + (selectedCabangIds.length > 0 ? 1 : 0) + (selectedUserIds.length > 0 ? 1 : 0);
 
@@ -488,10 +529,49 @@ export default function Pelanggan() {
                               <MapPin className="w-3 h-3" />
                               <span className="truncate">{item.alamat}</span>
                             </p>
-                            <p className="text-xs text-muted-foreground flex items-center gap-1.5">
-                              <Phone className="w-3 h-3" />
-                              {item.telepon}
-                            </p>
+                            <div className="flex items-center justify-between group/phone">
+                              <p className="text-xs text-muted-foreground flex items-center gap-1.5">
+                                <Phone className="w-3 h-3" />
+                                {item.telepon}
+                              </p>
+                              {item.telepon && (
+                                <div className="flex gap-1">
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    className="h-7 w-7 text-green-600 hover:text-green-700 hover:bg-green-50"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      window.open(`https://wa.me/${formatWhatsAppNumber(item.telepon)}`, '_blank');
+                                    }}
+                                  >
+                                    <MessageCircle className="w-3.5 h-3.5" />
+                                  </Button>
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    className="h-7 w-7 text-blue-600 hover:text-blue-700 hover:bg-blue-50"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      window.open(`tel:${item.telepon}`, '_self');
+                                    }}
+                                  >
+                                    <Phone className="w-3.5 h-3.5" />
+                                  </Button>
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    className="h-7 w-7 text-muted-foreground hover:text-foreground hover:bg-muted"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleShare(item);
+                                    }}
+                                  >
+                                    <Share2 className="w-3.5 h-3.5" />
+                                  </Button>
+                                </div>
+                              )}
+                            </div>
                           </div>
                           <div className="flex items-center justify-between mt-2">
                             <span className="text-xs text-muted-foreground">

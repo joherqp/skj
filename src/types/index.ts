@@ -647,6 +647,7 @@ export interface DatabaseContextType {
   pettyCashBalance: number;
   isLoading: boolean;
   isRefreshing: boolean;
+  isInitialized: boolean;
   setIsLoading: (loading: boolean) => void;
   viewMode: 'all' | 'me';
   setViewMode: (mode: 'all' | 'me') => void;

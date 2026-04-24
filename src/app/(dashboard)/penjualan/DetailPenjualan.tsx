@@ -7,9 +7,9 @@ import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { PembayaranPenjualan, Penjualan, PenjualanItem } from '@/types';
-import { formatRupiah, formatTanggal, formatWaktu, cn } from '@/lib/utils';
+import { formatRupiah, formatTanggal, formatWaktu, cn, formatWhatsAppNumber } from '@/lib/utils';
 import { supabase } from '@/lib/supabase';
-import { Share2, Printer, ArrowLeft, Calendar, Loader2, DollarSign, History, CreditCard, MapPin, User, ShoppingBag, Receipt } from 'lucide-react';
+import { Share2, Printer, ArrowLeft, Calendar, Loader2, DollarSign, History, CreditCard, MapPin, User, ShoppingBag, Receipt, MessageCircle, Phone } from 'lucide-react';
 import { toast } from 'sonner';
 import { useDatabase } from '@/contexts/DatabaseContext';
 import { useAuth } from '@/contexts/AuthContext';
@@ -255,10 +255,18 @@ ${items}
 
 ━━━━━━━━━━━━━━━━━━
 💰 *Total: ${formatRupiah(trx.total)}*
-💵 Bayar: ${formatRupiah(trx.bayar || 0)}
+💵 Bayar: ${formatRupiah(paymentHistory.reduce((sum, p) => sum + Number(p.jumlah), 0))}
 📊 Status: ${shareStatus}
 ━━━━━━━━━━━━━━━━━━
 ${profilPerusahaan.nama}`;
+
+        // If customer has phone, send directly to WA
+        if (customerInfo?.telepon && customerInfo.telepon !== '-') {
+            const waUrl = `https://wa.me/${formatWhatsAppNumber(customerInfo.telepon)}?text=${encodeURIComponent(shareText)}`;
+            window.open(waUrl, '_blank');
+            toast.success('Membuka WhatsApp...');
+            return;
+        }
 
         if (navigator.share) {
             try {
@@ -575,8 +583,49 @@ ${profilPerusahaan.nama}`;
                                             <User className="w-5 h-5 text-primary" />
                                         </div>
                                         <div className="flex-1">
-                                            <p className="text-sm font-bold">{customer?.nama || 'UMUM'}</p>
-                                            <p className="text-xs text-muted-foreground">{customer?.telepon || '-'}</p>
+                                            <div className="flex items-center justify-between">
+                                                <div>
+                                                    <p className="text-sm font-bold">{customer?.nama || 'UMUM'}</p>
+                                                    <p className="text-xs text-muted-foreground">{customer?.telepon || '-'}</p>
+                                                </div>
+                                                {customer?.telepon && customer.telepon !== '-' && (
+                                                    <div className="flex gap-1">
+                                                        <Button
+                                                            variant="outline"
+                                                            size="icon"
+                                                            className="h-8 w-8 rounded-full border-green-200 text-green-600 hover:bg-green-50"
+                                                            onClick={(e) => {
+                                                                e.stopPropagation();
+                                                                window.open(`https://wa.me/${formatWhatsAppNumber(customer.telepon)}`, '_blank');
+                                                            }}
+                                                        >
+                                                            <MessageCircle className="w-4 h-4 fill-current" />
+                                                        </Button>
+                                                        <Button
+                                                            variant="outline"
+                                                            size="icon"
+                                                            className="h-8 w-8 rounded-full border-blue-200 text-blue-600 hover:bg-blue-50"
+                                                            onClick={(e) => {
+                                                                e.stopPropagation();
+                                                                window.open(`tel:${customer.telepon}`, '_self');
+                                                            }}
+                                                        >
+                                                            <Phone className="w-4 h-4 fill-current" />
+                                                        </Button>
+                                                        <Button
+                                                            variant="outline"
+                                                            size="icon"
+                                                            className="h-8 w-8 rounded-full border-muted-foreground/20 text-muted-foreground hover:bg-muted/50"
+                                                            onClick={(e) => {
+                                                                e.stopPropagation();
+                                                                handleShare();
+                                                            }}
+                                                        >
+                                                            <Share2 className="w-4 h-4" />
+                                                        </Button>
+                                                    </div>
+                                                )}
+                                            </div>
                                         </div>
                                     </div>
                                     <div className="flex items-start gap-4">

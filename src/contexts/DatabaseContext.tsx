@@ -48,7 +48,7 @@ export function useDatabase() {
 }
 
 export function DatabaseProvider({ children }: { children: ReactNode }) {
-  const { user: currentUser } = useAuth();
+  const { user: currentUser, isLoading: isAuthLoading } = useAuth();
   const demoWarningShown = useRef(false);
   const fetchWarningShown = useRef<Set<string>>(new Set());
 
@@ -146,6 +146,7 @@ export function DatabaseProvider({ children }: { children: ReactNode }) {
   const [pettyCashBalance, setPettyCashBalance] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [isInitialized, setIsInitialized] = useState(false);
   const [viewMode, setViewMode] = useState<'all' | 'me'>('all');
 
   // Feature: Offline Sync
@@ -356,7 +357,9 @@ export function DatabaseProvider({ children }: { children: ReactNode }) {
   // Load all data
   const loadAllData = useCallback(async (isManualRefresh = false) => {
     if (!currentUser) {
-      setIsLoading(false);
+      if (!isAuthLoading) {
+        setIsLoading(false);
+      }
       return;
     }
 
@@ -481,6 +484,7 @@ export function DatabaseProvider({ children }: { children: ReactNode }) {
       }
       setRestock(getResult<Restock>(24));
 
+      setIsInitialized(true);
     } catch (error) {
       console.error('Error loading data:', error);
     } finally {
@@ -710,6 +714,7 @@ export function DatabaseProvider({ children }: { children: ReactNode }) {
     pettyCashBalance,
     isLoading,
     isRefreshing,
+    isInitialized,
     setIsLoading,
     viewMode,
     setViewMode,

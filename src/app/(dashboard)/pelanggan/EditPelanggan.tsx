@@ -23,6 +23,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { LocationPicker, extractAddressFromCoordinates } from '@/components/map/components/LocationPicker';
+import { formatWhatsAppNumber } from '@/lib/utils';
 
 export default function EditPelanggan() {
   const router = useRouter();
@@ -132,7 +133,8 @@ export default function EditPelanggan() {
 
     // Check duplicates (exclude current user)
     if (formData.telepon) {
-      const duplicatePhone = pelanggan.find(p => p.telepon === formData.telepon && p.id !== idStr);
+      const normalizedNew = formatWhatsAppNumber(formData.telepon);
+      const duplicatePhone = pelanggan.find(p => p.id !== idStr && p.telepon && formatWhatsAppNumber(p.telepon) === normalizedNew);
       if (duplicatePhone) {
         toast.error(`Nomor telepon sudah digunakan oleh pelanggan: ${duplicatePhone.nama}`);
         return;
@@ -140,7 +142,8 @@ export default function EditPelanggan() {
     }
 
     if (formData.noRekening) {
-      const duplicateRek = pelanggan.find(p => p.noRekening === formData.noRekening && p.id !== idStr);
+      const cleanedNewRek = formData.noRekening.replace(/\D/g, '');
+      const duplicateRek = pelanggan.find(p => p.id !== idStr && p.noRekening && p.noRekening.replace(/\D/g, '') === cleanedNewRek);
       if (duplicateRek) {
         toast.error(`Nomor rekening sudah digunakan oleh pelanggan: ${duplicateRek.nama}`);
         return;
@@ -261,7 +264,7 @@ export default function EditPelanggan() {
                   <Label>Nomor Telepon / WA</Label>
                   <Input
                     value={formData.telepon}
-                    onChange={(e) => setFormData(prev => ({ ...prev, telepon: e.target.value }))}
+                    onChange={(e) => setFormData(prev => ({ ...prev, telepon: e.target.value.replace(/\D/g, '') }))}
                     placeholder="08..."
                     type="tel"
                     inputMode="numeric"
@@ -283,7 +286,7 @@ export default function EditPelanggan() {
                   <Label>Nomor Rekening</Label>
                   <Input
                     value={formData.noRekening}
-                    onChange={(e) => setFormData(prev => ({ ...prev, noRekening: e.target.value }))}
+                    onChange={(e) => setFormData(prev => ({ ...prev, noRekening: e.target.value.replace(/\D/g, '') }))}
                     placeholder="Nomor rekening..."
                     inputMode="numeric"
                   />

@@ -15,9 +15,9 @@ import { Switch } from "@/components/ui/switch";
 import { 
   Search, Plus, ShoppingCart, Filter, Receipt, BarChart, Trophy, 
   TrendingUp, Users, ChevronLeft, ChevronRight, User, Coins,
-  Building, ChevronDown 
+  Building, ChevronDown, MessageCircle, Phone, Share2 
 } from 'lucide-react';
-import { formatRupiah, formatTanggal, cn, formatNumber } from '@/lib/utils';
+import { formatRupiah, formatTanggal, cn, formatNumber, formatWhatsAppNumber } from '@/lib/utils';
 import {
   Dialog,
   DialogContent,
@@ -48,7 +48,7 @@ export default function Penjualan() {
   const { user } = useAuth();
   const {
     penjualan, pelanggan, barang, satuan, users, karyawan,
-    viewMode, setViewMode, cabang: listCabang
+    viewMode, setViewMode, cabang: listCabang, profilPerusahaan
   } = useDatabase();
   const [search, setSearch] = useState('');
   const router = useRouter();
@@ -56,6 +56,65 @@ export default function Penjualan() {
   const [selectedCabangIds, setSelectedCabangIds] = useState<string[]>([]);
   const [selectedUserIds, setSelectedUserIds] = useState<string[]>([]);
 
+  const handleShare = async (trx: PenjualanType) => {
+    const customerInfo = pelanggan.find(p => p.id === trx.pelangganId);
+    const items = trx.items.map(item => {
+      const product = barang.find(b => b.id === item.barangId);
+      const unit = satuan.find(s => s.id === item.satuanId);
+      return `• ${product?.nama || 'Item'} (${item.jumlah} ${unit?.simbol || 'pcs'}) - ${formatRupiah(item.subtotal)}`;
+    }).join('\n');
+
+    const statusText = trx.status === 'lunas' ? '✅ LUNAS' :
+      trx.status === 'batal' ? '❌ BATAL' :
+        trx.status === 'draft' ? '⏳ DRAFT' :
+          trx.status === 'pending' ? '⏳ PENDING' : (trx.status as string).toUpperCase();
+
+    const shareStatus = `${statusText}${trx.metodePembayaran === 'tempo' ? (trx.isLunas ? ' (LUNAS)' : ' (BELUM LUNAS)') : ''}`;
+
+    const text = `📄 *NOTA PENJUALAN*
+━━━━━━━━━━━━━━━━━━
+📌 No: ${trx.nomorNota}
+📅 Tanggal: ${formatTanggal(trx.tanggal)}
+👤 Pelanggan: ${customerInfo?.nama || 'Umum'}
+
+📦 *Rincian Barang:*
+${items}
+
+━━━━━━━━━━━━━━━━━━
+💰 *Total: ${formatRupiah(trx.total)}*
+📊 Status: ${shareStatus}
+━━━━━━━━━━━━━━━━━━
+${user?.nama || 'Sales'}`;
+
+    // If customer has phone, send directly to WA
+    if (customerInfo?.telepon && customerInfo.telepon !== '-') {
+      const waUrl = `https://wa.me/${formatWhatsAppNumber(customerInfo.telepon)}?text=${encodeURIComponent(text)}`;
+      window.open(waUrl, '_blank');
+      toast.success('Membuka WhatsApp...');
+      return;
+    }
+
+    if (navigator.share) {
+      try {
+        await navigator.share({
+          title: `Nota ${trx.nomorNota}`,
+          text: text,
+        });
+        toast.success('Berhasil dibagikan');
+      } catch (err) {
+        if ((err as Error).name !== 'AbortError') {
+          console.error('Share failed:', err);
+        }
+      }
+    } else {
+      try {
+        await navigator.clipboard.writeText(text);
+        toast.success('Nota disalin ke clipboard');
+      } catch (err) {
+        toast.error('Gagal menyalin nota');
+      }
+    }
+  };
 
   // Filters
   const [filterStartDate, setFilterStartDate] = useState('');
@@ -577,6 +636,43 @@ export default function Penjualan() {
                           <p className="text-xs text-muted-foreground mt-1">
                             {formatTanggal(item.tanggal)}
                           </p>
+                          {customer?.telepon && customer.telepon !== '-' && (
+                            <div className="flex gap-1 mt-2 justify-end">
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-7 w-7 text-green-600 hover:text-green-700 hover:bg-green-50"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  window.open(`https://wa.me/${formatWhatsAppNumber(customer.telepon)}`, '_blank');
+                                }}
+                              >
+                                <MessageCircle className="w-3.5 h-3.5" />
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-7 w-7 text-blue-600 hover:text-blue-700 hover:bg-blue-50"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  window.open(`tel:${customer.telepon}`, '_self');
+                                }}
+                              >
+                                <Phone className="w-3.5 h-3.5" />
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-7 w-7 text-muted-foreground hover:text-foreground hover:bg-muted"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleShare(item);
+                                }}
+                              >
+                                <Share2 className="w-3.5 h-3.5" />
+                              </Button>
+                            </div>
+                          )}
                         </div>
                       </div>
                     </CardContent>

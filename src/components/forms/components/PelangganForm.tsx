@@ -10,6 +10,7 @@ import { useDatabase } from '@/contexts/DatabaseContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { getCurrentLocation, calculateDistance } from '@/lib/gps';
 import { Pelanggan } from '@/types';
+import { formatWhatsAppNumber } from '@/lib/utils';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -175,7 +176,8 @@ export function PelangganForm({ onSuccess, onCancel, className, isDialog = false
 
     // Check duplicates
     if (formData.telepon) {
-      const duplicatePhone = pelanggan.find(p => p.telepon === formData.telepon);
+      const normalizedNew = formatWhatsAppNumber(formData.telepon);
+      const duplicatePhone = pelanggan.find(p => p.telepon && formatWhatsAppNumber(p.telepon) === normalizedNew);
       if (duplicatePhone) {
         toast.error(`Nomor telepon sudah digunakan oleh pelanggan: ${duplicatePhone.nama}`);
         return;
@@ -183,7 +185,8 @@ export function PelangganForm({ onSuccess, onCancel, className, isDialog = false
     }
 
     if (formData.noRekening) {
-      const duplicateRek = pelanggan.find(p => p.noRekening === formData.noRekening);
+      const cleanedNewRek = formData.noRekening.replace(/\D/g, '');
+      const duplicateRek = pelanggan.find(p => p.noRekening && p.noRekening.replace(/\D/g, '') === cleanedNewRek);
       if (duplicateRek) {
         toast.error(`Nomor rekening sudah digunakan oleh pelanggan: ${duplicateRek.nama}`);
         return;
@@ -393,7 +396,7 @@ export function PelangganForm({ onSuccess, onCancel, className, isDialog = false
                   <Label>Nomor Telepon / WA</Label>
                   <Input
                     value={formData.telepon}
-                    onChange={(e) => setFormData(prev => ({ ...prev, telepon: e.target.value }))}
+                    onChange={(e) => setFormData(prev => ({ ...prev, telepon: e.target.value.replace(/\D/g, '') }))}
                     placeholder="08..."
                     type="tel"
                     inputMode="numeric"
@@ -417,7 +420,7 @@ export function PelangganForm({ onSuccess, onCancel, className, isDialog = false
                 <Label>Nomor Rekening</Label>
                 <Input
                   value={formData.noRekening}
-                  onChange={(e) => setFormData(prev => ({ ...prev, noRekening: e.target.value }))}
+                  onChange={(e) => setFormData(prev => ({ ...prev, noRekening: e.target.value.replace(/\D/g, '') }))}
                   placeholder="Nomor rekening..."
                   type="text"
                   inputMode="numeric"

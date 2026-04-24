@@ -30,15 +30,27 @@ export function Header({
   isSidebarCollapsed = false,
   onSidebarToggle
 }: HeaderProps) {
-  const { user, logout } = useAuth();
-  const { notifikasi, markNotifikasiRead, markAllNotifikasiRead, refresh, isRefreshing, profilPerusahaan, dbMode } = useDatabase();
+  const { user, logout, isLoading: isAuthLoading } = useAuth();
+  const { 
+    notifikasi, 
+    markNotifikasiRead, 
+    markAllNotifikasiRead, 
+    refresh, 
+    isRefreshing, 
+    profilPerusahaan, 
+    dbMode,
+    isLoading: isDbLoading,
+    isInitialized
+  } = useDatabase();
   const router = useRouter();
   const pathname = usePathname();
 
-  // Connection status is now handled by Global ConnectionIndicator but we might want a small dot here too if preferred,
-  // or just rely on the global banner/indicator. 
-  // For this design, let's keep the small dot as a subtle indicator.
+  // Connection status
   const [isOnline, setIsOnline] = useState(true);
+
+  // Application readiness
+  const isAppReady = !isAuthLoading && !isDbLoading && isInitialized && !!user;
+  const isAppFullyReady = isAppReady && !isRefreshing && isOnline;
 
   useEffect(() => {
     setIsOnline(navigator.onLine);
@@ -129,10 +141,11 @@ export function Header({
         <div
           onClick={() => refresh()}
           className={cn(
-            "w-9 h-9 logo-round transition-all",
+            "w-9 h-9 logo-round transition-all cursor-pointer",
             isRefreshing && "animate-spin"
           )}
           style={isRefreshing ? { animationDuration: '3s' } : undefined}
+          title="Klik untuk memuat ulang data"
         >
           <span className="logo-text text-sm">SKJ</span>
         </div>
@@ -231,19 +244,59 @@ export function Header({
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <div className="flex items-center gap-2 cursor-pointer hover:bg-gray-50 p-1.5 rounded-full transition-colors border border-transparent hover:border-gray-200 ml-1">
-              <Avatar className="w-8 h-8 bg-teal-600 border border-teal-700/20">
-                <AvatarFallback className="bg-teal-600 text-white text-xs font-semibold">
-                  {user?.nama?.charAt(0).toUpperCase() || 'A'}
-                </AvatarFallback>
-              </Avatar>
+              <div className="relative">
+                <Avatar className="w-8 h-8 bg-teal-600 border border-teal-700/20">
+                  <AvatarFallback className="bg-teal-600 text-white text-xs font-semibold">
+                    {user?.nama?.charAt(0).toUpperCase() || 'U'}
+                  </AvatarFallback>
+                </Avatar>
+                {/* Red Indicator if not fully ready (Offline, Loading, or Refreshing) */}
+                {!isAppFullyReady && (
+                  <span className="absolute -top-1 -right-1 flex h-4 w-4">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
+                    <span className="relative inline-flex rounded-full h-4 w-4 bg-red-500 border-2 border-white"></span>
+                  </span>
+                )}
+                {/* Active/Ready Indicator */}
+                {isAppFullyReady && (
+                  <span className="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-green-500 border-2 border-white rounded-full shadow-sm" />
+                )}
+              </div>
               <div className="text-left hidden md:block">
-                <p className="text-sm font-medium leading-none text-gray-700">{user?.nama || 'User'}</p>
-                <p className="text-[10px] text-muted-foreground font-medium uppercase mt-0.5">{user?.roles?.[0] || 'Staff'}</p>
+                <p className="text-sm font-medium leading-none text-gray-700">
+                  {isAuthLoading ? 'Memuat...' : (user?.nama || 'User')}
+                </p>
+                <p className="text-[10px] text-muted-foreground font-medium uppercase mt-0.5">
+                  {isAuthLoading ? 'Staff' : (user?.roles?.[0] || 'Staff')}
+                </p>
               </div>
             </div>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-56">
-            <DropdownMenuLabel>Akun Saya</DropdownMenuLabel>
+            <DropdownMenuLabel>
+              <div className="flex flex-col">
+                <span>Akun Saya</span>
+                {!isAppReady && (
+                  <div className="flex items-center justify-between mt-1">
+                    <span className="text-[10px] font-normal text-red-500 flex items-center gap-1">
+                      <span className="w-1.5 h-1.5 bg-red-500 rounded-full animate-pulse" />
+                      Sesi belum siap
+                    </span>
+                    <Button 
+                      variant="ghost" 
+                      size="sm" 
+                      className="h-6 px-2 text-[10px] text-blue-600 hover:text-blue-700"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        refresh();
+                      }}
+                    >
+                      Coba Lagi
+                    </Button>
+                  </div>
+                )}
+              </div>
+            </DropdownMenuLabel>
             <DropdownMenuSeparator />
             <DropdownMenuItem onClick={() => router.push('/profil')} className="cursor-pointer">
               <User className="mr-2 h-4 w-4" />
@@ -256,10 +309,21 @@ export function Header({
           </DropdownMenuContent>
         </DropdownMenu>
 
-        {/* Connection Indicator Dot */}
+        {/* Status Indicator Dot */}
         <div
-          className={`w-2.5 h-2.5 rounded-full ${isOnline ? 'bg-green-500' : 'bg-red-500'} ring-2 ring-white shadow-sm flex-shrink-0 ml-2`}
-          title={isOnline ? "Terhubung" : "Terputus"}
+          className={cn(
+            "w-2.5 h-2.5 rounded-full ring-2 ring-white shadow-sm flex-shrink-0 ml-2 transition-colors duration-300",
+            isAppFullyReady ? 'bg-green-500' : 'bg-red-500'
+          )}
+          title={
+            isAppFullyReady 
+              ? "Aplikasi Siap & Terhubung" 
+              : !isOnline 
+                ? "Terputus (Offline)" 
+                : isRefreshing 
+                  ? "Sedang Memuat Ulang Data..." 
+                  : "Sesi Belum Siap"
+          }
         />
       </div>
     </div>

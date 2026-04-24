@@ -69,8 +69,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     createdAt: new Date(data.created_at),
   });
 
-  // Load user profile from database
-  const loadUserProfile = useCallback(async (authUser: SupabaseUser) => {
+  // Load user profile from database with retry logic
+  const loadUserProfile = useCallback(async (authUser: SupabaseUser, retryCount = 0): Promise<User | null> => {
     try {
       const { data: byId, error: byIdError } = await supabase
         .from('users')
@@ -79,7 +79,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         .maybeSingle();
 
       if (byIdError) {
-        console.error('Error finding profile by id:', byIdError);
+        console.error(`Error finding profile by id (attempt ${retryCount + 1}):`, byIdError);
+        if (retryCount < 2) {
+          await new Promise(resolve => setTimeout(resolve, 1000 * (retryCount + 1)));
+          return loadUserProfile(authUser, retryCount + 1);
+        }
         return null;
       }
 
@@ -137,6 +141,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return null;
     } catch (error) {
       console.error('Error loading user profile:', error);
+      if (retryCount < 2) {
+        await new Promise(resolve => setTimeout(resolve, 1000 * (retryCount + 1)));
+        return loadUserProfile(authUser, retryCount + 1);
+      }
       return null;
     }
   }, []);
