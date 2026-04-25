@@ -231,14 +231,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } = supabase.auth.onAuthStateChange(async (event, session) => {
       console.log(`Auth State Change Event: ${event}`);
       
-      if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
+      if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED' || event === 'INITIAL_SESSION') {
         await applySessionUser(session?.user ?? null);
       } else if (event === 'SIGNED_OUT') {
         setUser(null);
         setSupabaseUser(null);
       }
       
-      setIsLoading(false);
+      // Only set loading false if we're not already in the middle of initialization
+      // to avoid race conditions with the initialize() function
+      if (!isInitializingRef.current) {
+        setIsLoading(false);
+      }
     });
 
     const handleFocus = () => {

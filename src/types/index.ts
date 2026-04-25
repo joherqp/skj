@@ -777,4 +777,7 @@ export interface DatabaseContextType {
   // Database Mode
   dbMode: 'public' | 'demo';
   setDbMode: (mode: 'public' | 'demo') => void;
+
+  // Merge Pelanggan
+  mergePelanggan: (targetId: string, sourceId: string) => Promise<void>;
 }

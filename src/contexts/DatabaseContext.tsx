@@ -1155,6 +1155,68 @@ export function DatabaseProvider({ children }: { children: ReactNode }) {
     updateRestock: (id, item) => updateItem('restock', id, item, setRestock),
     deleteRestock: (id) => deleteItem('restock', id, setRestock),
 
+    // Merge Pelanggan
+    mergePelanggan: async (targetId: string, sourceId: string) => {
+      try {
+        setIsLoading(true);
+        
+        // 1. Update Penjualan
+        const { error: err1 } = await supabase
+          .schema(dbMode)
+          .from('penjualan')
+          .update({ pelanggan_id: targetId })
+          .eq('pelanggan_id', sourceId);
+        if (err1) throw err1;
+
+        // 2. Update Kunjungan
+        const { error: err2 } = await supabase
+          .schema(dbMode)
+          .from('kunjungan')
+          .update({ pelanggan_id: targetId })
+          .eq('pelanggan_id', sourceId);
+        if (err2) throw err2;
+
+        // 3. Update Riwayat Pelanggan
+        const { error: err3 } = await supabase
+          .schema(dbMode)
+          .from('riwayat_pelanggan')
+          .update({ pelanggan_id: targetId })
+          .eq('pelanggan_id', sourceId);
+        if (err3) throw err3;
+
+        // 4. Update Target Pelanggan (Merge debt/credits)
+        const target = pelanggan.find(p => p.id === targetId);
+        const source = pelanggan.find(p => p.id === sourceId);
+        
+        if (target && source) {
+           const newSisaKredit = (target.sisaKredit || 0) + (source.sisaKredit || 0);
+           const { error: err4 } = await supabase
+             .schema(dbMode)
+             .from('pelanggan')
+             .update({ sisa_kredit: newSisaKredit })
+             .eq('id', targetId);
+           if (err4) throw err4;
+        }
+
+        // 5. Delete Source Pelanggan
+        const { error: err5 } = await supabase
+          .schema(dbMode)
+          .from('pelanggan')
+          .delete() 
+          .eq('id', sourceId);
+        if (err5) throw err5;
+
+        toast.success('Pelanggan berhasil disatukan');
+        await loadAllData(true);
+      } catch (error) {
+        console.error('Error merging pelanggan:', error);
+        toast.error('Gagal menyatukan data pelanggan');
+        throw error;
+      } finally {
+        setIsLoading(false);
+      }
+    },
+
     // Database Mode
     dbMode,
     setDbMode,

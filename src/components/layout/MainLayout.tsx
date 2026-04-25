@@ -35,7 +35,9 @@ export const MainLayout = ({ children, title, className }: MainLayoutProps) => {
 
   useEffect(() => {
     if (!isAuthLoading && !isAuthenticated && pathname !== '/login') {
-      router.replace('/login');
+      const searchParams = new URLSearchParams();
+      searchParams.set('redirectTo', pathname);
+      router.replace(`/login?${searchParams.toString()}`);
     }
   }, [isAuthenticated, isAuthLoading, pathname, router]);
 

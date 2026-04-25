@@ -18,6 +18,8 @@ export default function LoginPage() {
     const [password, setPassword] = useState('');
     const { loginWithGoogle, login, isAuthenticated, isLoading: isAuthLoading } = useAuth();
     const router = useRouter();
+    const searchParams = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : null;
+    const redirectTo = searchParams?.get('redirectTo') || '/beranda';
 
     useEffect(() => {
         const timer = setTimeout(() => {
@@ -28,7 +30,7 @@ export default function LoginPage() {
 
     useEffect(() => {
         if (!isAuthLoading && isAuthenticated) {
-            router.replace('/beranda');
+            router.replace(redirectTo);
         }
     }, [isAuthenticated, isAuthLoading, router]);
 
