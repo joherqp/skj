@@ -11,13 +11,15 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { formatRupiah, formatTanggal } from '@/lib/utils';
 import { startOfWeek, endOfWeek, format, addWeeks, subWeeks, isSameDay, getISOWeek, eachDayOfInterval } from 'date-fns';
 import { id } from 'date-fns/locale';
-import { FileText, Download, Wallet, Clock, CheckCircle, XCircle, Search, ChevronLeft, ChevronRight, Calendar as CalendarIcon, ArrowLeft } from 'lucide-react';
+import { FileText, Download, Wallet, Clock, CheckCircle, XCircle, Search, ChevronLeft, ChevronRight, Calendar as CalendarIcon, ArrowLeft, Image as ImageIcon } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { toast } from 'sonner';
 import { useAuth } from '@/contexts/AuthContext';
 import * as XLSX from 'xlsx';
+import { ScopeFilters } from '@/components/shared/ScopeFilters';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 
 export default function LaporanReimburse() {
   const router = useRouter();
@@ -28,6 +30,9 @@ export default function LaporanReimburse() {
   const [dateFilter, setDateFilter] = useState<string>('this_month');
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [displayLimit, setDisplayLimit] = useState(20);
+  const [selectedCabangIds, setSelectedCabangIds] = useState<string[]>([]);
+  const [selectedUserIds, setSelectedUserIds] = useState<string[]>([]);
+  const [previewImage, setPreviewImage] = useState<string | null>(null);
 
   // Week Logic
   const startDate = startOfWeek(selectedDate, { weekStartsOn: 0 }); // Sunday start
@@ -144,7 +149,11 @@ export default function LaporanReimburse() {
         matchDate = itemDate.getMonth() === lastMonth.getMonth() && itemDate.getFullYear() === lastMonth.getFullYear();
     }
 
-    return matchSearch && matchStatus && matchDate;
+    const itemUser = users.find(u => u.id === item.userId);
+    const matchCabang = selectedCabangIds.length === 0 || (itemUser?.cabangId && selectedCabangIds.includes(itemUser.cabangId));
+    const matchUser = selectedUserIds.length === 0 || selectedUserIds.includes(item.userId);
+
+    return matchSearch && matchStatus && matchDate && matchCabang && matchUser;
   }).sort((a, b) => new Date(b.tanggal).getTime() - new Date(a.tanggal).getTime());
 
 
@@ -307,6 +316,19 @@ export default function LaporanReimburse() {
             </Card>
         </div>
 
+        {/* Scope Filters */}
+        <Card>
+            <CardContent className="p-4">
+                <ScopeFilters
+                    selectedCabangIds={selectedCabangIds}
+                    setSelectedCabangIds={setSelectedCabangIds}
+                    selectedUserIds={selectedUserIds}
+                    setSelectedUserIds={setSelectedUserIds}
+                    className="!space-y-0"
+                />
+            </CardContent>
+        </Card>
+
         {/* Status Filter Tabs */}
         <div className="flex flex-col sm:flex-row justify-between items-center bg-white p-3 rounded-xl shadow-sm border gap-4">
             <Tabs value={statusFilter} onValueChange={setStatusFilter} className="w-full sm:w-auto">
@@ -451,6 +473,7 @@ export default function LaporanReimburse() {
                         <TableHead>Keterangan</TableHead>
                         <TableHead>Jumlah</TableHead>
                         <TableHead>Status</TableHead>
+                        <TableHead>Bukti</TableHead>
                         <TableHead>Dibayar Pada</TableHead>
                     </TableRow>
                 </TableHeader>
@@ -475,6 +498,20 @@ export default function LaporanReimburse() {
                                 </TableCell>
                                 <TableCell className="font-bold">{formatRupiah(item.jumlah)}</TableCell>
                                 <TableCell>{getStatusBadge(item.status)}</TableCell>
+                                <TableCell>
+                                    {(item.bukti || item.buktiUrl) ? (
+                                        <Button 
+                                            variant="ghost" 
+                                            size="icon" 
+                                            className="h-8 w-8 text-pink-600 hover:text-pink-700 hover:bg-pink-50"
+                                            onClick={() => setPreviewImage(item.bukti || item.buktiUrl || null)}
+                                        >
+                                            <ImageIcon className="h-4 w-4" />
+                                        </Button>
+                                    ) : (
+                                        <span className="text-xs text-muted-foreground">-</span>
+                                    )}
+                                </TableCell>
                                 <TableCell>
                                     {item.dibayarPada ? (
                                         <div className="text-xs">
@@ -503,6 +540,31 @@ export default function LaporanReimburse() {
                 </TableBody>
             </Table>
         </Card>
+
+        {/* Image Preview Dialog */}
+        <Dialog open={!!previewImage} onOpenChange={() => setPreviewImage(null)}>
+            <DialogContent className="max-w-3xl p-0 overflow-hidden bg-transparent border-none">
+                <DialogHeader className="hidden">
+                    <DialogTitle>Bukti Reimburse</DialogTitle>
+                </DialogHeader>
+                <div className="relative w-full h-[80vh] flex items-center justify-center p-4">
+                    {previewImage && (
+                        <img 
+                            src={previewImage} 
+                            alt="Bukti Reimburse" 
+                            className="max-w-full max-h-full object-contain rounded-lg shadow-2xl"
+                        />
+                    )}
+                    <Button 
+                        variant="secondary" 
+                        className="absolute top-4 right-4 rounded-full h-8 w-8 p-0"
+                        onClick={() => setPreviewImage(null)}
+                    >
+                        <XCircle className="h-5 w-5" />
+                    </Button>
+                </div>
+            </DialogContent>
+        </Dialog>
       </div>
     </div>
   );

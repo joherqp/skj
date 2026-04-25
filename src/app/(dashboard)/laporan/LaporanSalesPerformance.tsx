@@ -13,11 +13,12 @@ import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
 import { useDatabase } from '@/contexts/DatabaseContext';
 import { formatRupiah, formatNumber } from '@/lib/utils';
-import { Download, History, ArrowRight } from 'lucide-react';
+import { Download, History, ArrowRight, ArrowLeft } from 'lucide-react';
 import { format, startOfMonth, endOfMonth } from 'date-fns';
 import { id as localeId } from 'date-fns/locale';
 import * as XLSX from 'xlsx';
 import { toast } from 'sonner';
+import { useRouter } from 'next/navigation';
 import { Penjualan, PenjualanItem } from '@/types';
 import { ScopeFilters } from '@/components/shared/ScopeFilters';
 
@@ -52,6 +53,7 @@ interface AdjustmentHistory {
 }
 
 export default function LaporanSalesPerformance() {
+  const router = useRouter();
   const { user } = useAuth();
   const { } = useDatabase();
   const [loading, setLoading] = useState(false);
@@ -264,6 +266,11 @@ export default function LaporanSalesPerformance() {
   return (
     <div className="animate-in fade-in duration-500">
       <div className="p-4 space-y-4">
+        <div className="flex justify-between items-center">
+          <Button variant="ghost" onClick={() => router.push('/laporan')} className="pl-0">
+            <ArrowLeft className="w-4 h-4 mr-2" /> Kembali
+          </Button>
+        </div>
         {/* Filters */}
         <Card className="border-none shadow-none md:border md:shadow-sm">
           <CardContent className="p-0 md:p-4 flex flex-col md:flex-row md:flex-wrap gap-3 md:gap-4 items-stretch md:items-end">

@@ -51,6 +51,7 @@ export function DatabaseProvider({ children }: { children: ReactNode }) {
   const { user: currentUser, isLoading: isAuthLoading } = useAuth();
   const demoWarningShown = useRef(false);
   const fetchWarningShown = useRef<Set<string>>(new Set());
+  const isFetchingRef = useRef(false);
 
   // State definitions
   const [kategori, setKategori] = useState<Kategori[]>([]);
@@ -147,6 +148,7 @@ export function DatabaseProvider({ children }: { children: ReactNode }) {
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isInitialized, setIsInitialized] = useState(false);
+  const isInitializedRef = useRef(false);
   const [viewMode, setViewMode] = useState<'all' | 'me'>('all');
 
   // Feature: Offline Sync
@@ -356,15 +358,17 @@ export function DatabaseProvider({ children }: { children: ReactNode }) {
 
   // Load all data
   const loadAllData = useCallback(async (isManualRefresh = false) => {
-    if (!currentUser) {
-      if (!isAuthLoading) {
+    if (!currentUser || isFetchingRef.current) {
+      if (!currentUser && !isAuthLoading) {
         setIsLoading(false);
       }
       return;
     }
 
+    isFetchingRef.current = true;
     try {
-      if (isManualRefresh) {
+      // If already initialized, use isRefreshing to avoid yellow flicker
+      if (isManualRefresh || isInitialized) {
         setIsRefreshing(true);
       } else {
         setIsLoading(true);
@@ -390,9 +394,9 @@ export function DatabaseProvider({ children }: { children: ReactNode }) {
           profileError = fallback.error;
         }
 
-        if (profileError) throw profileError;
-
-        if (profileData) {
+        if (profileError) {
+          console.warn('Profile fetch error, using default settings:', profileError);
+        } else if (profileData) {
           const profile = toCamelCase(profileData) as ProfilPerusahaan;
           setProfilPerusahaan(profile);
 
@@ -484,21 +488,52 @@ export function DatabaseProvider({ children }: { children: ReactNode }) {
       }
       setRestock(getResult<Restock>(24));
 
-      setIsInitialized(true);
     } catch (error) {
       console.error('Error loading data:', error);
     } finally {
-      if (isManualRefresh) {
+      isFetchingRef.current = false;
+      setIsLoading(false); 
+      setIsInitialized(true);
+      isInitializedRef.current = true;
+      
+      if (isManualRefresh || isInitialized) {
         setTimeout(() => setIsRefreshing(false), 1000);
-      } else {
-        setIsLoading(false);
       }
     }
-  }, [currentUser, dbMode, fetchData, shouldFallbackToPublic]);
+  }, [currentUser?.id, dbMode, fetchData, shouldFallbackToPublic]);
+
+  // Handle app visibility/focus to refresh data
+  const lastRefreshRef = useRef<number>(Date.now());
+  
+  useEffect(() => {
+    const handleFocus = () => {
+      const now = Date.now();
+      // If app has been in background for more than 2 minutes, refresh data
+      // We use 2 minutes to balance freshness vs battery/data usage
+      if (now - lastRefreshRef.current > 120000 && currentUser && isInitialized && !isRefreshing) {
+        console.log('App resumed after >2 mins, refreshing data...');
+        lastRefreshRef.current = now;
+        void loadAllData(true);
+      }
+    };
+
+    window.addEventListener('focus', handleFocus);
+    window.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible') {
+        handleFocus();
+      }
+    });
+
+    return () => {
+      window.removeEventListener('focus', handleFocus);
+      window.removeEventListener('visibilitychange', handleFocus);
+    };
+  }, [currentUser, isInitialized, isRefreshing, loadAllData]);
 
   // Load data when user changes
   useEffect(() => {
     loadAllData();
+    lastRefreshRef.current = Date.now();
   }, [loadAllData]);
 
   // Generic CRUD functions

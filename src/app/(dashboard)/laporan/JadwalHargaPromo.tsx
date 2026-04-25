@@ -9,13 +9,15 @@ import { Badge } from '@/components/ui/badge';
 import { Label } from '@/components/ui/label';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from '@/components/ui/sheet';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { CalendarClock, Tag, Percent, Clock, CheckCircle, Info, Building2, Users, FileSpreadsheet, ArrowLeft } from 'lucide-react';
+import { CalendarClock, Tag, Percent, Clock, CheckCircle, Info, Building2, Users, FileSpreadsheet, ArrowLeft, Search, Filter, X } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { formatRupiah } from '@/lib/utils';
-import { format } from 'date-fns';
+import { format, isWithinInterval, startOfDay, endOfDay } from 'date-fns';
 import { id as localeId } from 'date-fns/locale';
 import * as XLSX from 'xlsx';
 import { toast } from 'sonner';
+import { ScopeFilters } from '@/components/shared/ScopeFilters';
+import { Input } from '@/components/ui/input';
 
 import { Barang as BarangType, Satuan, Kategori, Harga, Promo, PersetujuanPayload } from '@/types';
 
@@ -26,6 +28,9 @@ interface ScheduleItemBase {
     subtitle?: string;
     status: 'pending' | 'active' | 'expired' | 'rejected';
     value: string;
+    oldValue?: string;
+    cabangId?: string;
+    userId?: string;
 }
 
 interface ScheduleItemHarga extends ScheduleItemBase {
@@ -44,10 +49,15 @@ type ScheduleItem = ScheduleItemHarga | ScheduleItemPromo;
 export default function JadwalHargaPromo() {
     const router = useRouter();
     const { user } = useAuth();
-    const { harga, promo, persetujuan, barang, satuan, cabang, kategoriPelanggan } = useDatabase();
+    const { harga, promo, persetujuan, barang, satuan, cabang, kategoriPelanggan, users } = useDatabase();
     const [activeTab, setActiveTab] = useState('aktif');
     const [selectedItem, setSelectedItem] = useState<ScheduleItem | null>(null);
     const [displayLimit, setDisplayLimit] = useState(20);
+    
+    // Filters
+    const [searchTerm, setSearchTerm] = useState('');
+    const [selectedCabangIds, setSelectedCabangIds] = useState<string[]>([]);
+    const [showFilters, setShowFilters] = useState(false);
 
     useEffect(() => {
         setDisplayLimit(20);
@@ -93,7 +103,10 @@ export default function JadwalHargaPromo() {
                     subtitle: `Satuan: ${unit?.nama || '-'}`,
                     status: 'pending',
                     value: formatRupiah(pData.hargaBaru),
-                    details: pData
+                    oldValue: pData.hargaLama ? formatRupiah(pData.hargaLama) : undefined,
+                    details: pData,
+                    cabangId: p.targetCabangId || 'global',
+                    userId: p.diajukanOleh
                 });
             } else if (p.jenis === 'promo' && pData) {
                 // Handle aliases for promo date in JSON payload
@@ -109,7 +122,9 @@ export default function JadwalHargaPromo() {
                     subtitle: pData.kode,
                     status: 'pending',
                     value: pData.tipe === 'persen' ? `${pData.nilai}%` : (pData.tipe === 'produk' ? 'Free Item' : formatRupiah(pData.nilai)),
-                    details: pData
+                    details: pData,
+                    cabangId: p.targetCabangId || 'global',
+                    userId: p.diajukanOleh
                 });
             }
         });
@@ -168,7 +183,9 @@ export default function JadwalHargaPromo() {
                     subtitle: `Satuan: ${unit?.nama || '-'} ${h.minQty ? `(Min: ${h.minQty})` : ''}`,
                     status: status,
                     value: formatRupiah(h.harga),
-                    details: h
+                    details: h,
+                    cabangId: h.cabangId || 'global',
+                    userId: h.disetujuiOleh
                 });
             });
         });
@@ -207,7 +224,8 @@ export default function JadwalHargaPromo() {
                 subtitle: p.kode,
                 status: status,
                 value: p.tipe === 'persen' ? `${p.nilai}%` : (p.tipe === 'produk' ? 'Free Item' : formatRupiah(p.nilai)),
-                details: p
+                details: p,
+                cabangId: p.cabangId || 'global'
             });
         });
 
@@ -223,9 +241,24 @@ export default function JadwalHargaPromo() {
         return b.date.getTime() - a.date.getTime();
     });
 
-    const filteredItems = activeTab === 'aktif'
-        ? sortedItems.filter(i => i.status === 'active')
-        : sortedItems.filter(i => i.type === activeTab);
+    const filteredItems = sortedItems.filter(item => {
+        // Tab filter
+        if (activeTab === 'aktif' && item.status !== 'active') return false;
+        if (activeTab !== 'aktif' && item.type !== activeTab) return false;
+
+        // Search filter
+        if (searchTerm && !item.title.toLowerCase().includes(searchTerm.toLowerCase()) && !item.subtitle?.toLowerCase().includes(searchTerm.toLowerCase())) {
+            return false;
+        }
+
+        // Branch filter
+        if (selectedCabangIds.length > 0) {
+            if (item.cabangId === 'global') return true; // Global visible to all?
+            if (item.cabangId && !selectedCabangIds.includes(item.cabangId)) return false;
+        }
+
+        return true;
+    });
 
 
 
@@ -321,6 +354,46 @@ export default function JadwalHargaPromo() {
                         <TabsTrigger value="promo" className="text-[10px] md:text-sm py-1.5 md:py-2">Promo</TabsTrigger>
                     </TabsList>
 
+                    <div className="mt-4 flex flex-col md:flex-row gap-2">
+                        <div className="relative flex-1">
+                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                            <Input
+                                placeholder="Cari produk atau promo..."
+                                value={searchTerm}
+                                onChange={(e) => setSearchTerm(e.target.value)}
+                                className="pl-9 h-10"
+                            />
+                            {searchTerm && (
+                                <button
+                                    onClick={() => setSearchTerm('')}
+                                    className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                                >
+                                    <X className="w-4 h-4" />
+                                </button>
+                            )}
+                        </div>
+                        <Button
+                            variant={showFilters ? "default" : "outline"}
+                            onClick={() => setShowFilters(!showFilters)}
+                            className="h-10 gap-2"
+                        >
+                            <Filter className="w-4 h-4" />
+                            {showFilters ? 'Tutup Filter' : 'Filter Lanjut'}
+                        </Button>
+                    </div>
+
+                    {showFilters && (
+                        <div className="mt-2 p-4 border rounded-lg bg-slate-50/50 animate-in slide-in-from-top-2 duration-300">
+                            <ScopeFilters
+                                selectedCabangIds={selectedCabangIds}
+                                setSelectedCabangIds={setSelectedCabangIds}
+                                selectedUserIds={[]}
+                                setSelectedUserIds={() => {}}
+                                showUserFilter={false}
+                            />
+                        </div>
+                    )}
+
                     <TabsContent value={activeTab} className="mt-3 md:mt-4 space-y-2 md:space-y-4">
                         {filteredItems.length === 0 ? (
                             <div className="text-center py-8 text-muted-foreground border rounded-lg border-dashed text-xs md:text-sm">
@@ -355,15 +428,25 @@ export default function JadwalHargaPromo() {
                                                 </div>
 
                                                 <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-1">
-                                                    <div>
-                                                        <p className="font-bold text-sm md:text-lg leading-tight truncate max-w-[200px] md:max-w-none">{item.title}</p>
-                                                        {item.subtitle && <p className="text-[10px] md:text-sm text-muted-foreground mt-0.5">{item.subtitle}</p>}
-                                                    </div>
-                                                    <div className="text-left sm:text-right bg-slate-50 sm:bg-transparent p-1.5 sm:p-0 rounded sm:rounded-none flex items-center justify-between sm:block">
-                                                        <p className="text-[10px] text-muted-foreground uppercase sm:hidden md:block">Nilai</p>
-                                                        <p className="font-bold text-base md:text-xl font-mono text-primary">{item.value}</p>
-                                                    </div>
-                                                </div>
+                                                     <div>
+                                                         <p className="font-bold text-sm md:text-lg leading-tight truncate max-w-[200px] md:max-w-none">{item.title}</p>
+                                                         {item.subtitle && <p className="text-[10px] md:text-sm text-muted-foreground mt-0.5">{item.subtitle}</p>}
+                                                         {item.cabangId && item.cabangId !== 'global' && (
+                                                             <p className="text-[10px] text-blue-600 font-medium mt-0.5 flex items-center gap-1">
+                                                                 <Building2 className="w-3 h-3" /> {cabang.find(c => c.id === item.cabangId)?.nama || item.cabangId}
+                                                             </p>
+                                                         )}
+                                                     </div>
+                                                      <div className="text-left sm:text-right bg-slate-50 sm:bg-transparent p-1.5 sm:p-0 rounded sm:rounded-none flex items-center justify-between sm:block">
+                                                         <p className="text-[10px] text-muted-foreground uppercase sm:hidden md:block">Nilai</p>
+                                                         <div className="flex flex-col items-end">
+                                                            <p className="font-bold text-base md:text-xl font-mono text-primary">{item.value}</p>
+                                                            {item.oldValue && (
+                                                                <p className="text-[10px] text-muted-foreground line-through decoration-destructive/50">{item.oldValue}</p>
+                                                            )}
+                                                         </div>
+                                                     </div>
+                                                 </div>
 
                                                 {item.type === 'harga' && item.details.grosir?.length > 0 && (
                                                     <div className="pt-1.5 border-t flex gap-3 text-[10px] md:text-xs text-muted-foreground">

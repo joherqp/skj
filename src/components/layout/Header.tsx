@@ -50,7 +50,8 @@ export function Header({
 
   // Application readiness
   const isAppReady = !isAuthLoading && !isDbLoading && isInitialized && !!user;
-  const isAppFullyReady = isAppReady && !isRefreshing && isOnline;
+  // Use a more stable ready state that doesn't flicker on refresh
+  const isConnected = isOnline && isAppReady;
 
   useEffect(() => {
     setIsOnline(navigator.onLine);
@@ -140,11 +141,7 @@ export function Header({
 
         <div
           onClick={() => refresh()}
-          className={cn(
-            "w-9 h-9 logo-round transition-all cursor-pointer",
-            isRefreshing && "animate-spin"
-          )}
-          style={isRefreshing ? { animationDuration: '3s' } : undefined}
+          className="w-9 h-9 logo-round transition-all cursor-pointer"
           title="Klik untuk memuat ulang data"
         >
           <span className="logo-text text-sm">SKJ</span>
@@ -250,17 +247,13 @@ export function Header({
                     {user?.nama?.charAt(0).toUpperCase() || 'U'}
                   </AvatarFallback>
                 </Avatar>
-                {/* Red Indicator if not fully ready (Offline, Loading, or Refreshing) */}
-                {!isAppFullyReady && (
-                  <span className="absolute -top-1 -right-1 flex h-4 w-4">
-                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
-                    <span className="relative inline-flex rounded-full h-4 w-4 bg-red-500 border-2 border-white"></span>
-                  </span>
-                )}
-                {/* Active/Ready Indicator */}
-                {isAppFullyReady && (
-                  <span className="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-green-500 border-2 border-white rounded-full shadow-sm" />
-                )}
+                {/* Unified Status Indicator */}
+                <span className={cn(
+                  "absolute -bottom-0.5 -right-0.5 w-3 h-3 border-2 border-white rounded-full shadow-sm transition-colors duration-300",
+                  !isOnline ? "bg-red-500" :
+                  !isAppReady ? "bg-amber-500" :
+                  isRefreshing ? "bg-blue-500 animate-pulse" : "bg-green-500"
+                )} />
               </div>
               <div className="text-left hidden md:block">
                 <p className="text-sm font-medium leading-none text-gray-700">
@@ -309,22 +302,6 @@ export function Header({
           </DropdownMenuContent>
         </DropdownMenu>
 
-        {/* Status Indicator Dot */}
-        <div
-          className={cn(
-            "w-2.5 h-2.5 rounded-full ring-2 ring-white shadow-sm flex-shrink-0 ml-2 transition-colors duration-300",
-            isAppFullyReady ? 'bg-green-500' : 'bg-red-500'
-          )}
-          title={
-            isAppFullyReady 
-              ? "Aplikasi Siap & Terhubung" 
-              : !isOnline 
-                ? "Terputus (Offline)" 
-                : isRefreshing 
-                  ? "Sedang Memuat Ulang Data..." 
-                  : "Sesi Belum Siap"
-          }
-        />
       </div>
     </div>
   );

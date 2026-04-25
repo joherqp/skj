@@ -1,11 +1,12 @@
 'use client';
-import { createContext, type ReactNode, useCallback, useContext, useEffect, useState } from 'react';
+import { createContext, type ReactNode, useCallback, useContext, useEffect, useState, useRef } from 'react';
 import { supabase } from '@/lib/supabase';
 import { User as SupabaseUser } from '@supabase/supabase-js';
 import { User, UserRole } from '@/types';
 import { toast } from 'sonner';
+import { useRouter } from 'next/navigation';
 
-const AUTH_TIMEOUT_MS = 40000;
+const AUTH_TIMEOUT_MS = 60000; // Increased to 60s for poor network conditions
 
 async function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
   let timeoutId: ReturnType<typeof setTimeout> | undefined;
@@ -36,13 +37,15 @@ interface AuthContextType {
   refreshUser: () => Promise<void>;
 }
 
-
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [supabaseUser, setSupabaseUser] = useState<SupabaseUser | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const isInitializingRef = useRef(false);
+  const lastFocusRef = useRef<number>(Date.now());
+  const router = useRouter();
 
   const mapProfileToUser = (data: {
     id: string;
@@ -73,12 +76,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   });
 
   // Load user profile from database with retry logic
-  const loadUserProfile = useCallback(async (authUser: SupabaseUser, retryCount = 0): Promise<User | null> => {
+  const loadUserProfile = useCallback(async (authUser: SupabaseUser | string, retryCount = 0): Promise<User | null> => {
+    const userId = typeof authUser === 'string' ? authUser : authUser.id;
+    const userEmail = typeof authUser === 'string' ? null : authUser.email;
+
     try {
       const { data: byId, error: byIdError } = await supabase
         .from('users')
         .select('*')
-        .eq('id', authUser.id)
+        .eq('id', userId)
         .maybeSingle();
 
       if (byIdError) {
@@ -94,11 +100,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return mapProfileToUser(byId);
       }
 
-      if (authUser.email) {
+      if (userEmail) {
         const { data: byEmail, error: byEmailError } = await supabase
           .from('users')
           .select('*')
-          .eq('email', authUser.email)
+          .eq('email', userEmail)
           .maybeSingle();
 
         if (byEmailError) {
@@ -112,18 +118,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
 
       // User doesn't exist in public.users, create default profile
-      // Default to Pusat Branch
       const defaultCabangId = '550e8400-e29b-41d4-a716-446655440002';
+      
+      const emailForProfile = userEmail || '';
+      const usernameForProfile = emailForProfile.split('@')[0] || 'user';
+      const nameForProfile = typeof authUser !== 'string' ? (authUser.user_metadata?.full_name || usernameForProfile) : usernameForProfile;
 
       const newProfile = {
-        id: authUser.id, // Link to Auth ID
-        username: authUser.email?.split('@')[0] || 'user',
-        nama: authUser.user_metadata?.full_name || authUser.email?.split('@')[0] || 'User',
-        email: authUser.email || '',
-        telepon: authUser.phone || '-',
+        id: userId,
+        username: usernameForProfile,
+        nama: nameForProfile,
+        email: emailForProfile,
+        telepon: typeof authUser !== 'string' ? (authUser.phone || '-') : '-',
         roles: ['staff'],
         cabang_id: defaultCabangId,
-        is_active: false, // Inactive by default, needs admin approval
+        is_active: false,
       };
 
       const { data: newData, error: createError } = await supabase
@@ -137,11 +146,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return null;
       }
 
-      if (newData) {
-        return mapProfileToUser(newData);
-      }
-
-      return null;
+      return newData ? mapProfileToUser(newData) : null;
     } catch (error) {
       console.error('Error loading user profile:', error);
       if (retryCount < 2) {
@@ -152,28 +157,30 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
-  const applySessionUser = useCallback(async (sessionUser: SupabaseUser | null) => {
-    setSupabaseUser(sessionUser);
-    if (!sessionUser) {
-      setUser(null);
-      return;
-    }
-
-    const profile = await loadUserProfile(sessionUser);
-    if (!profile) {
-      setUser(null);
-      return;
-    }
-
-    if (!profile.isActive) {
-      toast.error('Akun Anda belum aktif. Silakan hubungi admin untuk aktivasi.');
-      await supabase.auth.signOut();
+  const applySessionUser = useCallback(async (sUser: SupabaseUser | null) => {
+    if (!sUser) {
       setUser(null);
       setSupabaseUser(null);
       return;
     }
 
-    setUser(profile);
+    setSupabaseUser(sUser);
+    const profile = await loadUserProfile(sUser);
+    if (profile) {
+      if (!profile.isActive) {
+        toast.error('Akun Anda belum aktif. Silakan hubungi admin untuk aktivasi.');
+        await supabase.auth.signOut();
+        setUser(null);
+        setSupabaseUser(null);
+        return;
+      }
+      setUser({
+        ...profile,
+        email: sUser.email || profile.email,
+      });
+    } else {
+      console.error('Failed to load user profile after session restoration');
+    }
   }, [loadUserProfile]);
 
   const refreshUser = useCallback(async () => {
@@ -182,57 +189,86 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, [supabaseUser, applySessionUser]);
 
-  // Initialize auth state
-  useEffect(() => {
-    let isMounted = true;
+  const initialize = useCallback(async () => {
+    if (isInitializingRef.current) return;
+    isInitializingRef.current = true;
+    
+    try {
+      console.log('Starting auth initialization...');
+      const startTime = Date.now();
+      
+      const { data: { session }, error } = await withTimeout(
+        supabase.auth.getSession(),
+        AUTH_TIMEOUT_MS,
+        'Auth session check',
+      );
 
-    const initialize = async () => {
-      try {
-        console.log('Starting auth initialization...');
-        const { data: { session } } = await withTimeout(
-          supabase.auth.getSession(),
-          AUTH_TIMEOUT_MS,
-          'Auth session check',
-        );
-        if (!isMounted) return;
-        console.log('Auth session check completed:', !!session);
+      if (error) {
+        console.error('Auth session error:', error.message);
+        throw error;
+      }
+
+      const duration = Date.now() - startTime;
+      console.log(`Auth session retrieved in ${duration}ms. Session found:`, !!session);
+
+      await applySessionUser(session?.user ?? null);
+    } catch (err) {
+      console.warn('Auth initialization warning:', err instanceof Error ? err.message : err);
+      if (err instanceof Error && err.message.includes('timeout')) {
+        toast.error('Koneksi lambat. Memeriksa sesi...');
+      }
+    } finally {
+      setIsLoading(false);
+      isInitializingRef.current = false;
+    }
+  }, [applySessionUser]);
+
+  useEffect(() => {
+    initialize();
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange(async (event, session) => {
+      console.log(`Auth State Change Event: ${event}`);
+      
+      if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
         await applySessionUser(session?.user ?? null);
-      } catch (err) {
-        console.warn('Auth initialization warning:', err instanceof Error ? err.message : err);
-        if (isMounted) {
-          setUser(null);
-          setSupabaseUser(null);
-        }
-      } finally {
-        if (isMounted) {
-          setIsLoading(false);
-        }
+      } else if (event === 'SIGNED_OUT') {
+        setUser(null);
+        setSupabaseUser(null);
+      }
+      
+      setIsLoading(false);
+    });
+
+    const handleFocus = () => {
+      const now = Date.now();
+      // Only check session on focus if it's been more than 30 seconds since last check
+      if (now - lastFocusRef.current > 30000) {
+        console.log('App focused, re-checking session...');
+        lastFocusRef.current = now;
+        void supabase.auth.getSession().then(({ data: { session } }) => {
+          // If we found a session but didn't have one before, OR if we want to ensure profile is fresh
+          if (session) {
+            void applySessionUser(session.user);
+          }
+        });
       }
     };
 
-    initialize();
-
-    // Listen for auth changes
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange(async (_event, session) => {
-      if (!isMounted) return;
-      try {
-        await applySessionUser(session?.user ?? null);
-      } catch (error) {
-        console.warn('Auth state change warning:', error);
-        setUser(null);
-        setSupabaseUser(null);
-      } finally {
-        setIsLoading(false);
+    window.addEventListener('focus', handleFocus);
+    window.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible') {
+        handleFocus();
       }
     });
 
     return () => {
-      isMounted = false;
       subscription.unsubscribe();
+      window.removeEventListener('focus', handleFocus);
+      window.removeEventListener('visibilitychange', handleFocus);
     };
-  }, [applySessionUser]);
+  }, [initialize, applySessionUser]);
 
   const loginWithGoogle = async (): Promise<void> => {
     try {
@@ -252,12 +288,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  // Keep a dummy login for backward compatibility in case it's called elsewhere, 
-  // but we won't use it in our new UI.
   const login = async (username: string, password: string): Promise<boolean> => {
     try {
       console.warn('Email/password login is deprecated. Use Google Auth.');
-      // For demo/development: Use email format for Supabase auth
       const email = username.includes('@') ? username : `${username}@cvskj.local`;
 
       const { data, error } = await supabase.auth.signInWithPassword({
@@ -269,13 +302,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       if (data.user) {
         const profile = await loadUserProfile(data.user);
-
         if (!profile?.isActive) {
           toast.error('Akun Anda dinonaktifkan. Hubungi admin.');
           await supabase.auth.signOut();
           return false;
         }
-
         setUser(profile);
         setSupabaseUser(data.user);
         return true;

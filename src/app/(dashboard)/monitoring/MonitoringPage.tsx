@@ -53,11 +53,12 @@ export default function Monitoring() {
     const [mapCenter, setMapCenter] = useState<{ lat: number; lng: number }>({ lat: -6.2088, lng: 106.8456 });
     const [selectedCabang, setSelectedCabang] = useState<string[]>([]);
     const [selectedUser, setSelectedUser] = useState<string[]>([]);
-    const [dateRange, setDateRange] = useState<DateRange | undefined>(undefined);
+    const [dateRange, setDateRange] = useState<DateRange | undefined>({ from: new Date(), to: new Date() });
     const [colorIndicator, setColorIndicator] = useState<'pengguna' | 'cabang' | 'kategori'>('kategori');
     const [duplicateThreshold, setDuplicateThreshold] = useState(15); // Default 15 meters
     const [duplicateSearch, setDuplicateSearch] = useState('');
     const [isClient, setIsClient] = useState(false);
+    const [showNames, setShowNames] = useState(false);
 
     useEffect(() => {
         setIsClient(true);
@@ -71,24 +72,29 @@ export default function Monitoring() {
     const searchParams = useSearchParams();
     const activeTab = searchParams.get('tab') || 'explore';
 
-    const hasSetDefaultTrackingDate = useRef(false);
-
-    useEffect(() => {
-        if (isClient && activeTab === 'tracking' && !dateRange && !hasSetDefaultTrackingDate.current) {
-            setDateRange({ from: new Date(), to: new Date() });
-            hasSetDefaultTrackingDate.current = true;
-        } else if (activeTab !== 'tracking') {
-            hasSetDefaultTrackingDate.current = false;
-        }
-    }, [activeTab, dateRange, isClient]);
-
     // Search input states maintained for UI only
     const [mapSearchInput, setMapSearchInput] = useState('');
     const mapSearchRef = useRef<HTMLInputElement>(null);
 
-    // Provide a simple search mechanism via OpenStreetMap Nominatim
+    // Provide a search mechanism via marker titles or OpenStreetMap Nominatim
     const handleSearchMap = async () => {
         if (!mapSearchInput.trim()) return;
+
+        // First, search in current markers
+        const searchLower = mapSearchInput.toLowerCase().trim();
+        const localMatch = markers.find(m => 
+            m.title.toLowerCase().includes(searchLower) || 
+            (m.userName && m.userName.toLowerCase().includes(searchLower)) ||
+            (m.detail && m.detail.toLowerCase().includes(searchLower))
+        );
+
+        if (localMatch) {
+            setMapCenter(localMatch.position);
+            setSelectedMarker(localMatch);
+            return;
+        }
+
+        // Fallback to OpenStreetMap
         try {
             const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(mapSearchInput)}&countrycodes=id`);
             const data = await res.json();
@@ -1101,24 +1107,25 @@ export default function Monitoring() {
                         <Card elevated className="overflow-hidden">
                             <CardContent className="p-0 relative h-[400px] md:h-[600px] z-0">
                                 <div className="absolute inset-0 z-0 h-full w-full">
-                                    <MonitoringMapWrapper
-                                        markers={markers}
-                                        mapCenter={mapCenter}
-                                        setMapCenter={setMapCenter}
-                                        selectedMarker={selectedMarker}
-                                        setSelectedMarker={setSelectedMarker}
-                                        customerMarkers={customerMarkers}
-                                        radiusKunjungan={profilPerusahaan.config?.radiusKunjungan || 100}
-                                        duplicateThreshold={duplicateThreshold}
-                                        duplicateGroups={duplicateGroups}
-                                    >
+                                        <MonitoringMapWrapper
+                                            markers={markers}
+                                            mapCenter={mapCenter}
+                                            setMapCenter={setMapCenter}
+                                            selectedMarker={selectedMarker}
+                                            setSelectedMarker={setSelectedMarker}
+                                            customerMarkers={customerMarkers}
+                                            radiusKunjungan={profilPerusahaan.config?.radiusKunjungan || 100}
+                                            duplicateThreshold={duplicateThreshold}
+                                            duplicateGroups={duplicateGroups}
+                                            showNames={showNames}
+                                        >
                                         {/* Map Search Bar Overlay */}
-                                        <div className="absolute top-4 left-1/2 -translate-x-1/2 w-[90%] md:w-[400px] z-[1000] flex gap-2">
-                                            <div className="relative flex-1 shadow-lg">
+                                        <div className="absolute top-4 left-1/2 -translate-x-1/2 w-[95%] sm:w-[350px] md:w-[400px] z-[1000] flex gap-1.5">
+                                            <div className="relative flex-1 shadow-lg group">
                                                 <input
                                                     ref={mapSearchRef}
                                                     type="text"
-                                                    placeholder="Cari tempat di peta..."
+                                                    placeholder="Cari nama/tempat..."
                                                     value={mapSearchInput}
                                                     onChange={(e) => setMapSearchInput(e.target.value)}
                                                     onKeyDown={(e) => {
@@ -1126,19 +1133,30 @@ export default function Monitoring() {
                                                             handleSearchMap();
                                                         }
                                                     }}
-                                                    className="w-full h-10 pl-10 pr-4 rounded-lg border bg-white/95 backdrop-blur-sm focus:outline-none focus:ring-2 focus:ring-primary text-sm"
+                                                    className="w-full h-9 pl-9 pr-3 rounded-lg border bg-white/95 backdrop-blur-sm focus:outline-none focus:ring-2 focus:ring-primary text-[13px] shadow-inner transition-all duration-200"
                                                 />
-                                                <Search className="absolute left-3 top-3 w-4 h-4 text-muted-foreground" />
+                                                <Search className="absolute left-3 top-2.5 w-3.5 h-3.5 text-muted-foreground group-focus-within:text-primary transition-colors" />
                                             </div>
-                                            <Button
-                                                variant="secondary"
-                                                size="icon"
-                                                className="h-10 w-10 shrink-0 shadow-lg bg-white/95 backdrop-blur-sm"
-                                                onClick={handleCenterOnMe}
-                                                title="Lokasi Saya"
-                                            >
-                                                <Navigation className="w-4 h-4" />
-                                            </Button>
+                                            <div className="flex gap-1.5">
+                                                <Button
+                                                    variant={showNames ? "default" : "secondary"}
+                                                    size="icon"
+                                                    className={`h-9 w-9 shrink-0 shadow-lg backdrop-blur-sm border-0 ${showNames ? 'bg-primary text-white' : 'bg-white/95 text-slate-600'}`}
+                                                    onClick={() => setShowNames(!showNames)}
+                                                    title={showNames ? "Sembunyikan Nama" : "Tampilkan Nama"}
+                                                >
+                                                    <span className="text-[10px] font-bold">Aa</span>
+                                                </Button>
+                                                <Button
+                                                    variant="secondary"
+                                                    size="icon"
+                                                    className="h-9 w-9 shrink-0 shadow-lg bg-white/95 backdrop-blur-sm text-slate-600 border-0"
+                                                    onClick={handleCenterOnMe}
+                                                    title="Lokasi Saya"
+                                                >
+                                                    <Navigation className="w-4 h-4" />
+                                                </Button>
+                                            </div>
                                         </div>
 
                                         {/* Dynamic Legend Overlay */}

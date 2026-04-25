@@ -12,6 +12,7 @@ import { ConnectionIndicator } from "@/components/shared/ConnectionIndicator";
 
 import { LocationTracker } from '@/components/features/components/LocationTracker';
 import { useAuth } from "@/contexts/AuthContext";
+import { useDatabase } from "@/contexts/DatabaseContext";
 
 interface MainLayoutProps {
   children: ReactNode;
@@ -25,25 +26,31 @@ export const MainLayout = ({ children, title, className }: MainLayoutProps) => {
   const [mounted, setMounted] = useState(false);
   const router = useRouter();
   const pathname = usePathname();
-  const { isAuthenticated, isLoading } = useAuth();
+  const { isAuthenticated, isLoading: isAuthLoading } = useAuth();
+  const { isLoading: isDbLoading, isInitialized: isDbInitialized } = useDatabase();
 
   useEffect(() => {
     setMounted(true);
   }, []);
 
   useEffect(() => {
-    if (!isLoading && !isAuthenticated && pathname !== '/login') {
+    if (!isAuthLoading && !isAuthenticated && pathname !== '/login') {
       router.replace('/login');
     }
-  }, [isAuthenticated, isLoading, pathname, router]);
+  }, [isAuthenticated, isAuthLoading, pathname, router]);
 
-  if (!isLoading && !isAuthenticated) return null;
+  if (!isAuthLoading && !isAuthenticated && pathname !== '/login') return null;
+
+  const showLoading = isAuthLoading || (isAuthenticated && isDbLoading && !isDbInitialized);
 
   return (
     <div className="flex min-h-screen w-full bg-gray-50 overflow-x-hidden">
-      {mounted && isLoading && isAuthenticated && (
-        <div className="fixed top-2 left-1/2 -translate-x-1/2 z-[70] rounded-full bg-amber-100 text-amber-900 px-3 py-1 text-xs shadow">
-          Memeriksa sesi...
+      {mounted && showLoading && (
+        <div className="fixed inset-0 z-[100] flex flex-col items-center justify-center bg-white/80 backdrop-blur-sm">
+          <div className="w-12 h-12 rounded-full border-4 border-primary border-t-transparent animate-spin mb-4" />
+          <p className="text-sm font-medium text-gray-600 animate-pulse">
+            {isAuthLoading ? 'Memeriksa sesi...' : 'Memuat data...'}
+          </p>
         </div>
       )}
       <LocationTracker />

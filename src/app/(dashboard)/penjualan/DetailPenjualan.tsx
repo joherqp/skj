@@ -255,8 +255,8 @@ ${items}
 
 ━━━━━━━━━━━━━━━━━━
 💰 *Total: ${formatRupiah(trx.total)}*
-💵 Bayar: ${formatRupiah(paymentHistory.reduce((sum, p) => sum + Number(p.jumlah), 0))}
-📊 Status: ${shareStatus}
+💵 Bayar: ${formatRupiah(trx.bayar || paymentHistory.reduce((sum, p) => sum + Number(p.jumlah), 0))}
+${trx.kembalian ? `🪙 Kembalian: ${formatRupiah(trx.kembalian)}\n` : ''}📊 Status: ${shareStatus}
 ━━━━━━━━━━━━━━━━━━
 ${profilPerusahaan.nama}`;
 
@@ -366,8 +366,14 @@ ${profilPerusahaan.nama}`;
                         </div>
                         <div className="flex justify-between">
                             <span>BAYAR ({trx.metodePembayaran.toUpperCase()})</span>
-                            <span>{formatRupiah(paymentHistory.reduce((sum, p) => sum + Number(p.jumlah), 0)).replace('Rp', '')}</span>
+                            <span>{formatRupiah(trx.bayar || paymentHistory.reduce((sum, p) => sum + Number(p.jumlah), 0)).replace('Rp', '')}</span>
                         </div>
+                        {trx.kembalian > 0 && (
+                            <div className="flex justify-between">
+                                <span>KEMBALI</span>
+                                <span>{formatRupiah(trx.kembalian).replace('Rp', '')}</span>
+                            </div>
+                        )}
                         {trx.metodePembayaran === 'tempo' && (
                             <div className="flex justify-between font-bold border-t border-black pt-1 mt-1">
                                 <span>SISA PIUTANG</span>
@@ -479,7 +485,17 @@ ${profilPerusahaan.nama}`;
                                 <span className="font-bold">{formatRupiah(trx.total)}</span>
                             </div>
                             <div className="flex justify-between">
-                                <span className="text-gray-500 uppercase">Sudah Dibayar</span>
+                                <span className="text-gray-500 uppercase">Bayar</span>
+                                <span className="font-bold">{formatRupiah(trx.bayar || paymentHistory.reduce((sum, p) => sum + Number(p.jumlah), 0))}</span>
+                            </div>
+                            {trx.kembalian > 0 && (
+                                <div className="flex justify-between">
+                                    <span className="text-gray-500 uppercase">Kembalian</span>
+                                    <span className="font-bold text-blue-600">{formatRupiah(trx.kembalian)}</span>
+                                </div>
+                            )}
+                            <div className="flex justify-between">
+                                <span className="text-gray-500 uppercase">Total Terbayar</span>
                                 <span className="font-bold text-green-600">{formatRupiah(paymentHistory.reduce((sum, p) => sum + Number(p.jumlah), 0))}</span>
                             </div>
                             <div className="flex justify-between border-t-2 border-black pt-2 text-lg font-black">
@@ -788,6 +804,16 @@ ${profilPerusahaan.nama}`;
                                         <span className="font-bold font-mono">{formatRupiah(trx.total)}</span>
                                     </div>
                                     <div className="flex justify-between text-sm py-1 border-t border-dashed">
+                                        <span className="text-muted-foreground">Uang Bayar</span>
+                                        <span className="font-bold font-mono">{formatRupiah(trx.bayar || 0)}</span>
+                                    </div>
+                                    {trx.kembalian > 0 && (
+                                        <div className="flex justify-between text-sm py-1">
+                                            <span className="text-muted-foreground">Kembalian</span>
+                                            <span className="font-bold font-mono text-blue-600">{formatRupiah(trx.kembalian)}</span>
+                                        </div>
+                                    )}
+                                    <div className="flex justify-between text-sm py-1 border-t border-dashed">
                                         <span className="text-muted-foreground">Sudah Dibayar</span>
                                         <span className="font-bold font-mono text-green-600">
                                             {formatRupiah(paymentHistory.reduce((sum, p) => sum + Number(p.jumlah), 0))}
@@ -886,6 +912,11 @@ ${profilPerusahaan.nama}`;
                                                     <div className="flex items-center gap-1 text-[10px] text-muted-foreground mt-0.5 capitalize">
                                                         {ph.metodePembayaran || 'Transfer'}
                                                     </div>
+                                                    {ph.bayar !== undefined && ph.bayar > 0 && (
+                                                        <div className="text-[9px] text-muted-foreground font-mono mt-0.5">
+                                                            Bayar: {formatRupiah(ph.bayar)} | Kembali: {formatRupiah(ph.kembalian || 0)}
+                                                        </div>
+                                                    )}
                                                 </div>
                                                 <span className="font-bold text-green-600">+{formatRupiah(ph.jumlah)}</span>
                                             </div>
@@ -895,7 +926,7 @@ ${profilPerusahaan.nama}`;
                             </ScrollArea>
                             <div className="flex justify-between items-center mt-4 pt-2 border-t font-semibold">
                                 <span>Total Terbayar</span>
-                                <span className="text-green-600">{formatRupiah(paymentHistory.reduce((sum, p) => sum + Number(p.jumlah), 0) + (trx.bayar || 0))}</span>
+                                <span className="text-green-600">{formatRupiah(paymentHistory.reduce((sum, p) => sum + Number(p.jumlah), 0))}</span>
                             </div>
                         </div>
                     </DialogContent>

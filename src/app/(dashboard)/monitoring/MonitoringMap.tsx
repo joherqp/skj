@@ -75,6 +75,7 @@ export function MonitoringMapWrapper({
   radiusKunjungan = 100,
   duplicateThreshold = 15,
   duplicateGroups = [],
+  showNames = false,
   children,
 }: any) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -211,16 +212,18 @@ export function MonitoringMapWrapper({
                 },
               }}
             >
-              <Tooltip
-                permanent
-                direction="top"
-                offset={[0, -10]}
-                opacity={0.95}
-                interactive={false}
-                className="leaflet-name-label"
-              >
-                {marker.title}
-              </Tooltip>
+              {showNames && (
+                <Tooltip
+                  permanent
+                  direction="top"
+                  offset={[0, -10]}
+                  opacity={0.95}
+                  interactive={false}
+                  className="leaflet-name-label"
+                >
+                  {marker.title}
+                </Tooltip>
+              )}
             </Marker>
           );
         })}
@@ -344,7 +347,7 @@ export function MonitoringMapWrapper({
                 <div className="flex flex-col">
                   <span className="text-[10px] text-gray-400 uppercase tracking-wider font-semibold">Qty</span>
                   <span className="text-sm font-bold text-slate-800">
-                    {selectedMarker.data.items?.reduce((acc: number, item: any) => acc + (item.jumlah || 0), 0) || 0}
+                    {selectedMarker.data.items?.reduce((acc: number, item: any) => acc + (item.totalQty || item.jumlah || 0), 0) || 0}
                   </span>
                 </div>
                 <div className="flex flex-col">
