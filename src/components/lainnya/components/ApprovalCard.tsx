@@ -89,13 +89,13 @@ export function ApprovalCard({
 
         if (!u) {
             // Last ditch effort: check if userId itself is a name (non-UUID-like)
-            if (userId.length < 20 && !userId.includes('-') && isNaN(Number(userId))) return userId;
+            if (typeof userId === 'string' && userId.length < 20 && !userId.includes('-') && isNaN(Number(userId))) return userId;
             
             // Check payload fallbacks
             const payloadName = payload?.userName || payload?.namaUser || payload?.nama || payload?.operator || payload?.karyawanNama;
             if (payloadName && payloadName !== 'Unknown') return payloadName;
 
-            return userId.length > 15 ? `User ${userId.substring(0, 8)}` : `User ${userId}`;
+            return typeof userId === 'string' && userId.length > 15 ? `User ${userId.substring(0, 8)}` : `User ${userId}`;
         }
         
         // Robust name check
@@ -103,7 +103,7 @@ export function ApprovalCard({
             ? u.nama 
             : (u.username && u.username !== 'Unknown' && u.username.trim() !== '') 
                 ? u.username 
-                : (userId.length > 15 ? `User ${userId.substring(0, 8)}` : userId);
+                : (typeof userId === 'string' && userId.length > 15 ? `User ${userId.substring(0, 8)}` : userId);
                 
         const c = cabang.find(c => c.id === u.cabangId);
         const role = u.roles?.[0] ? ` (${u.roles[0]})` : '';
@@ -112,13 +112,15 @@ export function ApprovalCard({
 
     const getCabangName = (id?: string) => {
         if (!id || id === 'pusat' || id === 'Pusat' || id === 'system') return 'Pusat/Gudang';
-        const c = cabang.find(item => item.id === id || item.id === id.trim() || item.id === (id as any).id);
+        
+        const safeId = typeof id === 'string' ? id.trim() : id;
+        const c = cabang.find(item => item.id === id || item.id === safeId || item.id === (id as any).id);
         if (c) return c.nama;
         
         // Handle names that might be passed as IDs
-        if (id.length < 15 && isNaN(Number(id)) && !id.includes('-')) return id;
+        if (typeof id === 'string' && id.length < 15 && isNaN(Number(id)) && !id.includes('-')) return id;
         
-        return id.length > 15 ? `Cabang ${id.substring(0, 5)}` : id;
+        return typeof id === 'string' && id.length > 15 ? `Cabang ${id.substring(0, 5)}` : String(id);
     };
 
     const formatDateTime = (date: Date | string) => {
@@ -464,6 +466,15 @@ export function ApprovalCard({
                                 );
                             })}
                         </div>
+                        {item.jenis === 'mutasi_stok' && (
+                            <div className="mt-2 pt-2 border-t border-indigo-100/30 flex justify-between items-center">
+                                <span className="text-[10px] text-muted-foreground uppercase font-medium">Penerima</span>
+                                <span className="text-xs font-bold text-indigo-700 flex items-center gap-1.5 bg-white border border-indigo-100 px-2 py-0.5 rounded-full shadow-sm">
+                                    <UserIcon size={10} className="text-indigo-400" />
+                                    {users.find(u => u.id === item.targetUserId)?.nama || 'Unknown'}
+                                </span>
+                            </div>
+                        )}
                     </div>
                 );
             }
@@ -473,10 +484,36 @@ export function ApprovalCard({
                     <div className="mt-2 text-sm border border-blue-200 rounded-lg w-full bg-blue-50/50">
                         <div className="p-2 flex justify-between items-center border-b border-blue-100">
                             <span className="font-semibold text-blue-800 text-xs">Permintaan Stok</span>
-                            <span className="text-[10px] text-blue-600">{cabang.find(c => c.id === d.dariCabangId)?.nama || 'Cabang Asal'}</span>
+                            <div className="flex items-center gap-2">
+                                <span className="text-[10px] font-bold text-blue-700 bg-blue-100 px-1.5 py-0.5 rounded uppercase">Penerima</span>
+                                <span className="text-[10px] text-blue-600">{cabang.find(c => c.id === d.dariCabangId)?.nama || 'Cabang Asal'}</span>
+                            </div>
                         </div>
-                        <div className="p-2">
-                            <p className="text-xs text-muted-foreground italic">{(d.items as Record<string, unknown>[])?.length || 0} Barang diminta</p>
+                        <div className="p-3">
+                             <div className="flex justify-between items-center mb-2">
+                                <div className="flex flex-col">
+                                    <span className="text-[10px] text-muted-foreground uppercase">Dari (Pemohon)</span>
+                                    <span className="font-bold text-blue-700 text-xs">
+                                        {cabang.find(c => c.id === d.dariCabangId)?.nama || '-'}
+                                    </span>
+                                </div>
+                                <ArrowRight size={14} className="text-blue-400 mx-2" />
+                                <div className="flex flex-col text-right">
+                                    <span className="text-[10px] text-muted-foreground uppercase">Ke (Sumber Stok)</span>
+                                    <span className="font-bold text-slate-700 text-xs">
+                                        {cabang.find(c => c.id === d.keCabangId)?.nama || 'Pusat/Gudang'}
+                                    </span>
+                                </div>
+                            </div>
+                            <div className="space-y-1">
+                                {(d.items || []).slice(0, 2).map((it: any, idx: number) => (
+                                    <div key={idx} className="flex justify-between text-[11px] bg-white/50 px-2 py-1 rounded">
+                                        <span className="truncate max-w-[150px]">{barang.find(b => b.id === it.barangId)?.nama}</span>
+                                        <span className="font-medium">{it.jumlah} {satuan.find(s => s.id === it.satuanId)?.simbol || 'Unit'}</span>
+                                    </div>
+                                ))}
+                                {(d.items || []).length > 2 && <p className="text-[10px] text-center text-muted-foreground italic">+{ (d.items || []).length - 2 } item lainnya</p>}
+                            </div>
                         </div>
                     </div>
                 );

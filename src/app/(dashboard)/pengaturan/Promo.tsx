@@ -106,6 +106,27 @@ export default function Promo() {
           }
         },
         {
+          key: 'cabangIds',
+          label: 'Cabang',
+          render: (item) => {
+            if (!item.cabangIds || item.cabangIds.length === 0) {
+              return <span className="px-2 py-0.5 bg-slate-100 text-slate-600 rounded text-[10px] uppercase font-bold">Global</span>;
+            }
+            return (
+              <div className="flex flex-wrap gap-1">
+                {item.cabangIds.map(id => {
+                  const name = cabang.find(c => c.id === id)?.nama || id;
+                  return (
+                    <span key={id} className="px-2 py-0.5 bg-primary/10 text-primary border border-primary/20 rounded text-[10px] font-medium">
+                      {name}
+                    </span>
+                  );
+                })}
+              </div>
+            );
+          }
+        },
+        {
           key: 'isActive',
           label: 'Status',
           render: (item) => (
@@ -201,8 +222,8 @@ export default function Promo() {
               <Label>Tipe Promo</Label>
               <Select
                 value={formData.tipe}
-                onValueChange={(value) => setFormData(prev => ({ 
-                  ...prev, 
+                onValueChange={(value) => setFormData(prev => ({
+                  ...prev,
                   tipe: value as PromoType['tipe'],
                   metodeKelipatan: value === 'event' ? 'periode_promo' : prev.metodeKelipatan === 'periode_promo' ? 'per_item' : prev.metodeKelipatan,
                   isKelipatan: value === 'event' ? true : prev.isKelipatan
@@ -250,7 +271,7 @@ export default function Promo() {
                     <Info className="w-3 h-3" /> Konfigurasi Event (Gebyar)
                   </h5>
                   <p className="text-[11px] text-blue-700 leading-relaxed">
-                    Gunakan <strong>Target Utama</strong> untuk hadiah fisik (misal: 50 Dus untuk Kambing). <br/>
+                    Gunakan <strong>Target Utama</strong> untuk hadiah fisik (misal: 50 Dus untuk Kambing). <br />
                     Gunakan <strong>Bonus Cashback</strong> & <strong>Setiap Kelipatan</strong> untuk bonus rutin (misal: Rp 100rb per 10 Dus).
                   </p>
                 </div>
@@ -372,9 +393,9 @@ export default function Promo() {
 
             <div className="space-y-2">
               <Label>
-                {formData.tipe === 'produk' ? 'Berlaku Setiap Kelipatan Qty' : 
-                 formData.tipe === 'event' ? 'Target Minimal Hadiah (Sudah di atas)' : 
-                 'Syarat Minimum Qty'}
+                {formData.tipe === 'produk' ? 'Berlaku Setiap Kelipatan Qty' :
+                  formData.tipe === 'event' ? 'Target Minimal Hadiah (Sudah di atas)' :
+                    'Syarat Minimum Qty'}
               </Label>
               <Input
                 name="minQty"
@@ -388,11 +409,11 @@ export default function Promo() {
                 placeholder="1"
               />
               <p className="text-[10px] text-muted-foreground">
-                {formData.tipe === 'event' 
+                {formData.tipe === 'event'
                   ? 'Gunakan Target Utama di bagian konfigurasi event.'
                   : formData.tipe === 'produk'
-                  ? 'Contoh: Setiap beli 10 dapat 1. Masukkan 10 disini.'
-                  : 'Jika pembelian mencapai jumlah ini, promo akan berlaku.'}
+                    ? 'Contoh: Setiap beli 10 dapat 1. Masukkan 10 disini.'
+                    : 'Jika pembelian mencapai jumlah ini, promo akan berlaku.'}
               </p>
             </div>
           </div>
@@ -438,8 +459,8 @@ export default function Promo() {
                     {formData.metodeKelipatan === 'per_nota'
                       ? 'Total jumlah semua produk yang memenuhi syarat akan dihitung.'
                       : formData.metodeKelipatan === 'periode_promo'
-                      ? 'Total akumulasi pembelian selama periode promo akan dihitung.'
-                      : 'Setiap produk dihitung masing-masing.'}
+                        ? 'Total akumulasi pembelian selama periode promo akan dihitung.'
+                        : 'Setiap produk dihitung masing-masing.'}
                   </p>
                 </div>
               )}
@@ -480,36 +501,36 @@ export default function Promo() {
           </div>
 
           <div className="space-y-2 border rounded-md p-3">
-             <Label className="mb-2 block font-medium">Berlaku di Cabang</Label>
-             <div className="grid grid-cols-1 md:grid-cols-2 gap-2 max-h-40 overflow-y-auto">
-                 <div className="flex items-center space-x-2 col-span-full border-b pb-2 mb-1">
-                     <Checkbox 
-                        id="all-cabang-promo"
-                        checked={!formData.cabangIds || formData.cabangIds.length === 0}
-                        onCheckedChange={(checked) => {
-                            if (checked) setFormData(prev => ({ ...prev, cabangIds: [] }));
-                        }}
-                     />
-                     <label htmlFor="all-cabang-promo" className="text-sm font-medium">Semua Cabang (Global)</label>
-                 </div>
-                 {cabang.map(c => (
-                     <div key={c.id} className="flex items-center space-x-2">
-                         <Checkbox 
-                            id={`cb-promo-${c.id}`}
-                            checked={(formData.cabangIds || []).includes(c.id)}
-                            onCheckedChange={(checked) => {
-                                const current = formData.cabangIds || [];
-                                if (checked) {
-                                    setFormData(prev => ({ ...prev, cabangIds: [...current, c.id] }));
-                                } else {
-                                    setFormData(prev => ({ ...prev, cabangIds: current.filter(id => id !== c.id) }));
-                                }
-                            }}
-                         />
-                         <label htmlFor={`cb-promo-${c.id}`} className="text-sm">{c.nama}</label>
-                     </div>
-                 ))}
-             </div>
+            <Label className="mb-2 block font-medium">Berlaku di Cabang</Label>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-2 max-h-40 overflow-y-auto">
+              <div className="flex items-center space-x-2 col-span-full border-b pb-2 mb-1">
+                <Checkbox
+                  id="all-cabang-promo"
+                  checked={!formData.cabangIds || formData.cabangIds.length === 0}
+                  onCheckedChange={(checked) => {
+                    if (checked) setFormData(prev => ({ ...prev, cabangIds: [] }));
+                  }}
+                />
+                <label htmlFor="all-cabang-promo" className="text-sm font-medium">Semua Cabang (Global)</label>
+              </div>
+              {cabang.map(c => (
+                <div key={c.id} className="flex items-center space-x-2">
+                  <Checkbox
+                    id={`cb-promo-${c.id}`}
+                    checked={(formData.cabangIds || []).includes(c.id)}
+                    onCheckedChange={(checked) => {
+                      const current = formData.cabangIds || [];
+                      if (checked) {
+                        setFormData(prev => ({ ...prev, cabangIds: [...current, c.id] }));
+                      } else {
+                        setFormData(prev => ({ ...prev, cabangIds: current.filter(id => id !== c.id) }));
+                      }
+                    }}
+                  />
+                  <label htmlFor={`cb-promo-${c.id}`} className="text-sm">{c.nama}</label>
+                </div>
+              ))}
+            </div>
           </div>
 
           {formData.scope === 'selected_products' && (

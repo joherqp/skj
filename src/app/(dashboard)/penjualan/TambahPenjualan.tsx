@@ -1,5 +1,5 @@
 'use client';
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -234,20 +234,21 @@ export default function TambahPenjualan() {
         return satuan.find(s => s.id === id);
     };
 
-    const getUserStock = (barangId: string) => {
+    const getUserStock = useCallback((barangId: string) => {
         if (!user?.id) return 0;
         // Fix: Ignore PENDING_BONUS checks
         if (barangId === 'PENDING_BONUS') return Infinity;
 
         const stockEntry = stokPengguna.find(s => s.userId === user.id && s.barangId === barangId);
         return stockEntry ? stockEntry.jumlah : 0;
-    };
+    }, [stokPengguna, user?.id]);
 
 
 
 
     /* New: Product Search & Add Logic */
     const [isProductSearchOpen, setIsProductSearchOpen] = useState(false);
+    const [productSearchTerm, setProductSearchTerm] = useState("");
 
     // Payment States
     const [isPaymentDialogOpen, setIsPaymentDialogOpen] = useState(false);
@@ -256,7 +257,7 @@ export default function TambahPenjualan() {
     const [isProcessing, setIsProcessing] = useState(false);
     const [isSuccess, setIsSuccess] = useState(false);
 
-    const resolveItemDetails = (item: CartItem, currentCart: CartItem[], perNotaQuantities?: Map<string, number>): CartItem => {
+    const resolveItemDetails = useCallback((item: CartItem, currentCart: CartItem[], perNotaQuantities?: Map<string, number>): CartItem => {
         const totalMixMatchQty = currentCart
             .filter(c => !c.isBonus)
             .reduce((sum, c) => sum + (c.jumlah * (c.konversi || 1)), 0);
@@ -279,9 +280,9 @@ export default function TambahPenjualan() {
         // Note: we don't necessarily overwrite selectedPromoId here, but we could track applied
 
         return item;
-    };
+    }, [getPriceDetailed, getPromo, formData.pelangganId]);
 
-    const syncCart = (rawCart: CartItem[]) => {
+    const syncCart = useCallback((rawCart: CartItem[]) => {
         const manualItems = rawCart.filter(c => !c.isBonus && c.jumlah > 0);
 
         // Pre-calculate Per-Nota Quantities
@@ -436,7 +437,14 @@ export default function TambahPenjualan() {
         });
 
         return fullCart;
-    };
+    }, [promo, user?.cabangId, resolveItemDetails, getPromo, formData.pelangganId, barang, getUserStock]);
+
+    // Re-sync cart when customer changes to update prices and promos
+    useEffect(() => {
+        if (cart.length > 0) {
+            setCart(prev => syncCart(prev));
+        }
+    }, [formData.pelangganId, syncCart]);
 
     const updateProductPromo = (barangId: string, promoId: string) => {
         setCart(prev => {
@@ -1234,7 +1242,10 @@ export default function TambahPenjualan() {
                         <CardHeader className="flex flex-row items-center justify-between py-4">
                             <CardTitle className="text-base">Keranjang Belanja</CardTitle>
                             {formData.pelangganId && (
-                                <Popover open={isProductSearchOpen} onOpenChange={setIsProductSearchOpen}>
+                                <Popover open={isProductSearchOpen} onOpenChange={(open) => {
+                                    setIsProductSearchOpen(open);
+                                    if (!open) setProductSearchTerm("");
+                                }}>
                                     <PopoverTrigger asChild>
                                         <Button type="button" size="sm" variant="outline">
                                             <Plus className="w-4 h-4 mr-1" /> Tambah Produk
@@ -1242,13 +1253,23 @@ export default function TambahPenjualan() {
                                     </PopoverTrigger>
                                     <PopoverContent className="w-[300px] p-0" align="end">
                                         <Command>
-                                            <CommandInput placeholder="Cari produk aktif..." />
+                                            <CommandInput
+                                                placeholder="Cari produk aktif..."
+                                                value={productSearchTerm}
+                                                onValueChange={setProductSearchTerm}
+                                            />
                                             <CommandEmpty>Produk tidak ditemukan.</CommandEmpty>
                                             <CommandGroup className="max-h-60 overflow-y-auto">
                                                 {barang
                                                     .filter(b => {
+                                                        const stock = getUserStock(b.id);
                                                         const price = getPriceDetailed(b.id, b.satuanId, 1, 1, formData.pelangganId, 0).price;
-                                                        return b.isActive && !cart.some(c => c.barangId === b.id) && price > 0;
+                                                        const isVisible = b.isActive && !cart.some(c => c.barangId === b.id) && price > 0;
+
+                                                        // Sembunyikan stok 0 jika tidak sedang mencari
+                                                        if (!productSearchTerm && stock <= 0) return false;
+
+                                                        return isVisible;
                                                     })
                                                     .sort((a, b) => getUserStock(b.id) - getUserStock(a.id))
                                                     .map(b => {

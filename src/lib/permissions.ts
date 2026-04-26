@@ -31,10 +31,9 @@ export const ROUTE_PERMISSIONS: RoutePermission[] = [
     path: '/reimburse',
     excludedRoles: ['owner']
   },
-  // Persetujuan is usually for roles that can approve things
+  // Persetujuan is for all users to see items directed to them or their own tracking
   {
-    path: '/persetujuan',
-    allowedRoles: ['admin', 'owner', 'manager', 'finance', 'leader']
+    path: '/persetujuan'
   }
 ];
 

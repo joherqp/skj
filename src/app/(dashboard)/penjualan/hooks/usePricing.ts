@@ -1,12 +1,13 @@
 
 import { useDatabase } from '@/contexts/DatabaseContext';
 import { useAuth } from '@/contexts/AuthContext';
+import { useCallback, useMemo } from 'react';
 
 export function usePricing() {
     const { pelanggan, barang, harga, promo, penjualan } = useDatabase();
     const { user } = useAuth();
 
-    const getPriceDetailed = (
+    const getPriceDetailed = useCallback((
         productId: string,
         unitId: string | undefined,
         qty: number,
@@ -20,19 +21,47 @@ export function usePricing() {
 
         const findRule = (targetUnitId: string | undefined) => {
             if (!targetUnitId) return undefined;
-            const rules = harga.filter(h =>
-                h.barangId === productId &&
-                h.satuanId === targetUnitId &&
-                h.status === 'disetujui' &&
-                new Date(h.tanggalEfektif) <= new Date() &&
-                (!h.kategoriPelangganIds || (selectedCustomer && h.kategoriPelangganIds.includes(selectedCustomer.kategoriId))) &&
-                ((!h.cabangId && (!h.cabangIds || h.cabangIds.length === 0)) || h.cabangId === user?.cabangId || (h.cabangIds && h.cabangIds.includes(user?.cabangId || '')))
-            );
-            rules.sort((a, b) => {
-                const aIsBranch = a.cabangId || (a.cabangIds && a.cabangIds.length > 0);
-                const bIsBranch = b.cabangId || (b.cabangIds && b.cabangIds.length > 0);
-                return (bIsBranch ? 1 : 0) - (aIsBranch ? 1 : 0);
+            
+            const customerCabangId = selectedCustomer?.cabangId;
+            const userCabangId = user?.cabangId;
+
+            const rules = harga.filter(h => {
+                const isProductMatch = h.barangId === productId;
+                const isUnitMatch = h.satuanId === targetUnitId;
+                const isStatusMatch = h.status === 'disetujui';
+                const isDateMatch = new Date(h.tanggalEfektif) <= new Date();
+                
+                // Customer category match
+                const isCustomerGroupMatch = (!h.kategoriPelangganId && (!h.kategoriPelangganIds || h.kategoriPelangganIds.length === 0)) || 
+                    (selectedCustomer && (h.kategoriPelangganId === selectedCustomer.kategoriId || h.kategoriPelangganIds?.includes(selectedCustomer.kategoriId)));
+
+                if (!isProductMatch || !isUnitMatch || !isStatusMatch || !isDateMatch || !isCustomerGroupMatch) return false;
+
+                // Branch filtering logic
+                const isGlobal = (!h.cabangId || h.cabangId === 'all') && (!h.cabangIds || h.cabangIds.length === 0);
+                const matchesUserBranch = userCabangId && userCabangId !== 'all' && (h.cabangId === userCabangId || h.cabangIds?.includes(userCabangId));
+                const matchesCustomerBranch = customerCabangId && customerCabangId !== 'all' && (h.cabangId === customerCabangId || h.cabangIds?.includes(customerCabangId));
+
+                return isGlobal || matchesUserBranch || matchesCustomerBranch;
             });
+
+            rules.sort((a, b) => {
+                const getScore = (h: any) => {
+                    let score = 0;
+                    const isGlobal = (!h.cabangId || h.cabangId === 'all') && (!h.cabangIds || h.cabangIds.length === 0);
+                    
+                    if (customerCabangId && customerCabangId !== 'all' && (h.cabangId === customerCabangId || h.cabangIds?.includes(customerCabangId))) {
+                        score = 3;
+                    } else if (userCabangId && userCabangId !== 'all' && (h.cabangId === userCabangId || h.cabangIds?.includes(userCabangId))) {
+                        score = 2;
+                    } else if (!isGlobal) {
+                        score = 1;
+                    }
+                    return score;
+                };
+                return getScore(b) - getScore(a);
+            });
+
             return rules[0];
         };
 
@@ -64,9 +93,9 @@ export function usePricing() {
             return { price, tier: tierVal };
         }
         return { price: 0 };
-    };
+    }, [pelanggan, barang, harga, user]);
 
-    const getPromo = (
+    const getPromo = useCallback((
         productId: string,
         price: number,
         qty: number,
@@ -117,9 +146,11 @@ export function usePricing() {
             
             const isGlobal = (!p.cabangId || p.cabangId === 'all') && (!p.cabangIds || p.cabangIds.length === 0);
             if (!isGlobal) {
-                const matchSingle = p.cabangId && p.cabangId === user?.cabangId;
-                const matchMulti = p.cabangIds && p.cabangIds.includes(user?.cabangId || '');
-                if (!matchSingle && !matchMulti) return false;
+                const customerCabangId = pelanggan.find(pl => pl.id === customerId)?.cabangId;
+                const matchUser = user?.cabangId && user.cabangId !== 'all' && (p.cabangId === user.cabangId || p.cabangIds?.includes(user.cabangId));
+                const matchCustomer = customerCabangId && customerCabangId !== 'all' && (p.cabangId === customerCabangId || p.cabangIds?.includes(customerCabangId));
+                
+                if (!matchUser && !matchCustomer) return false;
             }
 
             const isAggregated = p.metodeKelipatan === 'per_nota' || p.metodeKelipatan === 'periode_promo';
@@ -338,7 +369,7 @@ export function usePricing() {
             availablePromos,
             appliedPromoId: selectedCandidate.p.id
         };
-    };
+    }, [promo, pelanggan, user, penjualan]);
 
-    return { getPriceDetailed, getPromo };
+    return useMemo(() => ({ getPriceDetailed, getPromo }), [getPriceDetailed, getPromo]);
 }

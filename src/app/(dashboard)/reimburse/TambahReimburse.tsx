@@ -110,6 +110,7 @@ export default function TambahReimburse() {
             status: 'pending',
             catatan: `Reimburse: ${formData.keterangan}`,
             targetRole: 'finance', 
+            targetCabangId: user.cabangId,
             data: {
                 amount: rawAmount,
                 keterangan: formData.keterangan,

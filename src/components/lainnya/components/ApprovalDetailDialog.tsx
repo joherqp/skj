@@ -60,27 +60,45 @@ export function ApprovalDetailDialog({
                return (
                     <div className="space-y-4">
                         <div className="bg-indigo-50 p-3 rounded-lg border border-indigo-100 mb-4 text-xs md:text-sm">
-                              <div className='flex justify-between items-center mb-2'>
-                                  <div className="flex flex-col">
-                                      <span className="text-xs text-muted-foreground">Dari Cabang</span>
-                                      <span className="font-semibold text-slate-700">
-                                          {cabang.find(c => c.id === (finalData.dariCabangId || requesterUser?.cabangId))?.nama || 'Pusat/Gudang'}
-                                      </span>
-                                  </div>
-                                  <ArrowLeftRight className="text-indigo-300 w-5 h-5 mx-2" />
-                                  <div className="flex flex-col text-right">
-                                      <span className="text-xs text-muted-foreground">Ke Cabang</span>
-                                      <span className="font-semibold text-indigo-700">
-                                          {cabang.find(c => c.id === (finalData.keCabangId))?.nama || '-'}
-                                      </span>
-                                  </div>
-                              </div>
+                               <div className='flex justify-between items-center mb-2'>
+                                   {(() => {
+                                       const isPermintaan = item.jenis === 'permintaan';
+                                       const sourceBranchId = isPermintaan ? finalData.keCabangId : (finalData.dariCabangId || requesterUser?.cabangId);
+                                       const destBranchId = isPermintaan ? (finalData.dariCabangId || requesterUser?.cabangId) : finalData.keCabangId;
+                                       
+                                       return (
+                                           <>
+                                               <div className="flex flex-col">
+                                                   <span className="text-xs text-muted-foreground">{isPermintaan ? 'Dari (Pemohon)' : 'Dari Cabang'}</span>
+                                                   <span className="font-semibold text-indigo-700">
+                                                       {cabang.find(c => c.id === destBranchId)?.nama || '-'}
+                                                   </span>
+                                               </div>
+                                               <ArrowLeftRight className="text-indigo-300 w-5 h-5 mx-2" />
+                                               <div className="flex flex-col text-right">
+                                                   <span className="text-xs text-muted-foreground">{isPermintaan ? 'Ke (Sumber Stok)' : 'Ke Cabang'}</span>
+                                                   <span className="font-semibold text-slate-700">
+                                                       {cabang.find(c => c.id === sourceBranchId)?.nama || (isPermintaan ? 'Pusat/Gudang' : 'Pusat/Gudang')}
+                                                   </span>
+                                               </div>
+                                           </>
+                                       );
+                                   })()}
+                               </div>
                               <div className='pt-2 border-t border-indigo-200 flex justify-between items-center'>
                                    <span className="text-xs text-muted-foreground">Diajukan Oleh:</span>
                                    <span className="text-sm font-medium text-foreground">
                                        {requesterUser?.nama || 'Unknown'}
                                    </span>
                               </div>
+                              {item.jenis === 'mutasi_stok' && (
+                                  <div className='pt-2 border-t border-indigo-200 flex justify-between items-center'>
+                                       <span className="text-xs text-muted-foreground font-semibold">Penerima Barang:</span>
+                                       <span className="text-sm font-bold text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded border border-indigo-100">
+                                           {users.find(u => u.id === item.targetUserId)?.nama || 'Unknown'}
+                                       </span>
+                                  </div>
+                              )}
                         </div>
                         <ApprovalMutasi data={finalData} barang={barang} satuan={satuan} />
                     </div>

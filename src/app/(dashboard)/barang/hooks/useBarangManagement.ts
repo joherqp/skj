@@ -119,12 +119,20 @@ export const useBarangManagement = () => {
 
                     const globalItem = { ...item, stok: consolidatedStock };
 
-                    if (filterStok.length > 0) {
-                        const health = getStockHealth(globalItem.id, globalItem.stok);
-                        if (filterStok.includes('aman') && health.status === 'aman') return globalItem;
-                        if (filterStok.includes('rendah') && health.status !== 'aman') return globalItem;
+                    // Stock Health Filtering
+                    const health = getStockHealth(globalItem.id, globalItem.stok);
+                    const matchesStockFilter = filterStok.length === 0 ||
+                        (filterStok.includes('aman') && health.status === 'aman') ||
+                        (filterStok.includes('rendah') && health.status !== 'aman') ||
+                        (filterStok.includes('kosong') && globalItem.stok <= 0);
+
+                    if (!matchesStockFilter) return null;
+
+                    // Hiding logic: Hide 0 stock if no search and no specific "kosong" filter
+                    if (search === '' && globalItem.stok <= 0 && !filterStok.includes('kosong')) {
                         return null;
                     }
+
                     return globalItem;
                 }).filter((item): item is (BarangType & { stok: number }) => item !== null);
             } else {
@@ -138,15 +146,17 @@ export const useBarangManagement = () => {
 
                     const branchItem = { ...item, stok: branchStock };
 
-                    if (filterStok.length > 0) {
-                        const health = getStockHealth(branchItem.id, branchItem.stok);
-                        if (filterStok.includes('aman') && health.status === 'aman') return branchItem;
-                        if (filterStok.includes('rendah') && health.status !== 'aman') return branchItem;
-                        return null;
-                    }
+                    // Stock Health Filtering
+                    const health = getStockHealth(branchItem.id, branchItem.stok);
+                    const matchesStockFilter = filterStok.length === 0 ||
+                        (filterStok.includes('aman') && health.status === 'aman') ||
+                        (filterStok.includes('rendah') && health.status !== 'aman') ||
+                        (filterStok.includes('kosong') && branchItem.stok <= 0);
 
-                    // Sembunyikan barang dengan stok kosong jika sedang filter cabang dan tidak sedang mencari
-                    if (search === '' && branchItem.stok <= 0) {
+                    if (!matchesStockFilter) return null;
+
+                    // Hiding logic: Hide 0 stock if no search and no specific "kosong" filter
+                    if (search === '' && branchItem.stok <= 0 && !filterStok.includes('kosong')) {
                         return null;
                     }
 
@@ -162,10 +172,17 @@ export const useBarangManagement = () => {
             const quantity = myStock ? myStock.jumlah : 0;
             const personalItem = { ...item, stok: quantity };
 
-            if (filterStok.length > 0) {
-                const health = getStockHealth(personalItem.id, personalItem.stok);
-                if (filterStok.includes('aman') && health.status === 'aman') return personalItem;
-                if (filterStok.includes('rendah') && health.status !== 'aman') return personalItem;
+            // Stock Health Filtering
+            const health = getStockHealth(personalItem.id, personalItem.stok);
+            const matchesStockFilter = filterStok.length === 0 ||
+                (filterStok.includes('aman') && health.status === 'aman') ||
+                (filterStok.includes('rendah') && health.status !== 'aman') ||
+                (filterStok.includes('kosong') && personalItem.stok <= 0);
+
+            if (!matchesStockFilter) return null;
+
+            // Hiding logic: Hide 0 stock if no search and no specific "kosong" filter
+            if (search === '' && personalItem.stok <= 0 && !filterStok.includes('kosong')) {
                 return null;
             }
 
@@ -173,7 +190,7 @@ export const useBarangManagement = () => {
         }).filter((item): item is (BarangType & { stok: number }) => item !== null)
             .sort((a, b) => (b.stok || 0) - (a.stok || 0));
 
-    }, [filteredBarang, stokPengguna, user, isAdminOrOwner, filterStok, filterCabang, users, cabang, getStockHealth]);
+    }, [filteredBarang, stokPengguna, user, isAdminOrOwner, filterStok, filterCabang, users, cabang, getStockHealth, search]);
 
     return {
         // State

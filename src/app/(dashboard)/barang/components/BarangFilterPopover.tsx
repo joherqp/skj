@@ -104,7 +104,7 @@ export function BarangFilterPopover({
                     <div className="space-y-3 pt-3 border-t">
                         <Label>Status Stok</Label>
                         <div className="space-y-2">
-                            {['Aman', 'Rendah'].map(status => (
+                            {['Aman', 'Rendah', 'Kosong'].map(status => (
                                 <div key={status} className="flex items-center space-x-2">
                                     <input
                                         type="checkbox"

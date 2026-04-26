@@ -492,10 +492,10 @@ export function DatabaseProvider({ children }: { children: ReactNode }) {
       console.error('Error loading data:', error);
     } finally {
       isFetchingRef.current = false;
-      setIsLoading(false); 
+      setIsLoading(false);
       setIsInitialized(true);
       isInitializedRef.current = true;
-      
+
       if (isManualRefresh || isInitialized) {
         setTimeout(() => setIsRefreshing(false), 1000);
       }
@@ -504,7 +504,7 @@ export function DatabaseProvider({ children }: { children: ReactNode }) {
 
   // Handle app visibility/focus to refresh data
   const lastRefreshRef = useRef<number>(Date.now());
-  
+
   useEffect(() => {
     const handleFocus = () => {
       const now = Date.now();
@@ -560,9 +560,9 @@ export function DatabaseProvider({ children }: { children: ReactNode }) {
 
       // Clean empty strings for UUID columns (PostgreSQL rejects "" for uuid)
       const uuidColumns = [
-        'referensi_id', 'diajukan_oleh', 'disetujui_oleh', 'target_cabang_id', 'target_user_id', 
-        'cabang_id', 'user_id', 'sales_id', 'pelanggan_id', 'barang_id', 'satuan_id', 'kategori_id', 
-        'rekening_bank_id', 'karyawan_id', 'area_id', 'dari_cabang_id', 'ke_cabang_id', 
+        'referensi_id', 'diajukan_oleh', 'disetujui_oleh', 'target_cabang_id', 'target_user_id',
+        'cabang_id', 'user_id', 'sales_id', 'pelanggan_id', 'barang_id', 'satuan_id', 'kategori_id',
+        'rekening_bank_id', 'karyawan_id', 'area_id', 'dari_cabang_id', 'ke_cabang_id',
         'user_account_id', 'penjualan_id', 'syarat_barang_id', 'bonus_produk_id', 'bonus_barang_id',
         'penerima_id', 'dibuat_oleh', 'updated_by', 'created_by', 'persetujuan_id', 'reimburse_id',
         'parent_id', 'kategori_pelanggan_id', 'rekening_id'
@@ -636,9 +636,9 @@ export function DatabaseProvider({ children }: { children: ReactNode }) {
 
       // Clean empty strings for UUID columns (PostgreSQL rejects "" for uuid)
       const uuidColumns = [
-        'referensi_id', 'diajukan_oleh', 'disetujui_oleh', 'target_cabang_id', 'target_user_id', 
-        'cabang_id', 'user_id', 'sales_id', 'pelanggan_id', 'barang_id', 'satuan_id', 'kategori_id', 
-        'rekening_bank_id', 'karyawan_id', 'area_id', 'dari_cabang_id', 'ke_cabang_id', 
+        'referensi_id', 'diajukan_oleh', 'disetujui_oleh', 'target_cabang_id', 'target_user_id',
+        'cabang_id', 'user_id', 'sales_id', 'pelanggan_id', 'barang_id', 'satuan_id', 'kategori_id',
+        'rekening_bank_id', 'karyawan_id', 'area_id', 'dari_cabang_id', 'ke_cabang_id',
         'user_account_id', 'penjualan_id', 'syarat_barang_id', 'bonus_produk_id', 'bonus_barang_id',
         'penerima_id', 'dibuat_oleh', 'updated_by', 'created_by', 'persetujuan_id', 'reimburse_id',
         'parent_id', 'kategori_pelanggan_id', 'rekening_id'
@@ -1203,7 +1203,7 @@ export function DatabaseProvider({ children }: { children: ReactNode }) {
     mergePelanggan: async (targetId: string, sourceId: string) => {
       try {
         setIsLoading(true);
-        
+
         // 1. Update Penjualan
         const { error: err1 } = await supabase
           .schema(dbMode)
@@ -1231,22 +1231,22 @@ export function DatabaseProvider({ children }: { children: ReactNode }) {
         // 4. Update Target Pelanggan (Merge debt/credits)
         const target = pelanggan.find(p => p.id === targetId);
         const source = pelanggan.find(p => p.id === sourceId);
-        
+
         if (target && source) {
-           const newSisaKredit = (target.sisaKredit || 0) + (source.sisaKredit || 0);
-           const { error: err4 } = await supabase
-             .schema(dbMode)
-             .from('pelanggan')
-             .update({ sisa_kredit: newSisaKredit })
-             .eq('id', targetId);
-           if (err4) throw err4;
+          const newSisaKredit = (target.sisaKredit || 0) + (source.sisaKredit || 0);
+          const { error: err4 } = await supabase
+            .schema(dbMode)
+            .from('pelanggan')
+            .update({ sisa_kredit: newSisaKredit })
+            .eq('id', targetId);
+          if (err4) throw err4;
         }
 
         // 5. Delete Source Pelanggan
         const { error: err5 } = await supabase
           .schema(dbMode)
           .from('pelanggan')
-          .delete() 
+          .delete()
           .eq('id', sourceId);
         if (err5) throw err5;
 

@@ -85,7 +85,7 @@ export function SettingsCrud<T extends CrudItem>({
     e.preventDefault();
     const result = await onSave({ ...formData, id: editingId || "" } as T);
     if (result === false) return;
-    
+
     setIsAdding(false);
     setEditingId(null);
     toast.success("Data berhasil disimpan");
@@ -175,17 +175,22 @@ export function SettingsCrud<T extends CrudItem>({
                       key={item.id}
                       className="flex items-center justify-between p-3 border rounded-lg bg-card hover:bg-muted/30 transition-colors animate-slide-up"
                     >
-                      <div className="space-y-1">
+                      <div className="space-y-1 flex-1">
                         <div className="font-medium text-sm">
                           {columns[0].render
                             ? columns[0].render(item)
                             : (item[columns[0].key] as React.ReactNode)}
                         </div>
-                        {columns.length > 1 && (
-                          <div className="text-xs text-muted-foreground">
-                            {String(item[columns[1].key])}
-                          </div>
-                        )}
+                        <div className="flex flex-wrap gap-x-4 gap-y-1">
+                          {columns.slice(1).map((col, idx) => (
+                            <div key={idx} className="text-xs text-muted-foreground flex items-center gap-1">
+                              <span className="font-medium text-[10px] uppercase text-muted-foreground/70 tracking-wider">{col.label}:</span>
+                              <span className="text-foreground/80">
+                                {col.render ? col.render(item) : String(item[col.key] || '-')}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
                       </div>
                       <div className="flex gap-2">
                         <Button

@@ -194,7 +194,12 @@ export default function Persetujuan() {
             // If viewMode is 'self', we only care about SPECIFIC targets (p.targetUserId)
             // So if targetUserId is null, and viewMode is 'self', we skip role/branch targets
             if (viewMode === 'me') {
-                isTarget = false;
+                // In 'Me' mode, we only show items if they are specifically targeted to our role OR branch
+                const isSuperUser = user?.roles.includes('admin') || user?.roles.includes('owner') || user?.roles.includes('manager');
+                const roleMatch = p.targetRole && user?.roles.includes(p.targetRole);
+                const branchMatch = p.targetCabangId && p.targetCabangId === user?.cabangId;
+                
+                if (!roleMatch && !branchMatch && !isSuperUser) isTarget = false;
             } else {
                 // 2. Role Target
                 const isSuperUser = user?.roles.includes('admin') || user?.roles.includes('owner') || user?.roles.includes('manager');
@@ -218,10 +223,14 @@ export default function Persetujuan() {
         // 1. My Requests (All, including Pending - for Tracking)
         if (p.diajukanOleh === user?.id) return true;
 
-        // In 'me' mode, ONLY show my requests
+        // 2. Items I approved or rejected
+        if (p.disetujuiOleh === user?.id || (p as any).ditolakOleh === user?.id) return true;
+
+        // In 'me' mode, we already showed "My Requests" and "My Actions" above.
+        // If it's still 'me' mode, we don't show general targeted items.
         if (viewMode === 'me') return false;
 
-        // 2. Items I was targeted for AND are processed (Approved/Rejected)
+        // 3. Items I was targeted for AND are processed (Approved/Rejected)
         // (Inbox Items that are finished)
         if (p.status === 'pending') return false; // If pending and not mine, it's in Inbox, not History
 
@@ -316,7 +325,7 @@ export default function Persetujuan() {
                                         pelanggan={pelanggan}
                                         kategoriPelanggan={kategoriPelanggan}
                                         reimburse={reimburse}
-                                        mutasiData={['mutasi', 'mutasi_stok'].includes(item.jenis) ? mutasiBarang.find(m => m.id === item.referensiId) as unknown as PersetujuanPayload : undefined}
+                                        mutasiData={['mutasi', 'mutasi_stok'].includes(item.jenis) ? (mutasiBarang || []).find(m => m.id === item.referensiId) as unknown as PersetujuanPayload : undefined}
                                         onViewDetail={handleViewDetail}
                                     />
                                 ))}
