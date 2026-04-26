@@ -1,18 +1,17 @@
 'use client';
 import { ReactNode, useEffect, useState } from "react";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname, useRouter, notFound } from "next/navigation";
 
 import { cn } from "@/lib/utils";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { Sidebar } from "./Sidebar";
 import { BottomNav } from "./BottomNav";
 import { Header } from "./Header";
-
 import { ConnectionIndicator } from "@/components/shared/ConnectionIndicator";
-
 import { LocationTracker } from '@/components/features/components/LocationTracker';
 import { useAuth } from "@/contexts/AuthContext";
 import { useDatabase } from "@/contexts/DatabaseContext";
+import { canAccessPath } from "@/lib/permissions";
 
 interface MainLayoutProps {
   children: ReactNode;
@@ -26,7 +25,7 @@ export const MainLayout = ({ children, title, className }: MainLayoutProps) => {
   const [mounted, setMounted] = useState(false);
   const router = useRouter();
   const pathname = usePathname();
-  const { isAuthenticated, isLoading: isAuthLoading } = useAuth();
+  const { user, isAuthenticated, isLoading: isAuthLoading } = useAuth();
   const { isLoading: isDbLoading, isInitialized: isDbInitialized } = useDatabase();
 
   useEffect(() => {
@@ -41,7 +40,13 @@ export const MainLayout = ({ children, title, className }: MainLayoutProps) => {
     }
   }, [isAuthenticated, isAuthLoading, pathname, router]);
 
+  // Check role-based access
+  const isAuthorized = !isAuthenticated || canAccessPath(pathname, user?.roles || []);
+
   if (!isAuthLoading && !isAuthenticated && pathname !== '/login') return null;
+  if (mounted && isAuthenticated && !isAuthorized) {
+    notFound();
+  }
 
   const showLoading = isAuthLoading || (isAuthenticated && isDbLoading && !isDbInitialized);
 

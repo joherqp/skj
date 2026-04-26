@@ -7,7 +7,7 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import { toast } from 'sonner';
-import { ShoppingCart, MapPin, Save, ArrowLeft, Plus, Trash2, Locate, Search, Check, ChevronsUpDown, AlertTriangle, Minus, Loader2, X, Tag, CalendarClock } from 'lucide-react';
+import { ShoppingCart, MapPin, Save, ArrowLeft, Plus, Trash2, Locate, Search, Check, ChevronsUpDown, AlertTriangle, Minus, Loader2, X, Tag, CalendarClock, Gift, Info } from 'lucide-react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useDatabase } from '@/contexts/DatabaseContext';
 import { useAuth } from '@/contexts/AuthContext';
@@ -271,10 +271,11 @@ export default function TambahPenjualan() {
         item.hargaTier = priceResult.tier; // Snapshot applied tier
         item.totalQty = item.jumlah * (item.konversi || 1); // Calculate Total Qty
 
-        const promoData = getPromo(item.barangId, item.harga, item.jumlah, item.konversi, totalProductQtyBase, item.selectedPromoId, perNotaQuantities);
+        const promoData = getPromo(item.barangId, item.harga, item.jumlah, item.konversi, formData.pelangganId, totalProductQtyBase, item.selectedPromoId, perNotaQuantities);
         item.diskon = promoData.discount;
         item.availablePromos = promoData.availablePromos;
         item.promoId = promoData.appliedPromoId; // Track which promo is currently active
+        item.earnedReward = promoData.earnedReward; // Store Event Reward
         // Note: we don't necessarily overwrite selectedPromoId here, but we could track applied
 
         return item;
@@ -297,7 +298,7 @@ export default function TambahPenjualan() {
             if (start > now || (end && end < now)) return false;
             if (p.cabangId && p.cabangId !== user?.cabangId) return false;
 
-            return p.metodeKelipatan === 'per_nota' || p.metode_kelipatan === 'per_nota';
+            return p.metodeKelipatan === 'per_nota' || p.metodeKelipatan === 'periode_promo' || p.metode_kelipatan === 'per_nota';
         }) || [];
 
         activePerNotaPromos.forEach(p => {
@@ -310,8 +311,20 @@ export default function TambahPenjualan() {
         });
 
         // 1. Recalculate Prices & Discounts for Manual Items
+        const rewardProcessed = new Set<string>(); // Prevent double counting rewards
         const updatedManualItems = manualItems.map(item => {
-            return resolveItemDetails({ ...item }, manualItems, perNotaQuantities);
+            const updated = resolveItemDetails({ ...item }, manualItems, perNotaQuantities);
+            
+            // Deduplicate Earned Reward (Event)
+            if (updated.earnedReward && updated.promoId) {
+                if (rewardProcessed.has(updated.promoId)) {
+                    updated.earnedReward = undefined;
+                } else {
+                    rewardProcessed.add(updated.promoId);
+                }
+            }
+            
+            return updated;
         });
 
         const fullCart: CartItem[] = [];
@@ -327,14 +340,15 @@ export default function TambahPenjualan() {
                 .filter(c => c.barangId === item.barangId)
                 .reduce((sum, c) => sum + (c.jumlah * (c.konversi || 1)), 0);
 
-            const promoData = getPromo(item.barangId, item.harga, 1, 1, totalProductQtyBase, item.selectedPromoId, perNotaQuantities);
+            const promoData = getPromo(item.barangId, item.harga, 1, 1, formData.pelangganId, totalProductQtyBase, item.selectedPromoId, perNotaQuantities);
 
             if (promoData.bonus) {
-                // Determine if this is a per_nota promo
-                const isPerNota = promoData.availablePromos.find(p => p.id === promoData.bonus!.promoId)?.metodeKelipatan === 'per_nota';
+                // Determine if this is an aggregated promo
+                const promoObj = promoData.availablePromos.find(p => p.id === promoData.bonus!.promoId);
+                const isAggregated = promoObj?.metodeKelipatan === 'per_nota' || promoObj?.metodeKelipatan === 'periode_promo';
 
                 let shouldProcess = false;
-                if (isPerNota) {
+                if (isAggregated) {
                     if (!bonusPromoProcessed.has(promoData.bonus.promoId)) {
                         bonusPromoProcessed.add(promoData.bonus.promoId);
                         shouldProcess = true;
@@ -834,7 +848,8 @@ export default function TambahPenjualan() {
                 diskon: c.diskon,
                 subtotal: c.harga * c.jumlah - c.diskon,
                 promoId: c.promoId,
-                isBonus: c.isBonus
+                isBonus: c.isBonus,
+                earnedReward: c.earnedReward
             })),
             subtotal: calculateGross(),
             diskon: calculateTotalDiscount(),
@@ -1372,14 +1387,62 @@ export default function TambahPenjualan() {
                                                                 parts.push(`Pot. -${formatRupiah(totalDiscount)}`);
                                                             }
 
-                                                            if (parts.length === 0) return null;
+                                                            // 3. Total Rewards (Event)
+                                                            const rewardMap: Record<string, { hadiah: string, qty: number, snk?: string }> = {};
+                                                            items.forEach(r => {
+                                                                if (r.item.earnedReward) {
+                                                                    const key = r.item.earnedReward.hadiah;
+                                                                    if (!rewardMap[key]) {
+                                                                        rewardMap[key] = { hadiah: r.item.earnedReward.hadiah, qty: 0, snk: r.item.earnedReward.snk };
+                                                                    }
+                                                                    rewardMap[key].qty += r.item.earnedReward.qty;
+                                                                }
+                                                            });
+
+                                                            const rewards = Object.values(rewardMap);
+
+                                                            if (parts.length === 0 && rewards.length === 0) return null;
 
                                                             return (
-                                                                <div className="text-[11px] flex items-center gap-1 text-muted-foreground">
-                                                                    <span className="min-w-[40px]">Promo:</span>
-                                                                    <span className="font-bold text-green-600 line-clamp-1">
-                                                                        {parts.join(' + ')}
-                                                                    </span>
+                                                                <div className="text-[10px] space-y-0.5 mt-1">
+                                                                    {parts.length > 0 && (
+                                                                        <div className="flex items-center gap-1 text-muted-foreground">
+                                                                            <span className="min-w-[40px]">Diskon:</span>
+                                                                            <span className="font-bold text-green-600 line-clamp-1">
+                                                                                {parts.join(' + ')}
+                                                                            </span>
+                                                                        </div>
+                                                                    )}
+                                                                    {rewards.map((r, i) => (
+                                                                        <div key={i} className="flex items-center gap-1 text-muted-foreground">
+                                                                            <span className="min-w-[40px]">Hadiah:</span>
+                                                                            <div className="flex items-center gap-1">
+                                                                                <span className="font-bold text-purple-600">
+                                                                                    {r.hadiah} ({r.qty}x)
+                                                                                </span>
+                                                                                {r.snk && (
+                                                                                    <Popover>
+                                                                                        <PopoverTrigger asChild>
+                                                                                            <button type="button" className="text-purple-400 hover:text-purple-600">
+                                                                                                <Info className="w-3 h-3" />
+                                                                                            </button>
+                                                                                        </PopoverTrigger>
+                                                                                        <PopoverContent className="w-64 p-3 bg-purple-50 border-purple-100" side="top">
+                                                                                            <div className="space-y-1.5">
+                                                                                                <div className="flex items-center gap-1.5 text-purple-700 font-bold text-xs">
+                                                                                                    <Gift className="w-3.5 h-3.5" />
+                                                                                                    <span>Syarat & Ketentuan Hadiah</span>
+                                                                                                </div>
+                                                                                                <p className="text-[11px] leading-relaxed text-purple-600/90 whitespace-pre-wrap">
+                                                                                                    {r.snk}
+                                                                                                </p>
+                                                                                            </div>
+                                                                                        </PopoverContent>
+                                                                                    </Popover>
+                                                                                )}
+                                                                            </div>
+                                                                        </div>
+                                                                    ))}
                                                                 </div>
                                                             );
                                                         })()}
@@ -1727,6 +1790,21 @@ export default function TambahPenjualan() {
                                                 <div className="text-[10px] text-muted-foreground">
                                                     {item.jumlah} {unit?.nama} x {item.harga > 0 ? formatRupiah(item.harga) : 'Free'}
                                                 </div>
+                                                {item.earnedReward && (
+                                                    <div className="text-[10px] bg-purple-50 p-1.5 rounded mt-1 border border-purple-100/50">
+                                                        <div className="flex items-center gap-1.5 text-purple-700 font-bold">
+                                                            <Gift className="w-3 h-3" />
+                                                            <span>Hadiah: {item.earnedReward.hadiah} ({item.earnedReward.qty}x)</span>
+                                                        </div>
+                                                        {item.earnedReward.snk && (
+                                                            <div className="mt-1 pl-4 border-l border-purple-200">
+                                                                <p className="text-[9px] font-medium text-purple-500/80 leading-tight">
+                                                                    S&K: {item.earnedReward.snk}
+                                                                </p>
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                )}
                                             </div>
                                             <div className="font-mono">
                                                 {formatRupiah(item.harga * item.jumlah - (item.diskon || 0))}

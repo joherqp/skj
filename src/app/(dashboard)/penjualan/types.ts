@@ -19,5 +19,11 @@ export interface CartItem {
     };
     // NEW: Flexible Promo Selection
     selectedPromoId?: string; // 'NONE' | uuid | undefined (Auto)
-    availablePromos?: { id: string; nama: string; tipe: string; nilai: number; bonusProdukIds?: string[]; isBest?: boolean }[]; 
+    availablePromos?: { id: string; nama: string; tipe: string; nilai: number; bonusProdukIds?: string[]; isBest?: boolean; metodeKelipatan?: 'per_item' | 'per_nota' | 'periode_promo'; hadiah?: string; snk?: string }[]; 
+    earnedReward?: {
+        nama: string;
+        hadiah: string;
+        qty: number;
+        snk?: string;
+    };
 }

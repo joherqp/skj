@@ -551,36 +551,32 @@ export const useApprovalAction = () => {
                         const payload = data as PersetujuanPayload;
                         const { isNew, ...promoData } = payload as Record<string, unknown>;
 
-                        if (isNew || !refId || (typeof refId === 'string' && refId.startsWith('new-'))) {
-                            // CREATE NEW
-                            // Map isActive (frontend) to aktif (db), maxApply to max_apply
-                            const { isActive, maxApply, minQty, isKelipatan, tanggalMulai, tanggalBerakhir, targetProdukIds, ...rest } = promoData;
-                            const finalPayload = {
-                                ...rest,
-                                aktif: (isActive !== undefined ? isActive : true) as unknown,
-                                max_apply: maxApply as unknown,
-                                min_qty: minQty as unknown,
-                                is_kelipatan: isKelipatan as unknown,
-                                berlaku_mulai: tanggalMulai ? new Date(tanggalMulai as string) : undefined as unknown,
-                                berlaku_sampai: tanggalBerakhir ? new Date(tanggalBerakhir as string) : undefined as unknown,
-                                target_produk_ids: targetProdukIds as unknown
-                            };
+                        // Map frontend fields to DB fields
+                        // Note: DatabaseContext.tsx's createItem/updateItem will call toSnakeCase
+                        // so camelCase keys like minQty, isKelipatan, etc. will be handled automatically.
+                        // We only need to map the "special" ones that don't follow standard naming or need conversion.
+                        
+                        const ensureDate = (val: any) => {
+                            if (!val) return undefined;
+                            const d = new Date(val);
+                            return isNaN(d.getTime()) ? undefined : d;
+                        };
 
+                        const finalPayload = {
+                            ...promoData,
+                            aktif: (promoData.isActive !== undefined ? promoData.isActive : (promoData.aktif ?? true)),
+                            berlaku_mulai: ensureDate(promoData.tanggalMulai || promoData.berlaku_mulai),
+                            berlaku_sampai: ensureDate(promoData.tanggalBerakhir || promoData.berlaku_sampai),
+                        };
+
+                        // Cleanup frontend-only keys to avoid duplication/conflicts
+                        delete (finalPayload as any).isActive;
+                        delete (finalPayload as any).tanggalMulai;
+                        delete (finalPayload as any).tanggalBerakhir;
+
+                        if (isNew || !refId || (typeof refId === 'string' && refId.startsWith('new-'))) {
                             await addPromo(finalPayload as unknown as import('@/types').Promo);
                         } else {
-                            // UPDATE EXISTING
-                            const { isActive, maxApply, minQty, isKelipatan, tanggalMulai, tanggalBerakhir, targetProdukIds, ...rest } = promoData;
-                            const finalPayload = {
-                                ...rest,
-                                aktif: (isActive !== undefined ? isActive : true) as unknown,
-                                max_apply: maxApply as unknown,
-                                min_qty: minQty as unknown,
-                                is_kelipatan: isKelipatan as unknown,
-                                berlaku_mulai: tanggalMulai ? new Date(tanggalMulai as string) : undefined as unknown,
-                                berlaku_sampai: tanggalBerakhir ? new Date(tanggalBerakhir as string) : undefined as unknown,
-                                target_produk_ids: targetProdukIds as unknown
-                            };
-
                             await updatePromo(refId, finalPayload as unknown as import('@/types').Promo);
                         }
                         toast.success('Promo disetujui & diterapkan');
@@ -825,9 +821,12 @@ export const useApprovalAction = () => {
                     break;
                 }
             }
-        } catch (err) {
-            console.error("Error executing approval logic", err);
-            toast.error("Gagal memproses logika bisnis");
+        } catch (err: any) {
+            console.error("Error executing approval logic:", err.message || err);
+            if (err.details) console.error("Error details:", err.details);
+            if (err.hint) console.error("Error hint:", err.hint);
+            
+            toast.error(`Gagal memproses logika bisnis: ${err.message || "Terjadi kesalahan pada sistem"}`);
             return { success: false, reason: 'error_processing' }; // Don't proceed to notification
         }
 

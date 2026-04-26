@@ -485,6 +485,20 @@ export function ApprovalCard({
                 return (
                     <div className="mt-2 text-sm border border-orange-200 rounded-lg w-full bg-orange-50/50 p-3">
                         <p className="font-semibold text-orange-800 text-xs uppercase tracking-wide mb-2">Rincian Perubahan Harga</p>
+                        
+                        {/* Branch List */}
+                        <div className="mb-2 flex flex-wrap gap-1">
+                            {d.cabangIds && d.cabangIds.length > 0 ? (
+                                d.cabangIds.map(id => (
+                                    <Badge key={id} variant="outline" className="text-[9px] px-1 py-0 bg-orange-100/50 border-orange-200">
+                                        {cabang.find(c => c.id === id)?.nama || id}
+                                    </Badge>
+                                ))
+                            ) : (
+                                <Badge variant="outline" className="text-[9px] px-1 py-0">Global</Badge>
+                            )}
+                        </div>
+
                         <div className="flex justify-between items-center mb-1">
                             <span className="font-medium">{barang.find(b => b.id === d.barangId)?.nama || d.barangId}</span>
                             <Badge variant="outline" className="text-[10px]">{getUnitName(d.satuanId)}</Badge>
@@ -492,7 +506,7 @@ export function ApprovalCard({
                         <div className="flex items-center gap-2 mt-2">
                             <div className="flex-1">
                                 <p className="text-[10px] text-muted-foreground">Harga Lama</p>
-                                <p className="font-mono text-muted-foreground line-through">
+                                <p className="font-mono text-muted-foreground line-through text-xs">
                                     {d.hargaLama ? formatRupiah(d.hargaLama) : '-'}
                                 </p>
                             </div>
@@ -517,23 +531,42 @@ export function ApprovalCard({
                     <div className="mt-2 text-sm border border-purple-200 rounded-lg w-full bg-purple-50/50 p-3">
                         <div className="flex justify-between items-start mb-2">
                             <div>
-                                <p className="font-semibold text-purple-900">{d.nama}</p>
-                                <p className="text-xs font-mono text-purple-700 bg-purple-100 px-1 rounded inline-block mt-0.5">{d.kode}</p>
+                                <p className="font-semibold text-purple-900 leading-tight">{d.nama}</p>
+                                <p className="text-[10px] font-mono text-purple-700 bg-purple-100 px-1 rounded inline-block mt-1">{d.kode}</p>
                             </div>
-                            <Badge variant={d.isActive ? 'success' : 'secondary'} className="text-[10px]">
+                            <Badge variant={d.isActive ? 'success' : 'secondary'} className="text-[9px] px-1 py-0">
                                 {d.isActive ? 'Aktif' : 'Non-Aktif'}
                             </Badge>
                         </div>
+                        
+                        {/* Branch List */}
+                        <div className="mb-2 flex flex-wrap gap-1">
+                            {d.cabangIds && d.cabangIds.length > 0 ? (
+                                d.cabangIds.slice(0, 3).map(id => (
+                                    <Badge key={id} variant="outline" className="text-[9px] px-1 py-0 bg-purple-100/50 border-purple-200">
+                                        {cabang.find(c => c.id === id)?.nama || id}
+                                    </Badge>
+                                ))
+                            ) : (
+                                <Badge variant="outline" className="text-[9px] px-1 py-0">Global</Badge>
+                            )}
+                            {d.cabangIds && d.cabangIds.length > 3 && (
+                                <span className="text-[9px] text-muted-foreground">+{d.cabangIds.length - 3}</span>
+                            )}
+                        </div>
+
                         <div className="flex flex-col gap-1 text-xs mb-2">
                             <div className="flex items-center gap-2">
-                                <span className="capitalize font-medium text-purple-800 bg-purple-100/50 px-2 py-0.5 rounded">{d.tipe}</span>
+                                <span className="capitalize font-medium text-purple-800 bg-purple-100/50 px-2 py-0.5 rounded text-[10px]">{d.tipe?.replace(/_/g, ' ')}</span>
                                 <ArrowRight className="w-3 h-3 text-purple-300" />
                                 <span className="font-bold text-purple-700">
-                                    {['nomimal', 'nominal'].includes(d.tipe || '')
-                                        ? formatRupiah(d.nilai || 0)
-                                        : d.tipe === 'persen'
-                                            ? `${d.nilai}%`
-                                            : `Free Bonus`}
+                                    {d.tipe === 'event'
+                                        ? `Event: ${d.tipeDiskon === 'persen' ? d.nilai + '%' : formatRupiah(Number(d.nilai))}`
+                                        : ['nomimal', 'nominal'].includes(d.tipe || '')
+                                            ? formatRupiah(d.nilai || 0)
+                                            : d.tipe === 'persen'
+                                                ? `${d.nilai}%`
+                                                : `Free Bonus`}
                                 </span>
                             </div>
                         </div>
@@ -544,16 +577,6 @@ export function ApprovalCard({
                                     Target: {d.scope === 'all' ? 'Semua Produk' : `${d.targetProdukIds?.length || 0} Produk Terpilih`}
                                 </span>
                             </div>
-                            {(d.tanggalMulai || d.tanggalBerakhir) && (
-                                <div className="flex items-center gap-1">
-                                    <Calendar className="w-3 h-3" />
-                                    <span>
-                                        {d.tanggalMulai ? new Date(d.tanggalMulai).toLocaleDateString('id-ID') : 'Now'}
-                                        {' - '}
-                                        {d.tanggalBerakhir ? new Date(d.tanggalBerakhir).toLocaleDateString('id-ID') : 'Seterusnya'}
-                                    </span>
-                                </div>
-                            )}
                         </div>
                     </div>
                 );

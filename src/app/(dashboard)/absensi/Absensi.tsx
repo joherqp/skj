@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { useAuth } from '@/contexts/AuthContext';
 import { useDatabase } from '@/contexts/DatabaseContext';
-import { Clock, MapPin, CheckCircle, XCircle, History, Navigation, AlertTriangle, Store } from 'lucide-react';
+import { Clock, MapPin, CheckCircle, XCircle, History, Navigation, AlertTriangle, Store, Briefcase, Truck, FileText } from 'lucide-react';
 import { formatTanggal, formatWaktu } from '@/lib/utils';
 import { getCurrentLocation } from '@/lib/gps';
 import { toast } from 'sonner';
@@ -59,6 +59,7 @@ export default function Absensi() {
   const [checkInStatus, setCheckInStatus] = useState<'masuk' | 'izin'>('masuk');
   const [checkOutStatus, setCheckOutStatus] = useState<'pulang' | 'istirahat' | 'izin'>('pulang');
   const [reason, setReason] = useState('');
+  const [attendanceNote, setAttendanceNote] = useState('');
   const [displayLimit, setDisplayLimit] = useState(10);
 
   // Kunjungan States
@@ -124,6 +125,7 @@ export default function Absensi() {
     }
     setCheckInStatus('masuk');
     setReason('');
+    setAttendanceNote('');
     setShowCheckInDialog(true);
   };
 
@@ -180,13 +182,18 @@ export default function Absensi() {
         }
       }
 
+      let combinedKeterangan = reason;
+      if (checkInStatus === 'masuk') {
+        combinedKeterangan = attendanceNote.trim() || reason;
+      }
+
       await addAbsensi({
         userId: user.id,
         tanggal: new Date(),
         checkIn: new Date(),
         lokasiCheckIn: currentLocation,
         status: checkInStatus === 'masuk' ? 'hadir' : 'izin', // Map to DB enum
-        keterangan: reason
+        keterangan: combinedKeterangan || undefined
       });
       toast.success('Check-in berhasil!');
       setShowCheckInDialog(false);
@@ -437,13 +444,32 @@ export default function Absensi() {
                 </div>
               </RadioGroup>
 
+              {checkInStatus === 'masuk' && (
+                <div className="space-y-2 animate-in slide-in-from-top-2 duration-300">
+                  <Label className="text-xs font-semibold text-muted-foreground flex items-center gap-2">
+                    <FileText className="w-3 h-3" />
+                    Tugas & Perjalanan (Opsional)
+                  </Label>
+                  <Textarea
+                    placeholder="Contoh: Nganvas/kirim barang ke Tanah Baru, Bogor..."
+                    value={attendanceNote}
+                    onChange={(e) => setAttendanceNote(e.target.value)}
+                    className="bg-muted/30"
+                  />
+                </div>
+              )}
+
               {checkInStatus === 'izin' && (
-                <div className="space-y-2">
-                  <Label>Alasan Izin</Label>
+                <div className="space-y-2 animate-in slide-in-from-top-2 duration-300">
+                  <Label className="text-xs font-semibold text-muted-foreground flex items-center gap-2">
+                    <FileText className="w-3 h-3" />
+                    Alasan Izin
+                  </Label>
                   <Textarea
                     placeholder="Contoh: Sakit demam, Izin urusan keluarga..."
                     value={reason}
                     onChange={(e) => setReason(e.target.value)}
+                    className="bg-muted/30"
                   />
                 </div>
               )}

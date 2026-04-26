@@ -1,7 +1,7 @@
 'use client';
 import { useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'; // Check if CardDescription needed
-import { BarChart, Package, Calendar, DollarSign, FileText, CalendarDays, Target, BarChart3 } from 'lucide-react';
+import { BarChart, Package, Calendar, DollarSign, FileText, CalendarDays, Target, BarChart3, Gift } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
 import { UserRole } from '@/types';
@@ -71,6 +71,14 @@ export default function Laporan() {
       path: '/laporan/jadwal-harga',
       color: 'text-indigo-600',
       bg: 'bg-indigo-100'
+    },
+    {
+      title: 'Capaian Promo Event',
+      description: 'Pantau akumulasi hadiah event pelanggan',
+      icon: Gift,
+      path: '/laporan/capaian-promo',
+      color: 'text-rose-600',
+      bg: 'bg-rose-100'
     },
     {
       title: 'Analisa Bisnis',

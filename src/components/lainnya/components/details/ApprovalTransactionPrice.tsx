@@ -1,5 +1,5 @@
 import { Badge } from '@/components/ui/badge';
-import { PersetujuanPayload, Barang, Satuan, Penjualan, PenjualanItem } from '@/types';
+import { PersetujuanPayload, Barang, Satuan, Penjualan, PenjualanItem, Cabang } from '@/types';
 import { formatRupiah } from '@/lib/utils';
 import { Tag, XCircle } from 'lucide-react';
 
@@ -58,11 +58,13 @@ export function ApprovalTransaction({
 export function ApprovalPrice({ 
     data, 
     barang, 
-    satuan 
+    satuan,
+    cabang
 }: { 
     data: PersetujuanPayload; 
     barang: Barang[]; 
     satuan: Satuan[];
+    cabang: Cabang[];
 }) {
     const getUnitName = (id?: string) => satuan.find(s => s.id === id)?.nama || '';
     
@@ -72,6 +74,22 @@ export function ApprovalPrice({
                 <h4 className="font-semibold text-orange-900 mb-3 flex items-center gap-2">
                     <Tag className="w-5 h-5" /> Detail Perubahan Harga
                 </h4>
+
+                {/* Branch Selection List */}
+                <div className="mb-4 p-3 bg-white/50 rounded-md border border-orange-100">
+                    <p className="text-[10px] text-muted-foreground uppercase font-bold mb-1">Berlaku di Cabang:</p>
+                    <div className="flex flex-wrap gap-1">
+                        {data.cabangIds && data.cabangIds.length > 0 ? (
+                            data.cabangIds.map(id => (
+                                <Badge key={id} variant="secondary" className="text-[10px] bg-orange-100 text-orange-700">
+                                    {cabang.find(c => c.id === id)?.nama || id}
+                                </Badge>
+                            ))
+                        ) : (
+                            <Badge variant="secondary" className="text-[10px]">Semua Cabang (Global)</Badge>
+                        )}
+                    </div>
+                </div>
                 
                 <div className="flex justify-between items-center mb-4 p-3 bg-white/50 rounded-md">
                      <div>

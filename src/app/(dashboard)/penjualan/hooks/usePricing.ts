@@ -3,7 +3,7 @@ import { useDatabase } from '@/contexts/DatabaseContext';
 import { useAuth } from '@/contexts/AuthContext';
 
 export function usePricing() {
-    const { pelanggan, barang, harga, promo } = useDatabase();
+    const { pelanggan, barang, harga, promo, penjualan } = useDatabase();
     const { user } = useAuth();
 
     const getPriceDetailed = (
@@ -26,9 +26,13 @@ export function usePricing() {
                 h.status === 'disetujui' &&
                 new Date(h.tanggalEfektif) <= new Date() &&
                 (!h.kategoriPelangganIds || (selectedCustomer && h.kategoriPelangganIds.includes(selectedCustomer.kategoriId))) &&
-                (!h.cabangId || h.cabangId === user?.cabangId)
+                ((!h.cabangId && (!h.cabangIds || h.cabangIds.length === 0)) || h.cabangId === user?.cabangId || (h.cabangIds && h.cabangIds.includes(user?.cabangId || '')))
             );
-            rules.sort((a, b) => (b.cabangId ? 1 : 0) - (a.cabangId ? 1 : 0));
+            rules.sort((a, b) => {
+                const aIsBranch = a.cabangId || (a.cabangIds && a.cabangIds.length > 0);
+                const bIsBranch = b.cabangId || (b.cabangIds && b.cabangIds.length > 0);
+                return (bIsBranch ? 1 : 0) - (aIsBranch ? 1 : 0);
+            });
             return rules[0];
         };
 
@@ -67,6 +71,7 @@ export function usePricing() {
         price: number,
         qty: number,
         conversion: number,
+        customerId: string,
         productQtyBase?: number,
         selectedPromoId?: string,
         perNotaQuantities?: Map<string, number>
@@ -78,8 +83,14 @@ export function usePricing() {
             mechanism: 'random' | 'single' | 'mix',
             promoId: string
         },
-        availablePromos: { id: string; nama: string; tipe: string; nilai: number; bonusProdukIds?: string[]; isBest?: boolean; metodeKelipatan?: 'per_item' | 'per_nota' }[],
-        appliedPromoId?: string
+        availablePromos: { id: string; nama: string; tipe: string; nilai: number; bonusProdukIds?: string[]; isBest?: boolean; metodeKelipatan?: 'per_item' | 'per_nota' | 'periode_promo'; hadiah?: string; snk?: string }[],
+        appliedPromoId?: string,
+        earnedReward?: {
+            nama: string,
+            hadiah: string,
+            qty: number,
+            snk?: string
+        }
     } => {
         const now = new Date();
         const totalInBase = productQtyBase !== undefined ? productQtyBase : (qty * conversion);
@@ -103,10 +114,16 @@ export function usePricing() {
 
             if (start > now || (end && end < now)) return false;
             if (p.scope === 'selected_products' && p.targetProdukIds && !p.targetProdukIds.includes(productId)) return false;
-            if (p.cabangId && p.cabangId !== user?.cabangId) return false;
+            
+            const isGlobal = (!p.cabangId || p.cabangId === 'all') && (!p.cabangIds || p.cabangIds.length === 0);
+            if (!isGlobal) {
+                const matchSingle = p.cabangId && p.cabangId === user?.cabangId;
+                const matchMulti = p.cabangIds && p.cabangIds.includes(user?.cabangId || '');
+                if (!matchSingle && !matchMulti) return false;
+            }
 
-            const isPerNota = p.metodeKelipatan === 'per_nota';
-            const basisQty = (isPerNota && perNotaQuantities) ? (perNotaQuantities.get(p.id) || 0) : totalInBase;
+            const isAggregated = p.metodeKelipatan === 'per_nota' || p.metodeKelipatan === 'periode_promo';
+            const basisQty = (isAggregated && perNotaQuantities) ? (perNotaQuantities.get(p.id) || 0) : totalInBase;
             if (p.minQty && basisQty < p.minQty) return false;
 
             return true;
@@ -117,13 +134,14 @@ export function usePricing() {
             let potentialDiscount = 0;
             let potentialBonus = undefined;
 
-            const isPerNota = p.metodeKelipatan === 'per_nota';
-            const calculationBasis = (isPerNota && perNotaQuantities) ? (perNotaQuantities.get(p.id) || 0) : totalInBase;
+            const isAggregated = p.metodeKelipatan === 'per_nota' || p.metodeKelipatan === 'periode_promo';
+            const calculationBasis = (isAggregated && perNotaQuantities) ? (perNotaQuantities.get(p.id) || 0) : totalInBase;
+            let potentialReward = undefined;
 
-            if (p.tipe === 'persen') {
+            if (p.tipe === 'persen' || (p.tipe === 'event' && p.tipeDiskon === 'persen')) {
                 const gross = price * qty;
                 potentialDiscount = gross * (p.nilai / 100);
-            } else if (p.tipe === 'nominal') {
+            } else if (p.tipe === 'nominal' || (p.tipe === 'event' && p.tipeDiskon === 'nominal')) {
                 const maxApply = p.maxApply || p.max_apply || Infinity;
                 if (p.isKelipatan) {
                     const effectiveMinQty = p.minQty && p.minQty > 0 ? p.minQty : 1;
@@ -135,7 +153,7 @@ export function usePricing() {
 
                     const totalDiscountGlobal = multiplier * p.nilai;
 
-                    if (isPerNota) {
+                    if (isAggregated) {
                         // Proportional share: (ItemQty / TotalQty) * GlobalDiscount
                         potentialDiscount = calculationBasis > 0 ? totalDiscountGlobal * (currentRowInBase / calculationBasis) : 0;
                     } else {
@@ -150,7 +168,7 @@ export function usePricing() {
                     }
                 } else {
                     // Not Kelipatan
-                    if (isPerNota) {
+                    if (isAggregated) {
                         // Flat nominal once per transaction?
                         // "Jika pembelian mencapai jumlah ini, promo berlaku."
                         // e.g. Buy 10 get 10k off. Total 10. Discount 10k.
@@ -193,13 +211,88 @@ export function usePricing() {
                         };
                     }
                 }
+            } else if (p.tipe === 'event' || p.metodeKelipatan === 'periode_promo') {
+                const maxApply = p.maxApply || p.max_apply || Infinity;
+                const effectiveMinQty = p.minQty && p.minQty > 0 ? p.minQty : 0;
+                const bonusStep = p.syarat_jumlah || 0;
+
+                // Cumulative Logic
+                const start = new Date(p.tanggalMulai || p.berlakuMulai || 0);
+                const end = (p.tanggalBerakhir || p.berlakuSampai) 
+                    ? new Date(p.tanggalBerakhir || p.berlakuSampai || 0) 
+                    : new Date('2099-12-31');
+
+                // User Rule: Only paid invoices count
+                const customerHistory = penjualan.filter(sj => 
+                    sj.pelangganId === customerId && 
+                    (sj.status === 'lunas' || sj.isLunas === true) &&
+                    new Date(sj.tanggal) >= start &&
+                    new Date(sj.tanggal) <= end
+                );
+
+                let historyBasis = 0;
+                let historyRewards = 0; // Main prize count
+                let historyBonusValue = 0; // Cashback value
+
+                customerHistory.forEach(sj => {
+                    sj.items.forEach(item => {
+                        const matches = !p.targetProdukIds || p.targetProdukIds.length === 0 || p.targetProdukIds.includes(item.barangId);
+                        if (matches) {
+                            historyBasis += (item.jumlah * (item.konversi || 1));
+                        }
+                        if (item.promoId === p.id) {
+                            if (item.earnedReward) historyRewards += item.earnedReward.qty;
+                            if (item.diskon) historyBonusValue += item.diskon;
+                        }
+                    });
+                });
+
+                const totalBasis = historyBasis + calculationBasis;
+                
+                // 1. Calculate Main Reward (Milestone)
+                let totalMainMultiplier = 0;
+                if (effectiveMinQty > 0) {
+                    if (p.isKelipatan) {
+                        totalMainMultiplier = Math.floor(totalBasis / effectiveMinQty);
+                    } else if (totalBasis >= effectiveMinQty) {
+                        totalMainMultiplier = 1;
+                    }
+                    if (maxApply && maxApply > 0) {
+                        totalMainMultiplier = Math.min(totalMainMultiplier, maxApply);
+                    }
+                }
+
+                // 2. Calculate Bonus Reward (Step/Kelipatan)
+                let totalBonusDiscount = 0;
+                if (bonusStep > 0 && p.nilai > 0) {
+                    const bonusMultiplier = Math.floor(totalBasis / bonusStep);
+                    totalBonusDiscount = bonusMultiplier * p.nilai;
+                }
+
+                const earnedMainThisTime = Math.max(0, totalMainMultiplier - historyRewards);
+                const earnedBonusThisTime = Math.max(0, totalBonusDiscount - historyBonusValue);
+
+                if (earnedMainThisTime > 0) {
+                    potentialReward = {
+                        nama: p.nama,
+                        hadiah: p.hadiah || 'Reward Event',
+                        qty: earnedMainThisTime,
+                        snk: p.snk
+                    };
+                }
+
+                if (earnedBonusThisTime > 0) {
+                    // Proportionally share the bonus discount across this row's contribution
+                    // This is a bit complex for accumulated discount, but we'll apply it as potentialDiscount
+                    potentialDiscount = earnedBonusThisTime;
+                }
             }
 
             // Evaluate value for "Best" determination (approximate value of bonus?)
-            // For now, we mainly compare discount. For bonus, we might prioritize it if discount is 0.
-            const valueScore = potentialDiscount > 0 ? potentialDiscount : (potentialBonus ? 999999 : 0); // Bonus is considered "high value"
+            // For now, we mainly compare discount. For bonus/reward, we might prioritize it if discount is 0.
+            const valueScore = potentialDiscount > 0 ? potentialDiscount : (potentialBonus || potentialReward ? 999999 : 0); // Bonus/Reward is considered "high value"
 
-            return { p, potentialDiscount, potentialBonus, valueScore };
+            return { p, potentialDiscount, potentialBonus, potentialReward, valueScore };
         });
 
         // Sort by value score desc
@@ -212,7 +305,9 @@ export function usePricing() {
             nilai: c.p.nilai,
             bonusProdukIds: c.p.bonusProdukIds || (c.p.bonusProdukId ? [c.p.bonusProdukId] : []),
             isBest: idx === 0,
-            metodeKelipatan: c.p.metodeKelipatan
+            metodeKelipatan: c.p.metodeKelipatan,
+            hadiah: c.p.hadiah,
+            snk: c.p.snk
         }));
 
         // Determine Which to Apply
@@ -239,6 +334,7 @@ export function usePricing() {
         return {
             discount: selectedCandidate.potentialDiscount,
             bonus: selectedCandidate.potentialBonus,
+            earnedReward: selectedCandidate.potentialReward,
             availablePromos,
             appliedPromoId: selectedCandidate.p.id
         };

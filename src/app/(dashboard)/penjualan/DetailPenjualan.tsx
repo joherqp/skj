@@ -9,7 +9,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { PembayaranPenjualan, Penjualan, PenjualanItem } from '@/types';
 import { formatRupiah, formatTanggal, formatWaktu, cn, formatWhatsAppNumber } from '@/lib/utils';
 import { supabase } from '@/lib/supabase';
-import { Share2, Printer, ArrowLeft, Calendar, Loader2, DollarSign, History, CreditCard, MapPin, User, ShoppingBag, Receipt, MessageCircle, Phone } from 'lucide-react';
+import { Share2, Printer, ArrowLeft, Calendar, Loader2, DollarSign, History, CreditCard, MapPin, User, ShoppingBag, Receipt, MessageCircle, Phone, Gift } from 'lucide-react';
 import { toast } from 'sonner';
 import { useDatabase } from '@/contexts/DatabaseContext';
 import { useAuth } from '@/contexts/AuthContext';
@@ -234,7 +234,11 @@ export default function DetailPenjualan() {
         const items = trx.items.map(item => {
             const product = barang.find(b => b.id === item.barangId);
             const unit = satuan.find(s => s.id === item.satuanId);
-            return `• ${product?.nama || 'Item'} (${item.jumlah} ${unit?.simbol || 'pcs'}) - ${formatRupiah(item.subtotal)}`;
+            let text = `• ${product?.nama || 'Item'} (${item.jumlah} ${unit?.simbol || 'pcs'}) - ${formatRupiah(item.subtotal)}`;
+            if (item.earnedReward) {
+                text += `\n  🎁 Hadiah: ${item.earnedReward.hadiah} (${item.earnedReward.qty}x)`;
+            }
+            return text;
         }).join('\n');
 
         const statusText = trx.status === 'lunas' ? '✅ LUNAS' :
@@ -346,6 +350,11 @@ ${profilPerusahaan.nama}`;
                                                 <span className="font-bold">{formatRupiah(item.subtotal).replace('Rp', '')}</span>
                                             </div>
                                             {item.isBonus && <div className="text-[9px] font-bold italic pl-2">*** ITEM BONUS ***</div>}
+                                            {item.earnedReward && (
+                                                <div className="text-[9px] font-bold pl-2 mt-1">
+                                                    🎁 HADIAH: {item.earnedReward.hadiah.toUpperCase()} ({item.earnedReward.qty}X)
+                                                </div>
+                                            )}
                                         </td>
                                     </tr>
                                 );
@@ -468,6 +477,14 @@ ${profilPerusahaan.nama}`;
                                             <p className="font-bold">{product?.nama || item.barangId}</p>
                                             <p className="text-[10px] text-gray-500">{product?.kode}</p>
                                             {item.isBonus && <p className="text-[9px] font-black text-blue-600 uppercase">*** ITEM BONUS PROMO ***</p>}
+                                            {item.earnedReward && (
+                                                <div className="mt-1 p-2 bg-purple-50 rounded border border-purple-100">
+                                                    <p className="text-[10px] font-bold text-purple-700 uppercase flex items-center gap-1">
+                                                        <Gift className="w-3 h-3" /> Hadiah: {item.earnedReward.hadiah} ({item.earnedReward.qty}x)
+                                                    </p>
+                                                    {item.earnedReward.snk && <p className="text-[9px] text-purple-500 italic mt-0.5">S&K: {item.earnedReward.snk}</p>}
+                                                </div>
+                                            )}
                                         </td>
                                         <td className="py-3 text-center">{item.jumlah} {unit?.simbol}</td>
                                         <td className="py-3 text-right">{formatRupiah(item.harga)}</td>
@@ -731,6 +748,12 @@ ${profilPerusahaan.nama}`;
                                                 <ShoppingBag className="w-3 h-3" /> Bonus Promo
                                             </div>
                                         )}
+                                        {item.earnedReward && (
+                                            <div className="text-[10px] text-purple-600 font-bold mt-1 bg-purple-50 p-2 rounded border border-purple-100 flex flex-col gap-0.5">
+                                                <span className="flex items-center gap-1.5"><Gift className="w-3 h-3" /> Hadiah: {item.earnedReward.hadiah} ({item.earnedReward.qty}x)</span>
+                                                {item.earnedReward.snk && <span className="text-[9px] font-normal italic text-purple-400">S&K: {item.earnedReward.snk}</span>}
+                                            </div>
+                                        )}
                                     </div>
                                 );
                             })}
@@ -768,6 +791,12 @@ ${profilPerusahaan.nama}`;
                                                             <span className="text-[10px] font-black text-blue-600 bg-blue-100 px-1.5 py-0.5 rounded-full mt-1 w-fit uppercase flex items-center gap-1">
                                                                 <ShoppingBag className="w-3 h-3" /> Bonus Promo
                                                             </span>
+                                                        )}
+                                                        {item.earnedReward && (
+                                                            <div className="text-[10px] text-purple-600 font-bold mt-1 bg-purple-50 px-2 py-1.5 rounded border border-purple-100 flex flex-col gap-0.5 max-w-[200px]">
+                                                                <span className="flex items-center gap-1.5"><Gift className="w-3 h-3" /> Hadiah: {item.earnedReward.hadiah} ({item.earnedReward.qty}x)</span>
+                                                                {item.earnedReward.snk && <span className="text-[9px] font-normal italic text-purple-400 leading-tight">S&K: {item.earnedReward.snk}</span>}
+                                                            </div>
                                                         )}
                                                     </div>
                                                 </TableCell>

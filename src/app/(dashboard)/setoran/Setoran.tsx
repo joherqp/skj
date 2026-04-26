@@ -356,7 +356,7 @@ export default function Setoran() {
               </div>
 
               <div className="space-y-2">
-                {teamBalances.slice(0, 5).map((item, idx) => (
+                {teamBalances.slice(0).map((item, idx) => (
                   <Card key={item.user.id} className="animate-slide-up" style={{ animationDelay: `${idx * 50}ms` }}>
                     <CardContent className="p-2.5 md:p-3 flex items-center justify-between gap-2 md:gap-3">
                       <div className="flex items-center gap-2 md:gap-3 min-w-0 flex-1">

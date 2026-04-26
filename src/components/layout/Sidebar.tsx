@@ -26,6 +26,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useDatabase } from '@/contexts/DatabaseContext';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
+import { canAccessPath } from '@/lib/permissions';
 
 interface SidebarProps {
   className?: string;
@@ -42,7 +43,7 @@ export function Sidebar({ className, onClose, isCollapsed = false }: SidebarProp
   const userCabang = cabang.find(c => c.id === user?.cabangId);
   const branchName = userCabang ? userCabang.nama : 'Pusat';
 
-  const menuItems = [
+  const allMenuItems = [
     { icon: Home, label: 'Beranda', path: '/beranda' },
     ...(profilPerusahaan?.config?.enableAIChat !== false ? [
       { icon: MessageSquare, label: 'Chat AI', path: '/chat-ai' },
@@ -54,24 +55,13 @@ export function Sidebar({ className, onClose, isCollapsed = false }: SidebarProp
     { icon: ShoppingCart, label: 'Penjualan', path: '/penjualan' },
     { icon: Wallet, label: 'Setoran', path: '/setoran' },
     { icon: BarChart, label: 'Laporan', path: '/laporan' },
-
-    // Reimbursement & Petty Cash - Hidden for owner
-    ...(!user?.roles?.includes('owner') ? [
-      { icon: FileText, label: 'Reimburse', path: '/reimburse' },
-    ] : []),
-    ...(user?.roles?.some(r => ['admin', 'finance', 'manager'].includes(r)) ? [
-      { icon: Coins, label: 'Kas Kecil', path: '/petty-cash' },
-    ] : []),
-
-    // Only show Monitoring to Admin, Owner, or Manager
-    ...(user?.roles?.some(r => ['admin', 'owner', 'manager'].includes(r)) ? [
-      { icon: Activity, label: 'Monitoring', path: '/monitoring' }
-    ] : []),
-    // Only show Settings to Admin
-    ...(user?.roles?.includes('admin') ? [
-      { icon: Settings, label: 'Pengaturan', path: '/pengaturan' }
-    ] : []),
+    { icon: FileText, label: 'Reimburse', path: '/reimburse' },
+    { icon: Coins, label: 'Kas Kecil', path: '/petty-cash' },
+    { icon: Activity, label: 'Monitoring', path: '/monitoring' },
+    { icon: Settings, label: 'Pengaturan', path: '/pengaturan' },
   ];
+
+  const menuItems = allMenuItems.filter(item => canAccessPath(item.path, user?.roles || []));
 
   const isActive = (path: string) => pathname === path || pathname.startsWith(path + '/');
 

@@ -559,9 +559,29 @@ export function DatabaseProvider({ children }: { children: ReactNode }) {
       }
 
       // Clean empty strings for UUID columns (PostgreSQL rejects "" for uuid)
-      const uuidColumns = ['referensi_id', 'diajukan_oleh', 'disetujui_oleh', 'target_cabang_id', 'target_user_id', 'cabang_id', 'user_id', 'sales_id', 'pelanggan_id', 'barang_id', 'satuan_id', 'kategori_id', 'rekening_bank_id', 'karyawan_id', 'area_id', 'dari_cabang_id', 'ke_cabang_id', 'user_account_id', 'penjualan_id'];
+      const uuidColumns = [
+        'referensi_id', 'diajukan_oleh', 'disetujui_oleh', 'target_cabang_id', 'target_user_id', 
+        'cabang_id', 'user_id', 'sales_id', 'pelanggan_id', 'barang_id', 'satuan_id', 'kategori_id', 
+        'rekening_bank_id', 'karyawan_id', 'area_id', 'dari_cabang_id', 'ke_cabang_id', 
+        'user_account_id', 'penjualan_id', 'syarat_barang_id', 'bonus_produk_id', 'bonus_barang_id',
+        'penerima_id', 'dibuat_oleh', 'updated_by', 'created_by', 'persetujuan_id', 'reimburse_id',
+        'parent_id', 'kategori_pelanggan_id', 'rekening_id'
+      ];
+
+      const arrayColumns = ['cabang_ids', 'target_produk_ids', 'bonus_produk_ids', 'kategori_pelanggan_ids'];
+
+      const numericColumns = ['nilai', 'syarat_jumlah', 'min_qty', 'max_apply', 'jumlah', 'nominal', 'biaya'];
       Object.keys(dbItem).forEach(key => {
-        if (uuidColumns.includes(key) && dbItem[key] === '') {
+        if ((uuidColumns.includes(key) || key.endsWith('_id')) && dbItem[key] === '') {
+          dbItem[key] = null;
+        }
+        if (uuidColumns.includes(key) && dbItem[key] === 'system') {
+          dbItem[key] = null;
+        }
+        if (arrayColumns.includes(key) && dbItem[key] === '') {
+          dbItem[key] = null;
+        }
+        if (numericColumns.includes(key) && (dbItem[key] === '' || dbItem[key] === undefined)) {
           dbItem[key] = null;
         }
       });
@@ -590,8 +610,10 @@ export function DatabaseProvider({ children }: { children: ReactNode }) {
         setter((prev) => [newItem, ...prev]);
       }
       return newItem;
-    } catch (error) {
-      console.error(`Error creating ${tableName}:`, error);
+    } catch (error: any) {
+      console.error(`Error creating ${tableName}:`, error.message || error);
+      if (error.details) console.error('Error details:', error.details);
+      if (error.hint) console.error('Error hint:', error.hint);
       throw error;
     }
   }, [currentUser, dbMode, isOnline, shouldFallbackToPublic]);
@@ -613,9 +635,29 @@ export function DatabaseProvider({ children }: { children: ReactNode }) {
       }
 
       // Clean empty strings for UUID columns (PostgreSQL rejects "" for uuid)
-      const uuidColumns = ['referensi_id', 'diajukan_oleh', 'disetujui_oleh', 'target_cabang_id', 'target_user_id', 'cabang_id', 'user_id', 'sales_id', 'pelanggan_id', 'barang_id', 'satuan_id', 'kategori_id', 'rekening_bank_id', 'karyawan_id', 'area_id', 'dari_cabang_id', 'ke_cabang_id', 'user_account_id', 'penjualan_id'];
+      const uuidColumns = [
+        'referensi_id', 'diajukan_oleh', 'disetujui_oleh', 'target_cabang_id', 'target_user_id', 
+        'cabang_id', 'user_id', 'sales_id', 'pelanggan_id', 'barang_id', 'satuan_id', 'kategori_id', 
+        'rekening_bank_id', 'karyawan_id', 'area_id', 'dari_cabang_id', 'ke_cabang_id', 
+        'user_account_id', 'penjualan_id', 'syarat_barang_id', 'bonus_produk_id', 'bonus_barang_id',
+        'penerima_id', 'dibuat_oleh', 'updated_by', 'created_by', 'persetujuan_id', 'reimburse_id',
+        'parent_id', 'kategori_pelanggan_id', 'rekening_id'
+      ];
+
+      const arrayColumns = ['cabang_ids', 'target_produk_ids', 'bonus_produk_ids', 'kategori_pelanggan_ids'];
+
+      const numericColumns = ['nilai', 'syarat_jumlah', 'min_qty', 'max_apply', 'jumlah', 'nominal', 'biaya'];
       Object.keys(dbItem).forEach(key => {
-        if (uuidColumns.includes(key) && dbItem[key] === '') {
+        if ((uuidColumns.includes(key) || key.endsWith('_id')) && dbItem[key] === '') {
+          dbItem[key] = null;
+        }
+        if (uuidColumns.includes(key) && dbItem[key] === 'system') {
+          dbItem[key] = null;
+        }
+        if (arrayColumns.includes(key) && dbItem[key] === '') {
+          dbItem[key] = null;
+        }
+        if (numericColumns.includes(key) && (dbItem[key] === '' || dbItem[key] === undefined)) {
           dbItem[key] = null;
         }
       });
@@ -643,8 +685,10 @@ export function DatabaseProvider({ children }: { children: ReactNode }) {
 
       const updatedItem = toCamelCase((data ?? { ...dbItem, id })) as T;
       setter((prev) => prev.map((p) => ((p as { id: string }).id === id ? updatedItem : p)));
-    } catch (error) {
-      console.error(`Error updating ${tableName}:`, error);
+    } catch (error: any) {
+      console.error(`Error updating ${tableName}:`, error.message || error);
+      if (error.details) console.error('Error details:', error.details);
+      if (error.hint) console.error('Error hint:', error.hint);
       throw error;
     }
   }, [currentUser, dbMode, isOnline, shouldFallbackToPublic]);

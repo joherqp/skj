@@ -1,7 +1,7 @@
 import { Badge } from '@/components/ui/badge';
-import { PersetujuanPayload, User, Pelanggan } from '@/types';
+import { PersetujuanPayload, User, Pelanggan, Cabang } from '@/types';
 import { formatRupiah } from '@/lib/utils';
-import { UserCog, User as UserIcon, Users, Tag } from 'lucide-react';
+import { UserCog, User as UserIcon, Users, Tag, Building2 } from 'lucide-react';
 
 export function ApprovalCustomerMutation({ 
     data, 
@@ -105,17 +105,40 @@ export function ApprovalCustomerEdit({ data }: { data: PersetujuanPayload }) {
     );
 }
 
-export function ApprovalPromo({ data }: { data: PersetujuanPayload }) {
+export function ApprovalPromo({ data, cabang }: { data: PersetujuanPayload; cabang: Cabang[] }) {
     return (
         <div className="space-y-4">
             <div className="p-4 bg-purple-50 border border-purple-100 rounded-lg">
                 <h4 className="font-semibold text-purple-900 mb-2 flex items-center gap-2">
                      <Tag className="w-5 h-5" /> Detail Promo
                 </h4>
+
+                {/* Branch Selection List */}
+                <div className="mb-3 p-3 bg-white/50 rounded-md border border-purple-100">
+                    <p className="text-[10px] text-muted-foreground uppercase font-bold mb-1 flex items-center gap-1">
+                        <Building2 className="w-3 h-3" /> Berlaku di Cabang:
+                    </p>
+                    <div className="flex flex-wrap gap-1">
+                        {data.cabangIds && data.cabangIds.length > 0 ? (
+                            data.cabangIds.map(id => (
+                                <Badge key={id} variant="secondary" className="text-[10px] bg-purple-100 text-purple-700 hover:bg-purple-100">
+                                    {cabang.find(c => c.id === id)?.nama || id}
+                                </Badge>
+                            ))
+                        ) : (
+                            <Badge variant="secondary" className="text-[10px]">Semua Cabang (Global)</Badge>
+                        )}
+                    </div>
+                </div>
+
                 <div className="bg-white p-3 rounded border border-purple-100 space-y-2 text-sm">
                     <div className="flex justify-between">
                          <span className="text-muted-foreground">Nama Promo:</span>
                          <span className="font-medium">{data.nama}</span>
+                    </div>
+                    <div className="flex justify-between">
+                         <span className="text-muted-foreground">Tipe:</span>
+                         <Badge variant="outline" className="capitalize text-[10px]">{data.tipe?.replace(/_/g, ' ')}</Badge>
                     </div>
                     <div className="flex justify-between">
                          <span className="text-muted-foreground">Kode:</span>
@@ -126,10 +149,20 @@ export function ApprovalPromo({ data }: { data: PersetujuanPayload }) {
                          <span className="font-bold text-purple-700">
                              {data.tipe === 'produk' 
                                  ? `Produk Gratis (${data.mekanismeBonus})`
-                                 : `Diskon ${data.tipe === 'persen' ? data.nilai + '%' : formatRupiah(Number(data.nilai))}`
+                                 : data.tipe === 'event'
+                                    ? `Hadiah: ${data.hadiah || 'Sesuai Ketentuan'}`
+                                    : `Diskon ${data.tipeDiskon === 'persen' ? data.nilai + '%' : formatRupiah(Number(data.nilai))}`
                              }
                          </span>
                     </div>
+                    {data.snk && (
+                        <div className="pt-2 border-t mt-2">
+                            <p className="text-[10px] text-muted-foreground uppercase font-bold mb-1">Syarat & Ketentuan (S&K):</p>
+                            <p className="text-xs text-slate-600 bg-slate-50 p-2 rounded border border-slate-100 whitespace-pre-wrap leading-relaxed">
+                                {data.snk}
+                            </p>
+                        </div>
+                    )}
                     <div className="pt-2 border-t mt-2">
                         <p className="text-xs text-muted-foreground mb-1">Target Produk:</p>
                         <p className="font-medium">

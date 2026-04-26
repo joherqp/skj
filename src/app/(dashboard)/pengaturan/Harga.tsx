@@ -28,7 +28,8 @@ export default function HargaManagement() {
   // Grouping
   harga.forEach(h => {
      if (h.status === 'ditolak') return; // Exclude rejected from grouping logic logic, handled separately
-     const key = `${h.barangId}-${h.satuanId}-${h.minQty || 0}-${h.cabangId || 'global'}-${(h.kategoriPelangganIds || []).sort().join(',')}`;
+     const branches = h.cabangIds && h.cabangIds.length > 0 ? h.cabangIds.sort().join(',') : (h.cabangId || 'global');
+     const key = `${h.barangId}-${h.satuanId}-${h.minQty || 0}-${branches}-${(h.kategoriPelangganIds || []).sort().join(',')}`;
      if (!groupedHarga[key]) groupedHarga[key] = [];
      groupedHarga[key].push(h);
   });
@@ -146,6 +147,7 @@ export default function HargaManagement() {
         barangId: '', 
         satuanId: '',
         cabangId: '', 
+        cabangIds: [],
         kategoriPelangganIds: [], 
         harga: 0,
         minQty: 1,
@@ -192,6 +194,7 @@ export default function HargaManagement() {
                     hargaBaru: dataToSave.harga,
                     hargaLama: exists.harga,
                     cabangId: dataToSave.cabangId,
+                    cabangIds: dataToSave.cabangIds,
                     grosir: dataToSave.grosir,
                     minQty: dataToSave.minQty,
                     tanggalEfektif: dataToSave.tanggalEfektif,
@@ -227,6 +230,7 @@ export default function HargaManagement() {
                     satuanId: dataToSave.satuanId,
                     hargaBaru: dataToSave.harga,
                     cabangId: dataToSave.cabangId,
+                    cabangIds: dataToSave.cabangIds,
                     grosir: dataToSave.grosir,
                     minQty: dataToSave.minQty,
                     tanggalEfektif: dataToSave.tanggalEfektif,
@@ -274,6 +278,15 @@ export default function HargaManagement() {
                 setFormData(prev => ({ ...prev, kategoriPelangganIds: [...current, id] }));
             } else {
                 setFormData(prev => ({ ...prev, kategoriPelangganIds: current.filter(k => k !== id) }));
+            }
+        };
+
+        const toggleCabang = (id: string, checked: boolean) => {
+            const current = formData.cabangIds || [];
+            if (checked) {
+                setFormData(prev => ({ ...prev, cabangIds: [...current, id] }));
+            } else {
+                setFormData(prev => ({ ...prev, cabangIds: current.filter(c => c !== id) }));
             }
         };
 
@@ -341,22 +354,30 @@ export default function HargaManagement() {
             </div>
           </div>
           
-          <div className="space-y-2">
-             <Label>Target Cabang</Label>
-             <Select 
-                value={formData.cabangId || "all"} 
-                onValueChange={(value) => setFormData(prev => ({ ...prev, cabangId: value === "all" ? undefined : value }))}
-            >
-                <SelectTrigger>
-                    <SelectValue placeholder="Semua Cabang" />
-                </SelectTrigger>
-                <SelectContent>
-                    <SelectItem value="all">Semua Cabang</SelectItem>
-                    {cabang.map(c => (
-                        <SelectItem key={c.id} value={c.id}>{c.nama}</SelectItem>
-                    ))}
-                </SelectContent>
-            </Select>
+          <div className="space-y-2 border rounded-md p-3">
+             <Label className="mb-2 block">Target Cabang</Label>
+             <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                 <div className="flex items-center space-x-2 col-span-full border-b pb-2 mb-1">
+                     <Checkbox 
+                        id="all-cabang"
+                        checked={!formData.cabangIds || formData.cabangIds.length === 0}
+                        onCheckedChange={(checked) => {
+                            if (checked) setFormData(prev => ({ ...prev, cabangIds: [] }));
+                        }}
+                     />
+                     <label htmlFor="all-cabang" className="text-sm font-medium">Semua Cabang (Global)</label>
+                 </div>
+                 {cabang.map(c => (
+                     <div key={c.id} className="flex items-center space-x-2">
+                         <Checkbox 
+                            id={`cb-${c.id}`}
+                            checked={(formData.cabangIds || []).includes(c.id)}
+                            onCheckedChange={(checked) => toggleCabang(c.id, !!checked)}
+                         />
+                         <label htmlFor={`cb-${c.id}`} className="text-sm">{c.nama}</label>
+                     </div>
+                 ))}
+             </div>
           </div>
 
           <div className="space-y-2 border rounded-md p-3">

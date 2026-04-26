@@ -1,7 +1,7 @@
 'use client';
 import { useState } from 'react';
 import { SettingsCrud } from '@/components/settings/components/SettingsCrud';
-import { Percent } from 'lucide-react';
+import { Percent, Info } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useAuth } from '@/contexts/AuthContext';
@@ -11,9 +11,10 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { formatRupiah } from '@/lib/utils';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Textarea } from '@/components/ui/textarea';
 
 export default function Promo() {
-  const { promo, addPromo, updatePromo, deletePromo, barang, addPersetujuan } = useDatabase();
+  const { promo, addPromo, updatePromo, deletePromo, barang, cabang, addPersetujuan } = useDatabase();
   const { user, hasRole } = useAuth();
   const [activeTab, setActiveTab] = useState('aktif');
 
@@ -24,6 +25,7 @@ export default function Promo() {
     tanggalMulai: (p as any).berlakuMulai || (p as any).berlaku_mulai || p.tanggalMulai,
     tanggalBerakhir: (p as any).berlakuSampai || (p as any).berlaku_sampai || p.tanggalBerakhir,
     metodeKelipatan: (p as any).metode_kelipatan || p.metodeKelipatan || 'per_item',
+    syaratJumlah: (p as any).syarat_jumlah || p.syaratJumlah || 0,
   })).filter(p => {
     const now = new Date();
     const start = new Date(p.tanggalMulai);
@@ -90,6 +92,9 @@ export default function Promo() {
               const pIds = item.bonusProdukIds && item.bonusProdukIds.length > 0 ? item.bonusProdukIds : (item.bonusProdukId ? [item.bonusProdukId] : []);
               const names = pIds.map(id => barang.find(b => b.id === id)?.nama).filter(Boolean).join(', ');
               display = names ? `Free: ${names.length > 30 ? names.substring(0, 30) + '...' : names}` : 'Free Item';
+            } else if (item.tipe === 'event') {
+              display = item.hadiah || 'Hadiah Event';
+              if (item.snk) display += ` (S&K: ${item.snk.length > 20 ? item.snk.substring(0, 20) + '...' : item.snk})`;
             } else {
               display = item.tipe === 'persen' ? `${item.nilai}%` : formatRupiah(item.nilai);
             }
@@ -119,21 +124,27 @@ export default function Promo() {
         isActive: true,
         tanggalMulai: new Date(),
         targetProdukIds: [],
+        cabangIds: [],
         minQty: 1,
-        metodeKelipatan: 'per_item'
+        metodeKelipatan: 'per_item',
+        hadiah: '',
+        snk: ''
       }}
       onSave={async (item) => {
         const isOwner = hasRole(['owner']);
         const exists = item.id && !item.id.startsWith('new-');
+        const prospectiveId = exists ? item.id : self.crypto.randomUUID();
 
         // Prepare Payload with Mapping
-        const { isActive, tanggalMulai, tanggalBerakhir, metodeKelipatan, isNew, ...rest } = item as any;
+        const { isActive, tanggalMulai, tanggalBerakhir, metodeKelipatan, syaratJumlah, isNew: _isNew, id: _id, ...rest } = item as any;
         const payloadToSave = {
           ...rest,
+          id: prospectiveId,
           aktif: isActive,
           berlaku_mulai: tanggalMulai,
           berlaku_sampai: tanggalBerakhir,
-          metode_kelipatan: metodeKelipatan
+          metode_kelipatan: metodeKelipatan,
+          syarat_jumlah: syaratJumlah
         };
 
         console.log('Promo saving Payload:', payloadToSave);
@@ -147,27 +158,15 @@ export default function Promo() {
           }
         } else {
           // Non-Owner: Create Approval Request
-          // Note: useApprovalAction expects the camelCase keys (isActive, tanggalMulai) to map them again.
-          // OR we can send the pre-mapped keys? The current useApprovalAction logic maps isActive -> aktif.
-          // If we send 'aktif', it won't map it (rest covers it).
-          // But useApprovalAction explicitly destructures isActive.
-          // Let's send the original 'item' which has camelKeys, so useApprovalAction works as designed.
-
-          const prospectiveId = exists ? item.id : self.crypto.randomUUID();
-
           await addPersetujuan({
             jenis: 'promo',
             referensiId: prospectiveId,
             status: 'pending',
-            diajukanOleh: user?.id || 'system',
+            diajukanOleh: user?.id,
             tanggalPengajuan: new Date(),
             targetRole: 'owner',
             catatan: exists ? `Update Promo: ${item.nama}` : `Promo Baru: ${item.nama}`,
-            data: {
-              ...item,
-              id: prospectiveId,
-              isNew: !exists
-            }
+            data: { ...payloadToSave, isNew: !exists }
           });
         }
       }}
@@ -202,7 +201,12 @@ export default function Promo() {
               <Label>Tipe Promo</Label>
               <Select
                 value={formData.tipe}
-                onValueChange={(value) => setFormData(prev => ({ ...prev, tipe: value as PromoType['tipe'] }))}
+                onValueChange={(value) => setFormData(prev => ({ 
+                  ...prev, 
+                  tipe: value as PromoType['tipe'],
+                  metodeKelipatan: value === 'event' ? 'periode_promo' : prev.metodeKelipatan === 'periode_promo' ? 'per_item' : prev.metodeKelipatan,
+                  isKelipatan: value === 'event' ? true : prev.isKelipatan
+                }))}
               >
                 <SelectTrigger>
                   <SelectValue placeholder="Pilih Tipe" />
@@ -211,6 +215,7 @@ export default function Promo() {
                   <SelectItem value="nominal">Nominal (Rp)</SelectItem>
                   <SelectItem value="persen">Persen (%)</SelectItem>
                   <SelectItem value="produk">Bonus Produk</SelectItem>
+                  <SelectItem value="event">Event</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -219,7 +224,8 @@ export default function Promo() {
               <Label>
                 {formData.tipe === 'persen' ? 'Nilai Persen (%)' :
                   formData.tipe === 'produk' ? 'Qty Bonus (Per Kelipatan)' :
-                    'Nilai Potongan (Rp)'}
+                    formData.tipe === 'event' ? 'Bonus Cashback (Rp/Poin)' :
+                      'Nilai Potongan (Rp)'}
               </Label>
               <Input
                 name="nilai"
@@ -228,9 +234,71 @@ export default function Promo() {
                 onFocus={(e) => e.target.select()}
                 value={formData.nilai}
                 onChange={handleChange}
-                required
+                required={formData.tipe !== 'event'}
               />
+              {formData.tipe === 'event' && (
+                <p className="text-[10px] text-muted-foreground">
+                  Opsional. Diisi jika ada bonus cashback/poin per kelipatan.
+                </p>
+              )}
             </div>
+
+            {formData.tipe === 'event' && (
+              <>
+                <div className="col-span-2 p-3 bg-blue-50 border border-blue-100 rounded-md mb-2">
+                  <h5 className="text-xs font-semibold text-blue-800 flex items-center gap-1 mb-1">
+                    <Info className="w-3 h-3" /> Konfigurasi Event (Gebyar)
+                  </h5>
+                  <p className="text-[11px] text-blue-700 leading-relaxed">
+                    Gunakan <strong>Target Utama</strong> untuk hadiah fisik (misal: 50 Dus untuk Kambing). <br/>
+                    Gunakan <strong>Bonus Cashback</strong> & <strong>Setiap Kelipatan</strong> untuk bonus rutin (misal: Rp 100rb per 10 Dus).
+                  </p>
+                </div>
+
+                <div className="col-span-2 space-y-2">
+                  <Label>Hadiah Utama (Milestone)</Label>
+                  <Input
+                    name="hadiah"
+                    value={formData.hadiah || ''}
+                    onChange={handleChange}
+                    placeholder="Contoh: 1 Ekor Kambing / TV 32 inch / Bingkisan"
+                    required
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Target Utama (Threshold)</Label>
+                  <Input
+                    name="minQty"
+                    type="number"
+                    inputMode="numeric"
+                    onFocus={(e) => e.target.select()}
+                    value={formData.minQty || 0}
+                    onChange={handleChange}
+                    placeholder="Contoh: 50"
+                  />
+                  <p className="text-[10px] text-muted-foreground">
+                    Jumlah minimal Dus untuk Hadiah Utama.
+                  </p>
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Bonus Setiap Kelipatan (Qty)</Label>
+                  <Input
+                    name="syaratJumlah"
+                    type="number"
+                    inputMode="numeric"
+                    onFocus={(e) => e.target.select()}
+                    value={formData.syaratJumlah || 0}
+                    onChange={handleChange}
+                    placeholder="Contoh: 10"
+                  />
+                  <p className="text-[10px] text-muted-foreground">
+                    Kelipatan untuk perhitungan Bonus Cashback.
+                  </p>
+                </div>
+              </>
+            )}
 
             {formData.tipe === 'produk' && (
               <div className="col-span-2 space-y-4 border p-4 rounded-lg bg-slate-50">
@@ -304,27 +372,32 @@ export default function Promo() {
 
             <div className="space-y-2">
               <Label>
-                {formData.tipe === 'produk' ? 'Berlaku Setiap Kelipatan Qty' : 'Syarat Minimum Qty'}
+                {formData.tipe === 'produk' ? 'Berlaku Setiap Kelipatan Qty' : 
+                 formData.tipe === 'event' ? 'Target Minimal Hadiah (Sudah di atas)' : 
+                 'Syarat Minimum Qty'}
               </Label>
               <Input
                 name="minQty"
                 type="number"
                 inputMode="numeric"
                 onFocus={(e) => e.target.select()}
+                disabled={formData.tipe === 'event'}
                 value={formData.minQty || 1}
                 onChange={handleChange}
                 min={1}
                 placeholder="1"
               />
               <p className="text-[10px] text-muted-foreground">
-                {formData.tipe === 'produk'
+                {formData.tipe === 'event' 
+                  ? 'Gunakan Target Utama di bagian konfigurasi event.'
+                  : formData.tipe === 'produk'
                   ? 'Contoh: Setiap beli 10 dapat 1. Masukkan 10 disini.'
                   : 'Jika pembelian mencapai jumlah ini, promo akan berlaku.'}
               </p>
             </div>
           </div>
 
-          {(formData.tipe === 'nominal' || formData.tipe === 'produk') && (
+          {(formData.tipe === 'nominal' || formData.tipe === 'produk' || formData.tipe === 'event') && (
             <div className="grid grid-cols-2 gap-4 pb-4">
               <div className="flex items-center space-x-2 pt-2">
                 <Checkbox
@@ -350,19 +423,22 @@ export default function Promo() {
                   <Label>Metode Kelipatan</Label>
                   <Select
                     value={formData.metodeKelipatan || 'per_item'}
-                    onValueChange={(value) => setFormData(prev => ({ ...prev, metodeKelipatan: value as 'per_item' | 'per_nota' }))}
+                    onValueChange={(value) => setFormData(prev => ({ ...prev, metodeKelipatan: value as 'per_item' | 'per_nota' | 'periode_promo' }))}
                   >
                     <SelectTrigger>
                       <SelectValue placeholder="Pilih Metode" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="per_item">Per Item (Default)</SelectItem>
+                      <SelectItem value="per_item">Per Item</SelectItem>
                       <SelectItem value="per_nota">Per Nota (Total Qty)</SelectItem>
+                      <SelectItem value="periode_promo">Periode Promo (Akumulasi)</SelectItem>
                     </SelectContent>
                   </Select>
                   <p className="text-[10px] text-muted-foreground">
                     {formData.metodeKelipatan === 'per_nota'
                       ? 'Total jumlah semua produk yang memenuhi syarat akan dihitung.'
+                      : formData.metodeKelipatan === 'periode_promo'
+                      ? 'Total akumulasi pembelian selama periode promo akan dihitung.'
                       : 'Setiap produk dihitung masing-masing.'}
                   </p>
                 </div>
@@ -401,6 +477,39 @@ export default function Promo() {
                 <SelectItem value="selected_products">Produk Tertentu</SelectItem>
               </SelectContent>
             </Select>
+          </div>
+
+          <div className="space-y-2 border rounded-md p-3">
+             <Label className="mb-2 block font-medium">Berlaku di Cabang</Label>
+             <div className="grid grid-cols-1 md:grid-cols-2 gap-2 max-h-40 overflow-y-auto">
+                 <div className="flex items-center space-x-2 col-span-full border-b pb-2 mb-1">
+                     <Checkbox 
+                        id="all-cabang-promo"
+                        checked={!formData.cabangIds || formData.cabangIds.length === 0}
+                        onCheckedChange={(checked) => {
+                            if (checked) setFormData(prev => ({ ...prev, cabangIds: [] }));
+                        }}
+                     />
+                     <label htmlFor="all-cabang-promo" className="text-sm font-medium">Semua Cabang (Global)</label>
+                 </div>
+                 {cabang.map(c => (
+                     <div key={c.id} className="flex items-center space-x-2">
+                         <Checkbox 
+                            id={`cb-promo-${c.id}`}
+                            checked={(formData.cabangIds || []).includes(c.id)}
+                            onCheckedChange={(checked) => {
+                                const current = formData.cabangIds || [];
+                                if (checked) {
+                                    setFormData(prev => ({ ...prev, cabangIds: [...current, c.id] }));
+                                } else {
+                                    setFormData(prev => ({ ...prev, cabangIds: current.filter(id => id !== c.id) }));
+                                }
+                            }}
+                         />
+                         <label htmlFor={`cb-promo-${c.id}`} className="text-sm">{c.nama}</label>
+                     </div>
+                 ))}
+             </div>
           </div>
 
           {formData.scope === 'selected_products' && (
@@ -448,6 +557,17 @@ export default function Promo() {
                 onChange={(e) => setFormData(prev => ({ ...prev, tanggalBerakhir: e.target.value ? new Date(e.target.value) : undefined }))}
               />
             </div>
+          </div>
+
+          <div className="space-y-2">
+            <Label>Syarat & Ketentuan (S&K)</Label>
+            <Textarea
+              name="snk"
+              value={formData.snk || ''}
+              onChange={handleChange}
+              placeholder="Masukkan syarat dan ketentuan promo di sini..."
+              rows={3}
+            />
           </div>
 
           <div className="flex items-center space-x-2 pt-2">

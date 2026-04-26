@@ -91,7 +91,7 @@ export function ApprovalDetailDialog({
                 return <ApprovalReimburse data={data} reference={reimburse.find(r => r.id === item.referensiId)} />;
             
             case 'perubahan_harga':
-                return <ApprovalPrice data={data} barang={barang} satuan={satuan} />;
+                return <ApprovalPrice data={data} barang={barang} satuan={satuan} cabang={cabang} />;
             
             case 'hapus_transaksi':
             case 'pembatalan_penjualan':
@@ -111,7 +111,7 @@ export function ApprovalDetailDialog({
                 return <ApprovalCustomerEdit data={data} />;
             
             case 'promo':
-                return <ApprovalPromo data={data} />;
+                return <ApprovalPromo data={data} cabang={cabang} />;
             
             case 'opname':
                 return <ApprovalOpname data={data} barang={barang} />;

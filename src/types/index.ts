@@ -211,6 +211,12 @@ export interface PembayaranPenjualan {
   kembalian?: number;
 }
 
+export interface EarnedReward {
+  hadiah: string;
+  qty: number;
+  snk?: string;
+}
+
 export interface PenjualanItem {
   id: string;
   barangId: string;
@@ -223,6 +229,7 @@ export interface PenjualanItem {
   isBonus?: boolean;
   totalQty?: number;
   promoId?: string;
+  earnedReward?: EarnedReward;
 }
 
 // Deposit/Setoran Types
@@ -354,6 +361,7 @@ export interface PersetujuanPayload {
   hargaLama?: number;
   minQty?: number;
   cabangId?: string;
+  cabangIds?: string[];
   kategoriPelangganIds?: string[];
   grosir?: { min: number; max: number; harga: number; isMixMatch?: boolean }[];
   tanggalEfektif?: string | Date;
@@ -366,6 +374,9 @@ export interface PersetujuanPayload {
   transfers?: { amount: number; bankId?: string; proofUrl?: string }[];
   rekeningNama?: string;
   buktiGambar?: string;
+  tipeDiskon?: 'persen' | 'nominal';
+  hadiah?: string;
+  snk?: string;
   [key: string]: unknown;
 }
 
@@ -397,6 +408,7 @@ export interface Harga {
   satuanId?: string;
   minQty?: number;
   cabangId?: string;
+  cabangIds?: string[];
   kategoriPelangganIds?: string[]; // Used in some parts instead of single ID
   disetujuiOleh?: string;
   tanggalEfektif?: Date;
@@ -414,8 +426,9 @@ export interface StokPengguna {
 export interface Promo {
   id: string;
   nama: string;
-  tipe: 'nominal' | 'persen' | 'produk' | 'potongan_harga' | 'bonus_barang' | 'diskon_persen';
+  tipe: 'nominal' | 'persen' | 'produk' | 'potongan_harga' | 'bonus_barang' | 'diskon_persen' | 'event';
   syarat_jumlah?: number;
+  syaratJumlah?: number;
   syarat_barang_id?: string;
   bonus_barang_id?: string;
   bonus_jumlah?: number;
@@ -444,10 +457,14 @@ export interface Promo {
   minQty?: number;
   min_qty?: number; // DB column
   cabangId?: string;
+  cabangIds?: string[];
   maxApply?: number;
   max_apply?: number; // DB Column
-  metodeKelipatan?: 'per_item' | 'per_nota';
-  metode_kelipatan?: 'per_item' | 'per_nota'; // DB Column
+  metodeKelipatan?: 'per_item' | 'per_nota' | 'periode_promo';
+  metode_kelipatan?: 'per_item' | 'per_nota' | 'periode_promo'; // DB Column
+  tipeDiskon?: 'persen' | 'nominal';
+  hadiah?: string;
+  snk?: string;
 }
 
 export interface MutasiBarang {
