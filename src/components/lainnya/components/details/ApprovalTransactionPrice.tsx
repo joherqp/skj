@@ -85,6 +85,10 @@ export function ApprovalPrice({
                                     {cabang.find(c => c.id === id)?.nama || id}
                                 </Badge>
                             ))
+                        ) : data.cabangId ? (
+                            <Badge variant="secondary" className="text-[10px] bg-orange-100 text-orange-700">
+                                {cabang.find(c => c.id === data.cabangId)?.nama || data.cabangId}
+                            </Badge>
                         ) : (
                             <Badge variant="secondary" className="text-[10px]">Semua Cabang (Global)</Badge>
                         )}

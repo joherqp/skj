@@ -7,6 +7,7 @@ import { supabase } from '@/lib/supabase';
 import { formatRupiah, formatCompactRupiah } from '@/lib/utils';
 import { ArrowLeft, Download, Search, Loader2, Eye, Receipt } from 'lucide-react';
 import { useRouter } from 'next/navigation';
+import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from '@/components/ui/badge';
@@ -39,6 +40,7 @@ interface ArchiveSale {
 }
 
 export default function LaporanArsipPenjualan() {
+  const { user: currentUser } = useAuth();
   const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [data, setData] = useState<ArchiveSale[]>([]);
@@ -58,13 +60,21 @@ export default function LaporanArsipPenjualan() {
       setLoading(true);
       try {
           // Fetch directly from Supabase to bypass Context Cache Limit
-          const { data: result, error } = await supabase
+          let query = supabase
               .from('penjualan')
               .select(`
                   *,
                   pelanggan:pelanggan(nama),
                   sales:users!sales_id(nama)
-              `)
+              `);
+
+          // Add role-based branch filtering
+          const isAdminOrOwner = currentUser?.roles.some(r => ['admin', 'owner'].includes(r));
+          if (!isAdminOrOwner && currentUser?.cabangId) {
+              query = query.eq('cabang_id', currentUser.cabangId);
+          }
+
+          const { data: result, error } = await query
               .eq('status', 'lunas')
               .gte('tanggal', startDate)
               .lte('tanggal', endDate + 'T23:59:59')

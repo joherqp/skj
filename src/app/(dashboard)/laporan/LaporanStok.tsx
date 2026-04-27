@@ -96,6 +96,82 @@ export default function LaporanStok() {
     const isAdminOrOwner = currentUser?.roles.includes('admin') || currentUser?.roles.includes('owner');
 
     // Filter Users based on selected Branch and Role, considering Date Range for inactive users
+    // Calculate available branches and users based on data in the selected period
+    const { availableCabangIds, availableUserIds } = useMemo(() => {
+        if (!effectiveDateRange?.from || !effectiveDateRange?.to) {
+            return { availableCabangIds: [], availableUserIds: [] };
+        }
+
+        const start = effectiveDateRange.from;
+        const end = effectiveDateRange.to;
+        const startTimestamp = start.setHours(0, 0, 0, 0);
+        const endTimestamp = end.setHours(23, 59, 59, 999);
+
+        const cabs = new Set<string>();
+        const usrs = new Set<string>();
+
+        // 1. Sales
+        penjualan.forEach(p => {
+            if (p.status !== 'lunas') return;
+            const pDate = new Date(p.tanggal).getTime();
+            if (pDate >= startTimestamp && pDate <= endTimestamp) {
+                if (p.cabangId) cabs.add(p.cabangId);
+                if (p.salesId) usrs.add(p.salesId);
+            }
+        });
+
+        // 2. Mutations
+        mutasiBarang.forEach(m => {
+            if (m.status !== 'disetujui') return;
+            const mDate = new Date(m.tanggal).getTime();
+            if (mDate >= startTimestamp && mDate <= endTimestamp) {
+                if (m.dariCabangId) cabs.add(m.dariCabangId);
+                if (m.keCabangId) cabs.add(m.keCabangId);
+                
+                // For users, check who initiated or is target
+                const relatedPersetujuan = persetujuan.find(p => p.id === m.persetujuanId);
+                if (m.createdBy) usrs.add(m.createdBy);
+                if (relatedPersetujuan?.diajukanOleh) usrs.add(relatedPersetujuan.diajukanOleh);
+                if (relatedPersetujuan?.targetUserId) usrs.add(relatedPersetujuan.targetUserId);
+            }
+        });
+
+        // 3. Restock
+        persetujuan.forEach(p => {
+            if (p.jenis !== 'restock' || p.status !== 'disetujui') return;
+            const pDate = new Date(p.tanggalPersetujuan || p.tanggalPengajuan).getTime();
+            if (pDate >= startTimestamp && pDate <= endTimestamp) {
+                if (p.targetCabangId) cabs.add(p.targetCabangId);
+                if (p.targetUserId) usrs.add(p.targetUserId);
+                if (p.diajukanOleh) usrs.add(p.diajukanOleh);
+            }
+        });
+
+        // 4. Adjustments
+        penyesuaianStok.forEach(adj => {
+            if (adj.status !== 'disetujui') return;
+            const aDate = new Date(adj.tanggal).getTime();
+            if (aDate >= startTimestamp && aDate <= endTimestamp) {
+                if (adj.cabangId) cabs.add(adj.cabangId);
+            }
+        });
+
+        // 5. Existing Stock (Anyone who HAS stock record is potentially relevant for "data" in stock report)
+        stokPengguna.forEach(s => {
+            if (s.jumlah > 0) {
+                usrs.add(s.userId);
+                const u = users.find(usr => usr.id === s.userId);
+                if (u?.cabangId) cabs.add(u.cabangId);
+            }
+        });
+
+        return {
+            availableCabangIds: Array.from(cabs),
+            availableUserIds: Array.from(usrs)
+        };
+    }, [effectiveDateRange, penjualan, mutasiBarang, persetujuan, penyesuaianStok, stokPengguna, users]);
+
+    // Filter Users based on selected Branch and Role, considering Date Range for inactive users
     const relevantUsers = useMemo(() => {
         const { from, to } = effectiveDateRange || {};
         const checkActiveInPeriod = (u: User) => {
@@ -112,13 +188,10 @@ export default function LaporanStok() {
             return userStart <= reportEnd && (u.endDate ? new Date(u.endDate) >= reportStart : true);
         };
 
-        // Filter by existence in stokPengguna
-        const userIdsWithStock = new Set(stokPengguna.map(s => s.userId));
-
         let candidates = users;
 
         // 1. Admin/Owner: Full access, respect UI filter
-        if (currentUser?.roles.includes('admin') || currentUser?.roles.includes('owner')) {
+        if (isAdminOrOwner) {
             if (selectedCabangIds.length > 0) {
                 candidates = users.filter(u => u.cabangId && selectedCabangIds.includes(u.cabangId));
             }
@@ -127,8 +200,11 @@ export default function LaporanStok() {
             candidates = users.filter(u => u.cabangId === currentUser?.cabangId);
         }
 
-        return candidates.filter(u => checkActiveInPeriod(u) && userIdsWithStock.has(u.id));
-    }, [users, selectedCabangIds, currentUser, effectiveDateRange, stokPengguna]);
+        return candidates
+            .filter(u => checkActiveInPeriod(u) && availableUserIds.includes(u.id))
+            .sort((a, b) => a.nama.localeCompare(b.nama));
+    }, [users, selectedCabangIds, isAdminOrOwner, currentUser, effectiveDateRange, availableUserIds]);
+
 
     // Extract calculation logic to a reusable function so we can calculate per-user
     const calculateStockReport = (specFilterUser: string) => {
@@ -539,7 +615,12 @@ export default function LaporanStok() {
         doc.setFontSize(10);
         doc.text(`Periode: ${isSingleDate ? format(singleDate, 'dd/MM/yyyy') : `${format(dateRange?.from || new Date(), 'dd/MM/yyyy')} - ${format(dateRange?.to || new Date(), 'dd/MM/yyyy')}`}`, 14, 22);
 
-        const namaCabang = selectedCabangIds.length === 0 ? 'Semua Cabang' : selectedCabangIds.map(id => cabang.find(c => c.id === id)?.nama || id).join(', ');
+        const namaCabang = selectedCabangIds.length === 0 
+            ? 'Semua Cabang' 
+            : selectedCabangIds
+                .map(id => cabang.find(c => c.id === id)?.nama || id)
+                .sort((a, b) => a.localeCompare(b) )
+                .join(', ');
         doc.text(`Cabang: ${namaCabang}`, 14, 27);
 
         const tableColumn = ["Nama", "Satuan", "Stok Awal", "Masuk", "Keluar", "Terjual", "Promo", "Stok Akhir"];
@@ -649,8 +730,11 @@ export default function LaporanStok() {
                                 setSelectedCabangIds={setSelectedCabangIds}
                                 selectedUserIds={selectedUserIds}
                                 setSelectedUserIds={setSelectedUserIds}
+                                availableCabangIds={availableCabangIds}
+                                availableUserIds={availableUserIds}
                                 className="!space-y-0"
                             />
+
                         </div>
 
                         {/* Date Group */}

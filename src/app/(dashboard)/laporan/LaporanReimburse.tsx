@@ -29,10 +29,13 @@ export default function LaporanReimburse() {
   const [statusFilter, setStatusFilter] = useState<string>('disetujui');
   const [dateFilter, setDateFilter] = useState<string>('this_month');
   const [selectedDate, setSelectedDate] = useState(new Date());
-  const [displayLimit, setDisplayLimit] = useState(20);
-  const [selectedCabangIds, setSelectedCabangIds] = useState<string[]>([]);
+  const isAdminOrOwner = currentUser?.roles.some(r => ['admin', 'owner'].includes(r));
+  const [selectedCabangIds, setSelectedCabangIds] = useState<string[]>(
+    isAdminOrOwner ? [] : (currentUser?.cabangId ? [currentUser.cabangId] : [])
+  );
   const [selectedUserIds, setSelectedUserIds] = useState<string[]>([]);
   const [previewImage, setPreviewImage] = useState<string | null>(null);
+  const [displayLimit, setDisplayLimit] = useState(20);
 
   // Week Logic
   const startDate = startOfWeek(selectedDate, { weekStartsOn: 0 }); // Sunday start
@@ -130,6 +133,35 @@ export default function LaporanReimburse() {
     return reimburse.filter(r => branchUserIds.includes(r.userId));
   }, [reimburse, currentUser, users]);
 
+  // Calculate available branches and users based on data in the selected period
+  const { availableCabangIds, availableUserIds } = useMemo(() => {
+    const today = new Date();
+    const dataForPeriod = accessibleReimburse.filter(item => {
+        const itemDate = new Date(item.tanggal);
+        if (dateFilter === 'this_month') {
+            return itemDate.getMonth() === today.getMonth() && itemDate.getFullYear() === today.getFullYear();
+        } else if (dateFilter === 'last_month') {
+            const lastMonth = new Date(today.getFullYear(), today.getMonth() - 1, 1);
+            return itemDate.getMonth() === lastMonth.getMonth() && itemDate.getFullYear() === lastMonth.getFullYear();
+        }
+        return true; // 'all'
+    });
+
+    const cabs = new Set<string>();
+    const usrs = new Set<string>();
+
+    dataForPeriod.forEach(item => {
+        usrs.add(item.userId);
+        const u = users.find(usr => usr.id === item.userId);
+        if (u?.cabangId) cabs.add(u.cabangId);
+    });
+
+    return {
+        availableCabangIds: Array.from(cabs),
+        availableUserIds: Array.from(usrs)
+    };
+  }, [accessibleReimburse, dateFilter, users]);
+
   // Main Filter Logic
   const filteredData = accessibleReimburse.filter(item => {
     const matchSearch = 
@@ -155,6 +187,7 @@ export default function LaporanReimburse() {
 
     return matchSearch && matchStatus && matchDate && matchCabang && matchUser;
   }).sort((a, b) => new Date(b.tanggal).getTime() - new Date(a.tanggal).getTime());
+
 
 
 
@@ -324,8 +357,11 @@ export default function LaporanReimburse() {
                     setSelectedCabangIds={setSelectedCabangIds}
                     selectedUserIds={selectedUserIds}
                     setSelectedUserIds={setSelectedUserIds}
+                    availableCabangIds={availableCabangIds}
+                    availableUserIds={availableUserIds}
                     className="!space-y-0"
                 />
+
             </CardContent>
         </Card>
 

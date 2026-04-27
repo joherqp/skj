@@ -58,6 +58,8 @@ export default function LaporanSalesPerformance() {
   const { } = useDatabase();
   const [loading, setLoading] = useState(false);
   const [performanceData, setPerformanceData] = useState<PerformanceItem[]>([]);
+  const [availableCabangIds, setAvailableCabangIds] = useState<string[]>([]);
+
 
   const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth());
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
@@ -65,7 +67,9 @@ export default function LaporanSalesPerformance() {
   const isAdminOrOwner = user?.roles.some(r => ['admin', 'owner'].includes(r));
   const userCabangId = user?.cabangId;
 
-  const [selectedCabangIds, setSelectedCabangIds] = useState<string[]>([]);
+  const [selectedCabangIds, setSelectedCabangIds] = useState<string[]>(
+    isAdminOrOwner ? [] : (user?.cabangId ? [user.cabangId] : [])
+  );
   const [selectedUserIds, setSelectedUserIds] = useState<string[]>([]);
 
   // History State
@@ -213,6 +217,13 @@ export default function LaporanSalesPerformance() {
 
         setPerformanceData(sortedData);
 
+        // Calculate available branches for filtering (all branches that have targets in this period)
+        const cabs = new Set<string>();
+        rawCalculatedData.forEach(item => {
+          if (item.cabang_id) cabs.add(item.cabang_id);
+        });
+        setAvailableCabangIds(Array.from(cabs));
+
       } catch (error) {
         console.error('Error fetching report:', error);
         toast.error('Gagal memuat laporan');
@@ -323,9 +334,11 @@ export default function LaporanSalesPerformance() {
               setSelectedCabangIds={setSelectedCabangIds}
               selectedUserIds={selectedUserIds}
               setSelectedUserIds={setSelectedUserIds}
+              availableCabangIds={availableCabangIds}
               showUserFilter={false}
               className="!space-y-0 flex flex-row items-center gap-2"
             />
+
 
             <div className="hidden md:block flex-1"></div>
 

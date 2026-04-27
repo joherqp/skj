@@ -125,6 +125,10 @@ export function ApprovalPromo({ data, cabang }: { data: PersetujuanPayload; caba
                                     {cabang.find(c => c.id === id)?.nama || id}
                                 </Badge>
                             ))
+                        ) : data.cabangId ? (
+                            <Badge variant="secondary" className="text-[10px] bg-purple-100 text-purple-700 hover:bg-purple-100">
+                                {cabang.find(c => c.id === data.cabangId)?.nama || data.cabangId}
+                            </Badge>
                         ) : (
                             <Badge variant="secondary" className="text-[10px]">Semua Cabang (Global)</Badge>
                         )}

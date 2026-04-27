@@ -299,7 +299,7 @@ export default function Setoran() {
                           Semua Cabang
                         </DropdownMenuCheckboxItem>
                         <DropdownMenuSeparator />
-                        {cabang.map(c => (
+                        {[...cabang].sort((a, b) => a.nama.localeCompare(b.nama)).map(c => (
                           <DropdownMenuCheckboxItem
                             key={c.id}
                             checked={selectedCabangIds.includes(c.id)}
@@ -502,7 +502,7 @@ export default function Setoran() {
                           Semua Cabang
                         </DropdownMenuCheckboxItem>
                         <DropdownMenuSeparator />
-                        {cabang.map(c => (
+                        {[...cabang].sort((a, b) => a.nama.localeCompare(b.nama)).map(c => (
                           <DropdownMenuCheckboxItem
                             key={c.id}
                             checked={selectedCabangIds.includes(c.id)}
@@ -559,7 +559,7 @@ export default function Setoran() {
                           }
                           // If finance/leader, see same branch
                           return isSalesOrLeader && isActive && u.cabangId === user?.cabangId;
-                        }).map(u => (
+                        }).sort((a, b) => a.nama.localeCompare(b.nama)).map(u => (
                           <DropdownMenuCheckboxItem
                             key={u.id}
                             checked={selectedUserIds.includes(u.id)}

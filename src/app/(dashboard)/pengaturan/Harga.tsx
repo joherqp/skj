@@ -21,14 +21,16 @@ export default function HargaManagement() {
     } = useDatabase();
     const { user, hasRole } = useAuth();
     const [activeTab, setActiveTab] = useState('aktif');
+    const isOwnerOrAdmin = hasRole(['owner', 'admin']);
 
     /* Logic from JadwalHargaPromo.tsx for consistency */
     const groupedHarga: Record<string, Harga[]> = {};
 
     // Grouping
     harga.forEach(h => {
-        if (h.status === 'ditolak') return; // Exclude rejected from grouping logic logic, handled separately
-        const branches = h.cabangIds && h.cabangIds.length > 0 ? h.cabangIds.sort().join(',') : (h.cabangId || 'global');
+        if (h.status === 'ditolak') return; 
+        // Use specific cabangId for grouping to ensure each branch's active status is tracked independently
+        const branches = h.cabangId || 'global';
         const key = `${h.barangId}-${h.satuanId}-${h.minQty || 0}-${branches}-${(h.kategoriPelangganIds || []).sort().join(',')}`;
         if (!groupedHarga[key]) groupedHarga[key] = [];
         groupedHarga[key].push(h);
@@ -66,6 +68,15 @@ export default function HargaManagement() {
     harga.filter(h => h.status === 'ditolak').forEach(h => expiredIds.add(h.id));
 
     const filteredItems = [...harga].filter(h => {
+        // Multi-branch filtering
+        const isOwnerOrAdmin = hasRole(['owner', 'admin']);
+        const userCabangId = user?.cabangId;
+        
+        // Prices can be global (empty cabangIds) or targeted to specific branches
+        const isTargetedToMyCabang = !h.cabangIds || h.cabangIds.length === 0 || (userCabangId && h.cabangIds.includes(userCabangId));
+        
+        if (!isOwnerOrAdmin && !isTargetedToMyCabang) return false;
+
         if (activeTab === 'aktif') {
             return activeIds.has(h.id);
         } else {
@@ -166,7 +177,6 @@ export default function HargaManagement() {
             initialFormState={{
                 barangId: '',
                 satuanId: '',
-                cabangId: '',
                 cabangIds: [],
                 kategoriPelangganIds: [],
                 harga: 0,
@@ -186,6 +196,7 @@ export default function HargaManagement() {
                     status: isOwner ? 'disetujui' : 'pending',
                     disetujuiOleh: isOwner ? user?.id : undefined,
                     tanggalEfektif: new Date(item.tanggalEfektif),
+                    cabangIds: item.cabangIds || [],
                     grosir: item.grosir?.map(g => ({
                         min: Number(g.min),
                         max: Number(g.max),
@@ -213,7 +224,6 @@ export default function HargaManagement() {
                                 satuanId: dataToSave.satuanId,
                                 hargaBaru: dataToSave.harga,
                                 hargaLama: exists.harga,
-                                cabangId: dataToSave.cabangId,
                                 cabangIds: dataToSave.cabangIds,
                                 grosir: dataToSave.grosir,
                                 minQty: dataToSave.minQty,
@@ -249,7 +259,6 @@ export default function HargaManagement() {
                                 barangId: dataToSave.barangId,
                                 satuanId: dataToSave.satuanId,
                                 hargaBaru: dataToSave.harga,
-                                cabangId: dataToSave.cabangId,
                                 cabangIds: dataToSave.cabangIds,
                                 grosir: dataToSave.grosir,
                                 minQty: dataToSave.minQty,
@@ -331,7 +340,7 @@ export default function HargaManagement() {
                                         <SelectValue placeholder="Pilih Produk" />
                                     </SelectTrigger>
                                     <SelectContent>
-                                        {barang.map(b => (
+                                        {[...barang].sort((a, b) => a.nama.localeCompare(b.nama)).map(b => (
                                             <SelectItem key={b.id} value={b.id}>{b.nama}</SelectItem>
                                         ))}
                                     </SelectContent>
@@ -377,17 +386,19 @@ export default function HargaManagement() {
                         <div className="space-y-2 border rounded-md p-3">
                             <Label className="mb-2 block">Target Cabang</Label>
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                                <div className="flex items-center space-x-2 col-span-full border-b pb-2 mb-1">
-                                    <Checkbox
-                                        id="all-cabang"
-                                        checked={!formData.cabangIds || formData.cabangIds.length === 0}
-                                        onCheckedChange={(checked) => {
-                                            if (checked) setFormData(prev => ({ ...prev, cabangIds: [] }));
-                                        }}
-                                    />
-                                    <label htmlFor="all-cabang" className="text-sm font-medium">Semua Cabang (Global)</label>
-                                </div>
-                                {cabang.map(c => (
+                                {isOwnerOrAdmin && (
+                                    <div className="flex items-center space-x-2 col-span-full border-b pb-2 mb-1">
+                                        <Checkbox
+                                            id="all-cabang"
+                                            checked={!formData.cabangIds || formData.cabangIds.length === 0}
+                                            onCheckedChange={(checked) => {
+                                                if (checked) setFormData(prev => ({ ...prev, cabangIds: [] }));
+                                            }}
+                                        />
+                                        <label htmlFor="all-cabang" className="text-sm font-medium">Semua Cabang (Global)</label>
+                                    </div>
+                                )}
+                                {cabang.filter(c => isOwnerOrAdmin || c.id === user?.cabangId).sort((a, b) => a.nama.localeCompare(b.nama)).map(c => (
                                     <div key={c.id} className="flex items-center space-x-2">
                                         <Checkbox
                                             id={`cb-${c.id}`}
@@ -403,7 +414,7 @@ export default function HargaManagement() {
                         <div className="space-y-2 border rounded-md p-3">
                             <Label className="mb-2 block">Target Kategori Pelanggan</Label>
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                                {kategoriPelanggan.map(k => (
+                                {[...kategoriPelanggan].sort((a, b) => a.nama.localeCompare(b.nama)).map(k => (
                                     <div key={k.id} className="flex items-center space-x-2">
                                         <input
                                             type="checkbox"

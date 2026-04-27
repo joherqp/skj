@@ -34,7 +34,7 @@ export default function MasterProduk() {
                           b.kode.toLowerCase().includes(searchQuery.toLowerCase());
 
       return matchTab && matchSearch;
-  });
+  }).sort((a, b) => a.nama.localeCompare(b.nama));
 
   return (
     <SettingsCrud<Barang>
@@ -283,7 +283,7 @@ export default function MasterProduk() {
                             <SelectValue placeholder="Pilih Kategori" />
                         </SelectTrigger>
                         <SelectContent>
-                            {kategori.map(k => (
+                            {[...kategori].sort((a, b) => a.nama.localeCompare(b.nama)).map(k => (
                                 <SelectItem key={k.id} value={k.id}>{k.nama}</SelectItem>
                             ))}
                         </SelectContent>
@@ -299,7 +299,7 @@ export default function MasterProduk() {
                             <SelectValue placeholder="Pilih Satuan" />
                         </SelectTrigger>
                         <SelectContent>
-                            {satuan.map(s => (
+                            {[...satuan].sort((a, b) => a.nama.localeCompare(b.nama)).map(s => (
                                 <SelectItem key={s.id} value={s.id}>{s.nama}</SelectItem>
                             ))}
                         </SelectContent>
@@ -340,7 +340,7 @@ export default function MasterProduk() {
                                                 <SelectValue placeholder="Pilih" />
                                             </SelectTrigger>
                                             <SelectContent>
-                                                {satuan.filter(s => s.id !== formData.satuanId).map(s => (
+                                                {satuan.filter(s => s.id !== formData.satuanId).sort((a, b) => a.nama.localeCompare(b.nama)).map(s => (
                                                     <SelectItem key={s.id} value={s.id}>{s.nama}</SelectItem>
                                                 ))}
                                             </SelectContent>

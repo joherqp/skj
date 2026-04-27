@@ -456,7 +456,7 @@ ${user?.nama || 'Sales'}`;
                           Semua Cabang
                         </DropdownMenuCheckboxItem>
                         <DropdownMenuSeparator />
-                        {listCabang.map(c => (
+                        {[...listCabang].sort((a, b) => a.nama.localeCompare(b.nama)).map(c => (
                           <DropdownMenuCheckboxItem
                             key={c.id}
                             checked={selectedCabangIds.includes(c.id)}
@@ -509,7 +509,7 @@ ${user?.nama || 'Sales'}`;
                             return isSalesOrLeader && isActive && isInSelectedCabang;
                           }
                           return isSalesOrLeader && isActive && u.cabangId === user?.cabangId;
-                        }).map(u => (
+                        }).sort((a, b) => a.nama.localeCompare(b.nama)).map(u => (
                           <DropdownMenuCheckboxItem
                             key={u.id}
                             checked={selectedUserIds.includes(u.id)}

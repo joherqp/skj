@@ -281,7 +281,7 @@ export default function LaporanAbsensi() {
                             </SelectTrigger>
                             <SelectContent>
                                 <SelectItem value="all">Global (Semua Cabang)</SelectItem>
-                                {cabang.map(c => (
+                                {[...cabang].sort((a, b) => a.nama.localeCompare(b.nama)).map(c => (
                                     <SelectItem key={c.id} value={c.id}>{c.nama}</SelectItem>
                                 ))}
                             </SelectContent>

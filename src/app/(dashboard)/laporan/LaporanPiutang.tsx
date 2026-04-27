@@ -52,9 +52,15 @@ type SortOption = 'highest' | 'lowest' | 'name-asc' | 'name-desc';
 export default function LaporanPiutang() {
   const router = useRouter();
   const { user: currentUser } = useAuth();
-  const { pelanggan, kategoriPelanggan, cabang, penjualan, users, profilPerusahaan } = useDatabase();
-  
-  const [filterCabang, setFilterCabang] = useState<string>('all');
+  const {
+    penjualan, users, pelanggan, profilPerusahaan, cabang, kategoriPelanggan
+  } = useDatabase();
+
+  const isAdminOrOwner = currentUser?.roles.some(r => ['admin', 'owner'].includes(r));
+  const [filterCabang, setFilterCabang] = useState<string>(() => {
+    if (isAdminOrOwner) return 'all';
+    return currentUser?.cabangId || 'all';
+  });
   const [filterUser, setFilterUser] = useState<string[]>([]); // Changed to Array
   const [searchQuery, setSearchQuery] = useState('');
   const [sortBy, setSortBy] = useState<SortOption>('highest');
@@ -87,7 +93,6 @@ export default function LaporanPiutang() {
       setIsDebtDialogOpen(true);
   };
 
-  const isAdminOrOwner = currentUser?.roles.includes('admin') || currentUser?.roles.includes('owner');
 
   // Use Global Limit Config
   const useGlobal = profilPerusahaan?.config?.useGlobalLimit;
@@ -269,7 +274,7 @@ ${profilPerusahaan.nama}`;
                         </SelectTrigger>
                         <SelectContent>
                             <SelectItem value="all">Semua Cabang</SelectItem>
-                            {cabang.map(c => (
+                            {[...cabang].sort((a, b) => a.nama.localeCompare(b.nama)).map(c => (
                                 <SelectItem key={c.id} value={c.id}>{c.nama}</SelectItem>
                             ))}
                         </SelectContent>
@@ -286,7 +291,7 @@ ${profilPerusahaan.nama}`;
                     <PopoverContent className="w-56 p-0" align="start">
                         <div className="p-3 border-b bg-muted/50 font-semibold text-xs">Pilih Sales</div>
                         <div className="max-h-60 overflow-y-auto p-2 space-y-2">
-                            {relevantUsers.map(u => (
+                            {[...relevantUsers].sort((a, b) => a.nama.localeCompare(b.nama)).map(u => (
                                 <div key={u.id} className="flex items-center space-x-2">
                                     <Checkbox 
                                         id={u.id} 

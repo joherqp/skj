@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import {
   Building2, Users, UserCog, Shield, MapPin, GitBranch,
   CreditCard, Ruler, Tags, UsersRound, DollarSign,
-  Percent, Database, ChevronRight, Package, Target
+  Percent, Database, ChevronRight, Package, Target, ShoppingCart
 } from 'lucide-react';
 
 interface SettingItemProps {
@@ -67,8 +67,12 @@ export default function Pengaturan() {
   ];
 
   const systemSettings = [
-    { icon: Database, label: 'Backup', description: 'Import & export data', path: '/pengaturan/backup' },
+    { icon: Database, label: 'Backup', description: 'Download & Restore database', path: '/pengaturan/backup' },
     { icon: Shield, label: 'Cek Integritas', description: 'Verifikasi stok & saldo', path: '/pengaturan/integritas' },
+  ];
+
+  const importSettings = [
+    { icon: ShoppingCart, label: 'Import Penjualan', description: 'Import data transaksi dari CSV/Excel', path: '/pengaturan/import-penjualan' },
   ];
 
   return (
@@ -144,6 +148,20 @@ export default function Pengaturan() {
           </CardContent>
         </Card>
 
+        {/* Import Data */}
+        <Card elevated>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm text-muted-foreground">Import Data</CardTitle>
+          </CardHeader>
+          <CardContent className="pt-0">
+            {importSettings.map((item, index) => (
+              <div key={item.path} className="animate-slide-up" style={{ animationDelay: `${(index + companySettings.length + userSettings.length + locationSettings.length + productSettings.length + pricingSettings.length + systemSettings.length) * 20}ms` }}>
+                <SettingItem {...item} />
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+
         {/* System */}
         <Card elevated>
           <CardHeader className="pb-2">
@@ -151,7 +169,7 @@ export default function Pengaturan() {
           </CardHeader>
           <CardContent className="pt-0">
             {systemSettings.map((item, index) => (
-              <div key={item.path} className="animate-slide-up" style={{ animationDelay: `${(index + companySettings.length + userSettings.length + locationSettings.length + productSettings.length + pricingSettings.length) * 20}ms` }}>
+              <div key={item.path} className="animate-slide-up" style={{ animationDelay: `${(index + companySettings.length + userSettings.length + locationSettings.length + productSettings.length + pricingSettings.length + importSettings.length) * 20}ms` }}>
                 <SettingItem {...item} />
               </div>
             ))}

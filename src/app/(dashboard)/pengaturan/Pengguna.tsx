@@ -20,7 +20,7 @@ import { toast } from 'sonner';
 
 
 export default function Pengguna() {
-  const { users, addUser, updateUser, deleteUser, addKaryawan, karyawan, isAdminOrOwner } = useDatabase();
+  const { users, addUser, updateUser, deleteUser, addKaryawan, karyawan, isAdminOrOwner, cabang } = useDatabase();
 
   const roleLabels: Record<UserRole, string> = {
     admin: 'Administrator',
@@ -46,7 +46,7 @@ export default function Pengguna() {
                         user.email.toLowerCase().includes(searchQuery.toLowerCase());
                         
     return matchTab && matchSearch;
-  });
+  }).sort((a, b) => a.username.localeCompare(b.username));
 
   return (
     <SettingsCrud<UserType>
@@ -129,10 +129,14 @@ export default function Pengguna() {
         }
 
         const exists = users.find(u => u.id === item.id);
+        const isUserAdminOrOwner = item.roles?.some((r: UserRole) => ['admin', 'owner'].includes(r));
+        const finalCabangId = isUserAdminOrOwner ? null : (item.cabangId || '550e8400-e29b-41d4-a716-446655440002');
+
         if (exists) {
           // Convert to snake_case for DB
           const updateData = {
             ...item,
+            cabangId: finalCabangId,
             kode_unik: item.kodeUnik?.toUpperCase().trim()
           };
           updateUser(item.id, updateData);
@@ -141,9 +145,6 @@ export default function Pengguna() {
           const newUserId = self.crypto.randomUUID();
           const newKaryawanId = self.crypto.randomUUID();
           
-          // Default Branch (Pusat)
-          const defaultCabangId = '550e8400-e29b-41d4-a716-446655440002'; 
-
           // Create User linked to Karyawan
           const { id: _ignored, ...userData } = item;
           addUser({
@@ -153,7 +154,7 @@ export default function Pengguna() {
             // Ensure mandatory fields for users table
             nama: item.username, // Default name to username if not provided
             telepon: '-',
-            cabangId: defaultCabangId,
+            cabangId: finalCabangId,
             isActive: true,
             karyawanId: newKaryawanId
           } as any); // eslint-disable-line @typescript-eslint/no-explicit-any
@@ -165,7 +166,7 @@ export default function Pengguna() {
             posisi: 'Staff', 
             telepon: '-', 
             status: 'aktif',
-            cabangId: defaultCabangId, 
+            cabangId: finalCabangId, 
             userAccountId: newUserId // Linking to users.id
           } as any); // eslint-disable-line @typescript-eslint/no-explicit-any
         }
@@ -247,6 +248,26 @@ export default function Pengguna() {
               <p className="text-xs text-muted-foreground">
                 Email ini harus sama persis dengan yang didaftarkan di Supabase Auth.
               </p>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="cabangId">Penempatan Cabang</Label>
+              <select
+                id="cabangId"
+                name="cabangId"
+                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                value={formData.cabangId || ''}
+                onChange={handleChange}
+                disabled={formData.roles?.some((r: UserRole) => ['admin', 'owner'].includes(r))}
+              >
+                <option value="">Pilih Cabang...</option>
+                {[...cabang].sort((a, b) => a.nama.localeCompare(b.nama)).map(c => (
+                  <option key={c.id} value={c.id}>{c.nama}</option>
+                ))}
+              </select>
+              {formData.roles?.some((r: UserRole) => ['admin', 'owner'].includes(r)) && (
+                <p className="text-[10px] text-blue-600">Admin/Owner otomatis akses semua cabang (Pusat).</p>
+              )}
             </div>
 
             <div className="space-y-2">

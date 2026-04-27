@@ -3,6 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter }
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useDatabase } from '@/contexts/DatabaseContext';
+import { useAuth } from '@/contexts/AuthContext';
 import {
     LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer,
     BarChart, Bar, PieChart, Pie, Cell, Legend, AreaChart, Area
@@ -41,6 +42,7 @@ const DEFAULT_WIDGETS: WidgetConfig[] = [
 ];
 
 export default function AnalisaVisual() {
+    const { user: currentUser } = useAuth();
     const { penjualan, barang, kategori: listKategori, users, pelanggan } = useDatabase();
     const [dateRange, setDateRange] = useState<'7d' | '30d' | '90d' | 'year'>('30d');
 
@@ -64,11 +66,18 @@ export default function AnalisaVisual() {
         if (dateRange === '90d') past.setDate(now.getDate() - 90);
         if (dateRange === 'year') past.setFullYear(now.getFullYear() - 1);
 
+        const isAdminOrOwner = currentUser?.roles.some(r => ['admin', 'owner'].includes(r));
+
         return penjualan.filter(p => {
             const d = new Date(p.tanggal);
-            return d >= past && d <= now && p.status !== 'batal';
+            const isInRange = d >= past && d <= now && p.status !== 'batal';
+            
+            if (!isInRange) return false;
+            if (isAdminOrOwner) return true;
+            
+            return p.cabangId === currentUser?.cabangId;
         });
-    }, [penjualan, dateRange]);
+    }, [penjualan, dateRange, currentUser]);
 
     // 2. Dynamic Data Aggregator
     const getChartData = (source: DataSource, metric: DataMetric) => {

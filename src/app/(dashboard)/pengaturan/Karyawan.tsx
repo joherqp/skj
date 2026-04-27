@@ -26,25 +26,20 @@ export default function Karyawan() {
     return [...users].sort((a, b) => {
       const aTaken = a.karyawanId && a.id !== currentUserId;
       const bTaken = b.karyawanId && b.id !== currentUserId;
-      if (aTaken === bTaken) return 0;
-      return aTaken ? 1 : -1;
+      if (aTaken !== bTaken) return aTaken ? 1 : -1;
+      return (a.username || '').localeCompare(b.username || '');
     });
   };
 
   const [activeTab, setActiveTab] = useState('aktif');
   const [searchQuery, setSearchQuery] = useState('');
 
-  const filteredKaryawan = karyawan.filter(k => {
-    // Tab Filter
-    const matchTab = activeTab === 'all' ? true : k.status === activeTab;
-
-    // Search Filter
-    const matchSearch = searchQuery === '' ||
-      k.nama.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      k.posisi.toLowerCase().includes(searchQuery.toLowerCase());
-
+  const filteredKaryawan = (karyawan || []).filter(k => {
+    const matchTab = activeTab === 'all' || k.status === activeTab;
+    const matchSearch = k.nama.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                       k.posisi.toLowerCase().includes(searchQuery.toLowerCase());
     return matchTab && matchSearch;
-  });
+  }).sort((a, b) => a.nama.localeCompare(b.nama));
 
   return (
     <SettingsCrud<KaryawanType>
@@ -334,7 +329,7 @@ export default function Karyawan() {
               required
             >
               <option value="">-- Pilih Cabang --</option>
-              {cabang.map(c => (
+              {[...cabang].sort((a, b) => a.nama.localeCompare(b.nama)).map(c => (
                 <option key={c.id} value={c.id}>{c.nama}</option>
               ))}
             </select>

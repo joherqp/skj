@@ -513,7 +513,7 @@ export const useApprovalAction = () => {
                                 satuanId: d.satuanId as string,
                                 harga: d.hargaBaru as number,
                                 minQty: d.minQty || 1,
-                                cabangId: d.cabangId as string,
+                                cabangIds: d.cabangIds || (d.cabangId ? [d.cabangId as string] : []),
                                 kategoriPelangganIds: d.kategoriPelangganIds || [],
                                 grosir: d.grosir || [],
                                 tanggalEfektif: d.tanggalEfektif ? new Date(d.tanggalEfektif as string) : new Date(),
@@ -527,7 +527,7 @@ export const useApprovalAction = () => {
                                 satuanId: d.satuanId as string,
                                 harga: d.hargaBaru as number,
                                 minQty: d.minQty as number,
-                                cabangId: d.cabangId as string,
+                                cabangIds: d.cabangIds || (d.cabangId ? [d.cabangId as string] : []),
                                 kategoriPelangganIds: d.kategoriPelangganIds || [],
                                 grosir: d.grosir || [],
                                 tanggalEfektif: d.tanggalEfektif ? new Date(d.tanggalEfektif as string) : undefined,
@@ -567,6 +567,8 @@ export const useApprovalAction = () => {
                             aktif: (promoData.isActive !== undefined ? promoData.isActive : (promoData.aktif ?? true)),
                             berlaku_mulai: ensureDate(promoData.tanggalMulai || promoData.berlaku_mulai),
                             berlaku_sampai: ensureDate(promoData.tanggalBerakhir || promoData.berlaku_sampai),
+                            cabang_ids: promoData.cabangIds || promoData.cabang_ids || (promoData.cabangId ? [promoData.cabangId] : []),
+                            cabang_id: null // Clear legacy
                         };
 
                         // Cleanup frontend-only keys to avoid duplication/conflicts

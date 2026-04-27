@@ -89,12 +89,22 @@ export default function LaporanHarian() {
     const [isRefreshingTargets, setIsRefreshingTargets] = useState(false);
 
     const [selectedDate, setSelectedDate] = useState<string>(() => format(new Date(), 'yyyy-MM-dd'));
-    const [selectedCabangIds, setSelectedCabangIds] = useState<string[]>([]);
+    const isAdminOrOwner = currentUser?.roles.some(r => ['admin', 'owner'].includes(r));
+    const [selectedCabangIds, setSelectedCabangIds] = useState<string[]>(
+        isAdminOrOwner ? [] : (currentUser?.cabangId ? [currentUser.cabangId] : [])
+    );
     const [selectedUserIds, setSelectedUserIds] = useState<string[]>([]);
     const [isGenerating, setIsGenerating] = useState(false);
     const [isFilterOpen, setIsFilterOpen] = useState(false);
 
-    const isAdminOrOwner = currentUser?.roles.some(r => ['admin', 'owner'].includes(r));
+
+
+    // Force branch filter for non-admin/owner
+    useEffect(() => {
+        if (currentUser && !isAdminOrOwner && currentUser.cabangId) {
+            setSelectedCabangIds([currentUser.cabangId]);
+        }
+    }, [currentUser, isAdminOrOwner]);
 
     useEffect(() => {
         const fetchPayments = async () => {
@@ -139,6 +149,31 @@ export default function LaporanHarian() {
         };
         fetchTargets();
     }, []);
+
+    const { availableCabangIds, availableUserIds } = useMemo(() => {
+        const date = new Date(selectedDate);
+        const dayStart = startOfDay(date);
+        const dayEnd = endOfDay(date);
+
+        const relevantSales = penjualan.filter(p => {
+            const pDate = new Date(p.tanggal);
+            return pDate >= dayStart && pDate <= dayEnd && p.status !== 'batal' && p.status !== 'draft';
+        });
+
+        const cIds = new Set<string>();
+        const uIds = new Set<string>();
+
+        relevantSales.forEach(p => {
+            if (p.cabangId) cIds.add(p.cabangId);
+            if (p.salesId) uIds.add(p.salesId);
+            if (p.createdBy) uIds.add(p.createdBy);
+        });
+
+        return {
+            availableCabangIds: Array.from(cIds),
+            availableUserIds: Array.from(uIds)
+        };
+    }, [selectedDate, penjualan]);
 
     const reportData = useMemo(() => {
         const date = new Date(selectedDate);
@@ -714,6 +749,8 @@ export default function LaporanHarian() {
                                 setSelectedCabangIds={setSelectedCabangIds}
                                 selectedUserIds={selectedUserIds}
                                 setSelectedUserIds={setSelectedUserIds}
+                                availableCabangIds={availableCabangIds}
+                                availableUserIds={availableUserIds}
                                 className="!space-y-0 flex flex-row items-center gap-2"
                             />
                         )}

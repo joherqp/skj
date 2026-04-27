@@ -13,7 +13,7 @@ export default function KategoriProduk() {
     <SettingsCrud<Kategori>
       title="Kategori Produk"
       icon={Tags}
-      items={kategori}
+      items={[...kategori].sort((a, b) => a.nama.localeCompare(b.nama))}
       columns={[
         { key: 'nama', label: 'Nama Kategori' },
         { key: 'deskripsi', label: 'Deskripsi' }

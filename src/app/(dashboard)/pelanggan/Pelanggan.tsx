@@ -431,7 +431,7 @@ ${profilPerusahaan?.nama || ''}`;
                         <div className="space-y-3">
                             <Label>Kategori</Label>
                             <div className="space-y-2 max-h-[200px] overflow-y-auto">
-                                {kategoriPelanggan.map(cat => (
+                                {[...kategoriPelanggan].sort((a, b) => a.nama.localeCompare(b.nama)).map(cat => (
                                     <div key={cat.id} className="flex items-center space-x-2">
                                         <input 
                                             type="checkbox" 
@@ -479,7 +479,7 @@ ${profilPerusahaan?.nama || ''}`;
                                           Semua Cabang
                                       </DropdownMenuCheckboxItem>
                                       <DropdownMenuSeparator />
-                                      {listCabang.map(c => (
+                                      {[...listCabang].sort((a, b) => a.nama.localeCompare(b.nama)).map(c => (
                                           <DropdownMenuCheckboxItem
                                               key={c.id}
                                               checked={selectedCabangIds.includes(c.id)}
@@ -535,7 +535,9 @@ ${profilPerusahaan?.nama || ''}`;
                                               return isSalesOrLeader && isActive && isInSelectedCabang;
                                           }
                                           return isSalesOrLeader && isActive && u.cabangId === user?.cabangId;
-                                      }).map(u => (
+                                      })
+                                      .sort((a, b) => a.nama.localeCompare(b.nama))
+                                      .map(u => (
                                           <DropdownMenuCheckboxItem
                                               key={u.id}
                                               checked={selectedUserIds.includes(u.id)}

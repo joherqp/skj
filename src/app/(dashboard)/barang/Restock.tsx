@@ -74,7 +74,7 @@ export function RestockForm({ embedded, onSuccess }: RestockFormProps) {
 
     // Strict branch match, no global admin bypass
     return isCabangMatch && isRoleMatch;
-  });
+  }).sort((a, b) => a.nama.localeCompare(b.nama));
 
   const handlePreSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -196,7 +196,7 @@ export function RestockForm({ embedded, onSuccess }: RestockFormProps) {
                     <SelectValue placeholder="Pilih cabang..." />
                   </SelectTrigger>
                   <SelectContent>
-                    {cabang.map((c) => (
+                    {[...cabang].sort((a, b) => a.nama.localeCompare(b.nama)).map((c) => (
                       <SelectItem key={c.id} value={c.id}>{c.nama}</SelectItem>
                     ))}
                   </SelectContent>
@@ -234,8 +234,9 @@ export function RestockForm({ embedded, onSuccess }: RestockFormProps) {
                   <SelectValue placeholder="Pilih barang..." />
                 </SelectTrigger>
                 <SelectContent>
-                  {barang
+                  {[...barang]
                     .filter(b => b.isActive) // Filter inactive products
+                    .sort((a, b) => a.nama.localeCompare(b.nama))
                     .map((item) => (
                       <SelectItem key={item.id} value={item.id}>
                         {item.nama}

@@ -1,7 +1,10 @@
 'use client';
+import { useState } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
+
 import { useDatabase } from '@/contexts/DatabaseContext';
-import { Building, Users, ChevronDown } from 'lucide-react';
+import { Building, Users, ChevronDown, Search } from 'lucide-react';
+
 import { Button } from '@/components/ui/button';
 import {
     DropdownMenu,
@@ -18,6 +21,8 @@ interface ScopeFiltersProps {
     selectedUserIds: string[];
     setSelectedUserIds: (ids: string[]) => void;
     showUserFilter?: boolean;
+    availableCabangIds?: string[];
+    availableUserIds?: string[];
     className?: string;
 }
 
@@ -27,10 +32,14 @@ export function ScopeFilters({
     selectedUserIds,
     setSelectedUserIds,
     showUserFilter = true,
+    availableCabangIds,
+    availableUserIds,
     className = ""
 }: ScopeFiltersProps) {
     const { user: currentUser } = useAuth();
     const { cabang: listCabang, users, viewMode } = useDatabase();
+    const [cabangSearch, setCabangSearch] = useState('');
+    const [userSearch, setUserSearch] = useState('');
 
     const isAdminOrOwner = currentUser?.roles.some(r => ['admin', 'owner'].includes(r));
     const isLeader = currentUser?.roles.includes('leader');
@@ -39,6 +48,40 @@ export function ScopeFilters({
     // Only show filters if viewMode is 'all' or user is privileged
     const canSeeFilters = viewMode === 'all' || isAdminOrOwner || isLeader || isFinance;
     if (!canSeeFilters) return null;
+
+    // Filtered Branch Options
+    const branchOptions = [...listCabang]
+        .filter(c => {
+            const matchesSearch = c.nama.toLowerCase().includes(cabangSearch.toLowerCase());
+            const isAvailable = !availableCabangIds || availableCabangIds.includes(c.id);
+            if (cabangSearch) return matchesSearch;
+            return isAvailable;
+        })
+        .sort((a, b) => a.nama.localeCompare(b.nama));
+
+    // Filtered User Options
+    const userOptions = users
+        .filter(u => {
+            const isActive = u.isActive !== false;
+            let rolePass = false;
+            if (isAdminOrOwner) {
+                const isInSelectedCabang = selectedCabangIds.length === 0 || (u.cabangId && selectedCabangIds.includes(u.cabangId));
+                rolePass = isActive && isInSelectedCabang;
+            } else if (isLeader || isFinance) {
+                rolePass = isActive && u.cabangId === currentUser?.cabangId;
+            } else {
+                rolePass = u.id === currentUser?.id;
+            }
+
+            if (!rolePass) return false;
+
+            const matchesSearch = u.nama.toLowerCase().includes(userSearch.toLowerCase());
+            const isAvailable = !availableUserIds || availableUserIds.includes(u.id);
+            
+            if (userSearch) return matchesSearch;
+            return isAvailable;
+        })
+        .sort((a, b) => a.nama.localeCompare(b.nama));
 
     return (
         <div className={`space-y-4 ${className}`}>
@@ -60,18 +103,35 @@ export function ScopeFilters({
                             <ChevronDown className="w-4 h-4 opacity-50 shrink-0" />
                         </Button>
                     </DropdownMenuTrigger>
-                    <DropdownMenuContent className="w-[240px] max-h-[300px] overflow-y-auto rounded-xl shadow-xl border-muted-foreground/10">
-                        <DropdownMenuLabel className="text-xs">Daftar Cabang</DropdownMenuLabel>
-                        <DropdownMenuSeparator />
-                        <DropdownMenuCheckboxItem
-                            checked={selectedCabangIds.length === 0}
-                            onCheckedChange={() => setSelectedCabangIds([])}
-                            className="text-xs"
-                        >
-                            Semua Cabang
-                        </DropdownMenuCheckboxItem>
-                        <DropdownMenuSeparator />
-                        {listCabang.map(c => (
+                    <DropdownMenuContent className="w-[240px] max-h-[350px] flex flex-col p-0 rounded-xl shadow-xl border-muted-foreground/10">
+                        <div className="p-2 border-b bg-muted/30">
+                            <DropdownMenuLabel className="text-[10px] uppercase tracking-wider text-muted-foreground p-1">Pencarian Cabang</DropdownMenuLabel>
+                            <div className="relative">
+                                <Search className="absolute left-2 top-2 h-3 w-3 text-muted-foreground" />
+                                <input
+                                    className="w-full bg-background border rounded-md px-7 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-primary"
+                                    placeholder="Cari..."
+                                    value={cabangSearch}
+                                    onChange={(e) => setCabangSearch(e.target.value)}
+                                    autoFocus
+                                />
+                            </div>
+                        </div>
+                        <div className="flex-1 overflow-y-auto p-1">
+                            <DropdownMenuCheckboxItem
+                                checked={selectedCabangIds.length === 0}
+                                onCheckedChange={() => setSelectedCabangIds([])}
+                                className="text-xs"
+                            >
+                                Semua Cabang
+                            </DropdownMenuCheckboxItem>
+                            <DropdownMenuSeparator />
+                            {branchOptions.length === 0 && (
+                                <div className="p-4 text-center text-muted-foreground text-[10px]">
+                                    Tidak ada data
+                                </div>
+                            )}
+                            {branchOptions.map(c => (
                             <DropdownMenuCheckboxItem
                                 key={c.id}
                                 checked={selectedCabangIds.includes(c.id)}
@@ -86,7 +146,8 @@ export function ScopeFilters({
                             >
                                 {c.nama}
                             </DropdownMenuCheckboxItem>
-                        ))}
+                            ))}
+                        </div>
                     </DropdownMenuContent>
                 </DropdownMenu>
             )}
@@ -108,28 +169,35 @@ export function ScopeFilters({
                             <ChevronDown className="w-4 h-4 opacity-50 shrink-0" />
                         </Button>
                     </DropdownMenuTrigger>
-                    <DropdownMenuContent className="w-[240px] max-h-[300px] overflow-y-auto rounded-xl shadow-xl border-muted-foreground/10">
-                        <DropdownMenuLabel className="text-xs">Daftar Pengguna</DropdownMenuLabel>
-                        <DropdownMenuSeparator />
-                        <DropdownMenuCheckboxItem
-                            checked={selectedUserIds.length === 0}
-                            onCheckedChange={() => setSelectedUserIds([])}
-                            className="text-xs"
-                        >
-                            Semua Pengguna
-                        </DropdownMenuCheckboxItem>
-                        <DropdownMenuSeparator />
-                        {users.filter(u => {
-                            const isActive = u.isActive !== false;
-                            if (isAdminOrOwner) {
-                                const isInSelectedCabang = selectedCabangIds.length === 0 || (u.cabangId && selectedCabangIds.includes(u.cabangId));
-                                return isActive && isInSelectedCabang;
-                            }
-                            if (isLeader || isFinance) {
-                                return isActive && u.cabangId === currentUser?.cabangId;
-                            }
-                            return u.id === currentUser?.id;
-                        }).map(u => (
+                    <DropdownMenuContent className="w-[240px] max-h-[350px] flex flex-col p-0 rounded-xl shadow-xl border-muted-foreground/10">
+                        <div className="p-2 border-b bg-muted/30">
+                            <DropdownMenuLabel className="text-[10px] uppercase tracking-wider text-muted-foreground p-1">Pencarian Pengguna</DropdownMenuLabel>
+                            <div className="relative">
+                                <Search className="absolute left-2 top-2 h-3 w-3 text-muted-foreground" />
+                                <input
+                                    className="w-full bg-background border rounded-md px-7 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-primary"
+                                    placeholder="Cari..."
+                                    value={userSearch}
+                                    onChange={(e) => setUserSearch(e.target.value)}
+                                    autoFocus
+                                />
+                            </div>
+                        </div>
+                        <div className="flex-1 overflow-y-auto p-1">
+                            <DropdownMenuCheckboxItem
+                                checked={selectedUserIds.length === 0}
+                                onCheckedChange={() => setSelectedUserIds([])}
+                                className="text-xs"
+                            >
+                                Semua Pengguna
+                            </DropdownMenuCheckboxItem>
+                            <DropdownMenuSeparator />
+                            {userOptions.length === 0 && (
+                                <div className="p-4 text-center text-muted-foreground text-[10px]">
+                                    Tidak ada data
+                                </div>
+                            )}
+                            {userOptions.map(u => (
                             <DropdownMenuCheckboxItem
                                 key={u.id}
                                 checked={selectedUserIds.includes(u.id)}
@@ -144,7 +212,8 @@ export function ScopeFilters({
                             >
                                 {u.nama.toUpperCase()}
                             </DropdownMenuCheckboxItem>
-                        ))}
+                            ))}
+                        </div>
                     </DropdownMenuContent>
                 </DropdownMenu>
             )}

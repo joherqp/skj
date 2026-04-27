@@ -9,7 +9,7 @@ export interface User {
   email: string;
   telepon: string;
   roles: UserRole[];
-  cabangId: string;
+  cabangId: string | null;
   karyawanId?: string;
   avatarUrl?: string;
   kodeUnik?: string;

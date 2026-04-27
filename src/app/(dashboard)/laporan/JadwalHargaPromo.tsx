@@ -1,5 +1,5 @@
 'use client';
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useMemo } from 'react';
 import { useDatabase } from '@/contexts/DatabaseContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { Card } from '@/components/ui/card';
@@ -30,6 +30,7 @@ interface ScheduleItemBase {
     value: string;
     oldValue?: string;
     cabangId?: string;
+    cabangIds?: string[];
     userId?: string;
 }
 
@@ -60,6 +61,14 @@ export default function JadwalHargaPromo() {
     const [showFilters, setShowFilters] = useState(false);
 
     useEffect(() => {
+        // Strict branch isolation: auto-select user's branch for non-admins
+        const isAdminOrOwner = user?.roles.some(r => ['admin', 'owner'].includes(r));
+        if (!isAdminOrOwner && user?.cabangId && selectedCabangIds.length === 0) {
+            setSelectedCabangIds([user.cabangId]);
+        }
+    }, [user, selectedCabangIds.length]);
+
+    useEffect(() => {
         setDisplayLimit(20);
     }, [activeTab]);
 
@@ -82,10 +91,18 @@ export default function JadwalHargaPromo() {
         persetujuan.filter(p => {
             if (p.status !== 'pending') return false;
             if (isGlobal) return true;
-            // If not global, check target branch. Global targets (!targetCabangId) are visible to all? Or just Admin?
-            // Usually global changes are Admin purview. Branch users see changes targeted at THEM.
-            // Assuming undefined targetCabangId means Global/All Branches.
-            return !p.targetCabangId || p.targetCabangId === userBranch;
+            
+            const pData = p.data as PersetujuanPayload;
+            const targetBranches = pData?.cabangIds || [];
+            
+            // Check singular target
+            if (p.targetCabangId && p.targetCabangId === userBranch) return true;
+            
+            // Check multi-branch target
+            if (targetBranches.length > 0) return targetBranches.includes(userBranch!);
+            
+            // If it's truly global (no specific target), visible to everyone
+            return !p.targetCabangId && targetBranches.length === 0;
         }).forEach(p => {
             const pData = p.data as PersetujuanPayload;
             if (p.jenis === 'perubahan_harga' && pData) {
@@ -105,7 +122,7 @@ export default function JadwalHargaPromo() {
                     value: formatRupiah(pData.hargaBaru),
                     oldValue: pData.hargaLama ? formatRupiah(pData.hargaLama) : undefined,
                     details: pData,
-                    cabangId: p.targetCabangId || 'global',
+                    cabangIds: pData.cabangIds || (p.targetCabangId ? [p.targetCabangId] : []),
                     userId: p.diajukanOleh
                 });
             } else if (p.jenis === 'promo' && pData) {
@@ -123,7 +140,7 @@ export default function JadwalHargaPromo() {
                     status: 'pending',
                     value: pData.tipe === 'persen' ? `${pData.nilai}%` : (pData.tipe === 'produk' ? 'Free Item' : formatRupiah(pData.nilai)),
                     details: pData,
-                    cabangId: p.targetCabangId || 'global',
+                    cabangIds: pData.cabangIds || (p.targetCabangId ? [p.targetCabangId] : []),
                     userId: p.diajukanOleh
                 });
             }
@@ -135,10 +152,17 @@ export default function JadwalHargaPromo() {
 
         // Grouping for harga to find latest active and expired
         harga.filter(h => {
-            // Usually we only care about approved prices in this section
             if (h.status === 'ditolak') return false;
             if (isGlobal) return true;
-            return !h.cabangId || h.cabangId === userBranch;
+            
+            // Match singular branch
+            if (h.cabangId && h.cabangId === userBranch) return true;
+            
+            // Match multi-branch array
+            if (h.cabangIds && h.cabangIds.includes(userBranch!)) return true;
+            
+            // Global price (no branch restriction)
+            return !h.cabangId && (!h.cabangIds || h.cabangIds.length === 0);
         }).forEach(h => {
             // Unique key for product pricing context: product + unit + minQty + branch + categories
             const key = `${h.barangId}-${h.satuanId}-${h.minQty || 0}-${h.cabangId || 'global'}-${(h.kategoriPelangganIds || []).sort().join(',')}`;
@@ -184,7 +208,7 @@ export default function JadwalHargaPromo() {
                     status: status,
                     value: formatRupiah(h.harga),
                     details: h,
-                    cabangId: h.cabangId || 'global',
+                    cabangIds: h.cabangIds || (h.cabangId ? [h.cabangId] : []),
                     userId: h.disetujuiOleh
                 });
             });
@@ -193,7 +217,15 @@ export default function JadwalHargaPromo() {
         // Promo
         promo.filter(p => {
             if (isGlobal) return true;
-            return !p.cabangId || p.cabangId === userBranch;
+            
+            // Match singular branch
+            if (p.cabangId && p.cabangId === userBranch) return true;
+            
+            // Match multi-branch array
+            if (p.cabangIds && p.cabangIds.includes(userBranch!)) return true;
+            
+            // Global promo
+            return !p.cabangId && (!p.cabangIds || p.cabangIds.length === 0);
         }).forEach(p => {
             const now = new Date();
             // Handle property name mismatch (DB: berlaku_mulai -> Camel: berlakuMulai vs Frontend: tanggalMulai)
@@ -225,7 +257,7 @@ export default function JadwalHargaPromo() {
                 status: status,
                 value: p.tipe === 'persen' ? `${p.nilai}%` : (p.tipe === 'produk' ? 'Free Item' : formatRupiah(p.nilai)),
                 details: p,
-                cabangId: p.cabangId || 'global'
+                cabangIds: p.cabangIds || (p.cabangId ? [p.cabangId] : [])
             });
         });
 
@@ -233,6 +265,16 @@ export default function JadwalHargaPromo() {
     };
 
     const allItems = getItems();
+
+    const availableCabangIds = useMemo(() => {
+        const cabs = new Set<string>();
+        allItems.forEach(item => {
+            if (item.cabangIds && item.cabangIds.length > 0) {
+                item.cabangIds.forEach(id => cabs.add(id));
+            }
+        });
+        return Array.from(cabs);
+    }, [allItems]);
 
     // Custom sorting: Active first, then by date desc
     const sortedItems = [...allItems].sort((a, b) => {
@@ -253,8 +295,9 @@ export default function JadwalHargaPromo() {
 
         // Branch filter
         if (selectedCabangIds.length > 0) {
-            if (item.cabangId === 'global') return true; // Global visible to all?
-            if (item.cabangId && !selectedCabangIds.includes(item.cabangId)) return false;
+            const itemBranchIds = item.cabangIds || [];
+            if (itemBranchIds.length === 0) return true; // Global matches everything
+            if (!itemBranchIds.some(id => selectedCabangIds.includes(id))) return false;
         }
 
         return true;
@@ -389,6 +432,7 @@ export default function JadwalHargaPromo() {
                                 setSelectedCabangIds={setSelectedCabangIds}
                                 selectedUserIds={[]}
                                 setSelectedUserIds={() => {}}
+                                availableCabangIds={availableCabangIds}
                                 showUserFilter={false}
                             />
                         </div>
@@ -431,9 +475,24 @@ export default function JadwalHargaPromo() {
                                                      <div>
                                                          <p className="font-bold text-sm md:text-lg leading-tight truncate max-w-[200px] md:max-w-none">{item.title}</p>
                                                          {item.subtitle && <p className="text-[10px] md:text-sm text-muted-foreground mt-0.5">{item.subtitle}</p>}
-                                                         {item.cabangId && item.cabangId !== 'global' && (
-                                                             <p className="text-[10px] text-blue-600 font-medium mt-0.5 flex items-center gap-1">
-                                                                 <Building2 className="w-3 h-3" /> {cabang.find(c => c.id === item.cabangId)?.nama || item.cabangId}
+                                                         {item.cabangIds && item.cabangIds.length > 0 ? (
+                                                             <div className="flex flex-wrap gap-1 mt-1">
+                                                                 {item.cabangIds
+                                                                    .map(id => ({ id, nama: cabang.find(c => c.id === id)?.nama || id }))
+                                                                    .sort((a, b) => a.nama.localeCompare(b.nama))
+                                                                    .slice(0, 3)
+                                                                    .map(c => (
+                                                                     <Badge key={c.id} variant="outline" className="text-[9px] px-1 py-0 h-4 bg-blue-50 text-blue-600 border-blue-100">
+                                                                         {c.nama}
+                                                                     </Badge>
+                                                                 ))}
+                                                                 {item.cabangIds.length > 3 && (
+                                                                     <span className="text-[9px] text-muted-foreground">+{item.cabangIds.length - 3}</span>
+                                                                 )}
+                                                             </div>
+                                                         ) : (
+                                                             <p className="text-[10px] text-muted-foreground mt-0.5 flex items-center gap-1">
+                                                                 <Building2 className="w-3 h-3" /> Global (Semua Cabang)
                                                              </p>
                                                          )}
                                                      </div>
@@ -559,9 +618,24 @@ export default function JadwalHargaPromo() {
                                                 <div>
                                                     <p className="font-medium">Cabang</p>
                                                     <p className="text-muted-foreground text-xs">
-                                                        {selectedItem.details.cabangId
-                                                            ? cabang.find(c => c.id === selectedItem.details.cabangId)?.nama
-                                                            : 'Semua Cabang'}
+                                                     <div className="flex flex-wrap gap-1">
+                                                        {selectedItem.details.cabangIds && selectedItem.details.cabangIds.length > 0 ? (
+                                                            selectedItem.details.cabangIds
+                                                                .map((id: string) => ({ id, nama: cabang.find(c => c.id === id)?.nama || id }))
+                                                                .sort((a: any, b: any) => a.nama.localeCompare(b.nama))
+                                                                .map((c: any) => (
+                                                                <Badge key={c.id} variant="secondary" className="text-[10px]">
+                                                                    {c.nama}
+                                                                </Badge>
+                                                            ))
+                                                        ) : selectedItem.details.cabangId ? (
+                                                            <Badge variant="secondary" className="text-[10px]">
+                                                                {cabang.find(c => c.id === selectedItem.details.cabangId)?.nama || selectedItem.details.cabangId}
+                                                            </Badge>
+                                                        ) : (
+                                                            <span className="text-muted-foreground text-xs italic">Semua Cabang (Global)</span>
+                                                        )}
+                                                     </div>
                                                     </p>
                                                 </div>
                                             </div>
@@ -625,10 +699,13 @@ export default function JadwalHargaPromo() {
                                                 <h4 className="font-semibold mb-2 text-sm">Produk Terkait</h4>
                                                 <div className="border rounded-md max-h-40 overflow-y-auto p-2 bg-slate-50">
                                                     <ul className="space-y-1 text-sm">
-                                                        {selectedItem.details.targetProdukIds.map((id: string) => (
-                                                            <li key={id} className="flex items-center gap-2">
+                                                        {selectedItem.details.targetProdukIds
+                                                            .map((id: string) => ({ id, nama: barang.find(b => b.id === id)?.nama || 'Unknown Product' }))
+                                                            .sort((a: any, b: any) => a.nama.localeCompare(b.nama))
+                                                            .map((p: any) => (
+                                                            <li key={p.id} className="flex items-center gap-2">
                                                                 <CheckCircle className="w-3 h-3 text-green-600" />
-                                                                {barang.find(b => b.id === id)?.nama || 'Unknown Product'}
+                                                                {p.nama}
                                                             </li>
                                                         ))}
                                                     </ul>

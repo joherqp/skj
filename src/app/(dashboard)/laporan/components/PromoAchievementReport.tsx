@@ -20,7 +20,9 @@ export default function PromoAchievementReport() {
 
   // Filter only Event type promos
   const eventPromos = useMemo(() => {
-    return promo.filter(p => p.tipe === 'event' && p.isActive !== false);
+    return promo
+      .filter(p => p.tipe === 'event' && p.isActive !== false)
+      .sort((a, b) => a.nama.localeCompare(b.nama));
   }, [promo]);
 
   // Selected promo details

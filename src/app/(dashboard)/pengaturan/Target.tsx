@@ -395,7 +395,7 @@ export default function TargetPage() {
                         <SelectValue placeholder="Pilih sales..." />
                       </SelectTrigger>
                       <SelectContent>
-                        {salesList.map((s) => (
+                        {[...salesList].sort((a, b) => a.nama.localeCompare(b.nama)).map((s) => (
                           <SelectItem key={s.id} value={s.id}>{s.nama}</SelectItem>
                         ))}
                       </SelectContent>
@@ -414,7 +414,7 @@ export default function TargetPage() {
                         <SelectValue placeholder="Pilih cabang..." />
                       </SelectTrigger>
                       <SelectContent>
-                        {cabangList.map((c) => (
+                        {[...cabangList].sort((a, b) => a.nama.localeCompare(b.nama)).map((c) => (
                           <SelectItem key={c.id} value={c.id}>{c.nama}</SelectItem>
                         ))}
                       </SelectContent>

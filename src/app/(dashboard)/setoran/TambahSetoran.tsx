@@ -326,7 +326,7 @@ export default function TambahSetoran() {
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="global">Saldo Global (Gabungan)</SelectItem>
-                      {cabang.map((c) => (
+                      {[...cabang].sort((a, b) => a.nama.localeCompare(b.nama)).map((c) => (
                         <SelectItem key={c.id} value={c.id}>
                           {c.nama}
                         </SelectItem>
@@ -359,6 +359,7 @@ export default function TambahSetoran() {
                       if (filterFinanceOnly && !u.roles.includes('finance')) return false;
                       return !user?.cabangId || u.cabangId === user.cabangId;
                     })
+                    .sort((a, b) => a.nama.localeCompare(b.nama))
                     .map(u => ({ value: u.id, label: u.nama }))
                   }
                   value={formData.recipientUserId}

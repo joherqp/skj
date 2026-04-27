@@ -61,7 +61,7 @@ export function MutasiBarangForm({ embedded, onSuccess, onCancel }: MutasiBarang
 
       // Allow ALL roles in same branch
       return isCabangMatch && isNotSelf && u.isActive !== false;
-  });
+  }).sort((a, b) => a.nama.localeCompare(b.nama));
 
   const [cart, setCart] = useState<{ barangId: string; jumlah: number; satuanId: string; konversi: number }[]>([]);
 
@@ -321,6 +321,7 @@ export function MutasiBarangForm({ embedded, onSuccess, onCancel }: MutasiBarang
                                                         const isSelected = cart.some(c => c.barangId === b.id);
                                                         return !isSelected || b.id === item.barangId;
                                                     })
+                                                    .sort((a, b) => a.nama.localeCompare(b.nama))
                                                     .map(b => {
                                                         const userStock = stokPengguna.find(s => s.userId === user?.id && s.barangId === b.id)?.jumlah || 0;
                                                         const unitName = satuan.find(s => s.id === b.satuanId)?.simbol || 'Unit';

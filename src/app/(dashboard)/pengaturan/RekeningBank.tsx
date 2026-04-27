@@ -16,7 +16,7 @@ export default function RekeningBank() {
     <SettingsCrud<RekeningBankType>
       title="Rekening Bank & Kas"
       icon={CreditCard}
-      items={rekeningBank}
+      items={[...rekeningBank].sort((a, b) => a.namaBank.localeCompare(b.namaBank))}
       columns={[
         { key: 'namaBank', label: 'Bank' },
         { key: 'nomorRekening', label: 'No. Rekening' },
@@ -69,7 +69,7 @@ export default function RekeningBank() {
                 searchPlaceholder="Cari User..."
                 options={[
                     { label: "-- Tidak Ada / Default --", value: "none" },
-                    ...users.filter(u => u.isActive !== false).map(u => ({
+                    ...users.filter(u => u.isActive !== false).sort((a, b) => (a.nama || '').localeCompare(b.nama || '')).map(u => ({
                         label: u.nama,
                         value: u.id,
                         description: u.roles.join(', ')

@@ -54,7 +54,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     email: string;
     telepon: string;
     roles: string[];
-    cabang_id: string;
+    cabang_id: string | null;
     karyawan_id?: string | null;
     avatar_url?: string | null;
     kode_unik?: string | null;

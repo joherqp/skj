@@ -531,6 +531,10 @@ export function ApprovalCard({
                                         {cabang.find(c => c.id === id)?.nama || id}
                                     </Badge>
                                 ))
+                            ) : d.cabangId ? (
+                                <Badge variant="outline" className="text-[9px] px-1 py-0 bg-orange-100/50 border-orange-200">
+                                    {cabang.find(c => c.id === d.cabangId)?.nama || d.cabangId}
+                                </Badge>
                             ) : (
                                 <Badge variant="outline" className="text-[9px] px-1 py-0">Global</Badge>
                             )}
@@ -584,6 +588,10 @@ export function ApprovalCard({
                                         {cabang.find(c => c.id === id)?.nama || id}
                                     </Badge>
                                 ))
+                            ) : d.cabangId ? (
+                                <Badge variant="outline" className="text-[9px] px-1 py-0 bg-purple-100/50 border-purple-200">
+                                    {cabang.find(c => c.id === d.cabangId)?.nama || d.cabangId}
+                                </Badge>
                             ) : (
                                 <Badge variant="outline" className="text-[9px] px-1 py-0">Global</Badge>
                             )}

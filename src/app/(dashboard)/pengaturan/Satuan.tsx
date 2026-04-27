@@ -12,7 +12,7 @@ export default function Satuan() {
     <SettingsCrud<SatuanType>
       title="Satuan Produk"
       icon={Ruler}
-      items={satuan}
+      items={[...satuan].sort((a, b) => a.nama.localeCompare(b.nama))}
       columns={[
         { key: 'nama', label: 'Nama Satuan' },
         { key: 'simbol', label: 'Simbol' }

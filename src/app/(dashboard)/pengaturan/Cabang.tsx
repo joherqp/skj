@@ -18,7 +18,7 @@ export default function Cabang() {
     <SettingsCrud<CabangType>
       title="Daftar Cabang"
       icon={Store}
-      items={cabang}
+      items={[...cabang].sort((a, b) => a.nama.localeCompare(b.nama))}
       columns={[
         { key: 'nama', label: 'Nama Cabang' },
         {
@@ -61,7 +61,7 @@ export default function Cabang() {
               required
             >
               <option value="">-- Pilih Area --</option>
-              {area.map(a => (
+              {[...area].sort((a, b) => a.nama.localeCompare(b.nama)).map(a => (
                 <option key={a.id} value={a.id}>{a.nama} ({a.kota})</option>
               ))}
             </select>

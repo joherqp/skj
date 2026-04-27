@@ -12,7 +12,7 @@ export default function KategoriPelanggan() {
     <SettingsCrud<KategoriPelangganType>
       title="Kategori Pelanggan"
       icon={Users}
-      items={kategoriPelanggan}
+      items={[...kategoriPelanggan].sort((a, b) => a.nama.localeCompare(b.nama))}
       columns={[
         { key: 'nama', label: 'Nama Kategori' },
         { key: 'diskon', label: 'Diskon Default (%)' }

@@ -17,6 +17,7 @@ export default function Promo() {
   const { promo, addPromo, updatePromo, deletePromo, barang, cabang, addPersetujuan } = useDatabase();
   const { user, hasRole } = useAuth();
   const [activeTab, setActiveTab] = useState('aktif');
+  const isOwnerOrAdmin = hasRole(['owner', 'admin']);
 
   const filteredItems = [...(promo || [])].map(p => ({
     ...p,
@@ -25,8 +26,15 @@ export default function Promo() {
     tanggalMulai: (p as any).berlakuMulai || (p as any).berlaku_mulai || p.tanggalMulai,
     tanggalBerakhir: (p as any).berlakuSampai || (p as any).berlaku_sampai || p.tanggalBerakhir,
     metodeKelipatan: (p as any).metode_kelipatan || p.metodeKelipatan || 'per_item',
-    syaratJumlah: (p as any).syarat_jumlah || p.syaratJumlah || 0,
+    syaratJumlah: (p as any).syarat_jumlah || p.syarat_jumlah || p.syaratJumlah || 0,
   })).filter(p => {
+    // Multi-branch filtering logic
+    const isOwnerOrAdmin = hasRole(['owner', 'admin']);
+    const userCabangId = user?.cabangId;
+    const isTargetedToMyCabang = !p.cabangIds || p.cabangIds.length === 0 || (userCabangId && p.cabangIds.includes(userCabangId));
+    
+    if (!isOwnerOrAdmin && !isTargetedToMyCabang) return false;
+
     const now = new Date();
     const start = new Date(p.tanggalMulai);
     const end = p.tanggalBerakhir ? new Date(p.tanggalBerakhir) : null;
@@ -157,7 +165,7 @@ export default function Promo() {
         const prospectiveId = exists ? item.id : self.crypto.randomUUID();
 
         // Prepare Payload with Mapping
-        const { isActive, tanggalMulai, tanggalBerakhir, metodeKelipatan, syaratJumlah, isNew: _isNew, id: _id, ...rest } = item as any;
+        const { isActive, tanggalMulai, tanggalBerakhir, metodeKelipatan, syaratJumlah, isNew: _isNew, id: _id, cabangId: _oldCid, ...rest } = item as any;
         const payloadToSave = {
           ...rest,
           id: prospectiveId,
@@ -165,7 +173,9 @@ export default function Promo() {
           berlaku_mulai: tanggalMulai,
           berlaku_sampai: tanggalBerakhir,
           metode_kelipatan: metodeKelipatan,
-          syarat_jumlah: syaratJumlah
+          syarat_jumlah: syaratJumlah,
+          cabang_ids: item.cabangIds || [],
+          cabang_id: null // Ensure legacy column is cleared
         };
 
         console.log('Promo saving Payload:', payloadToSave);
@@ -351,8 +361,9 @@ export default function Promo() {
                   <div className="space-y-2">
                     <Label>Produk Bonus (Bisa pilih &gt; 1)</Label>
                     <div className="border rounded-md p-2 h-40 overflow-y-auto bg-white">
-                      {barang
+                      {[...barang]
                         .filter(b => b.isActive)
+                        .sort((a, b) => a.nama.localeCompare(b.nama))
                         .map(product => {
                           const isChecked = (formData.bonusProdukIds || []).includes(product.id) || formData.bonusProdukId === product.id;
                           return (
@@ -503,17 +514,19 @@ export default function Promo() {
           <div className="space-y-2 border rounded-md p-3">
             <Label className="mb-2 block font-medium">Berlaku di Cabang</Label>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-2 max-h-40 overflow-y-auto">
-              <div className="flex items-center space-x-2 col-span-full border-b pb-2 mb-1">
-                <Checkbox
-                  id="all-cabang-promo"
-                  checked={!formData.cabangIds || formData.cabangIds.length === 0}
-                  onCheckedChange={(checked) => {
-                    if (checked) setFormData(prev => ({ ...prev, cabangIds: [] }));
-                  }}
-                />
-                <label htmlFor="all-cabang-promo" className="text-sm font-medium">Semua Cabang (Global)</label>
-              </div>
-              {cabang.map(c => (
+              {isOwnerOrAdmin && (
+                <div className="flex items-center space-x-2 col-span-full border-b pb-2 mb-1">
+                  <Checkbox
+                    id="all-cabang-promo"
+                    checked={!formData.cabangIds || formData.cabangIds.length === 0}
+                    onCheckedChange={(checked) => {
+                      if (checked) setFormData(prev => ({ ...prev, cabangIds: [] }));
+                    }}
+                  />
+                  <label htmlFor="all-cabang-promo" className="text-sm font-medium">Semua Cabang (Global)</label>
+                </div>
+              )}
+              {cabang.filter(c => isOwnerOrAdmin || c.id === user?.cabangId).sort((a, b) => a.nama.localeCompare(b.nama)).map(c => (
                 <div key={c.id} className="flex items-center space-x-2">
                   <Checkbox
                     id={`cb-promo-${c.id}`}
@@ -536,8 +549,9 @@ export default function Promo() {
           {formData.scope === 'selected_products' && (
             <div className="space-y-2 border p-3 rounded-md max-h-40 overflow-y-auto">
               <Label className="mb-2 block">Pilih Target Produk</Label>
-              {barang
+              {[...barang]
                 .filter(b => b.isActive) // Filter inactive
+                .sort((a, b) => a.nama.localeCompare(b.nama))
                 .map(product => (
                   <div key={product.id} className="flex items-center space-x-2 mb-1">
                     <Checkbox

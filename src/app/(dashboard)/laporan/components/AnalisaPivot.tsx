@@ -96,9 +96,13 @@ export default function AnalisaPivot() {
     });
     const [endDate, setEndDate] = useState(() => new Date().toLocaleDateString('sv').split('T')[0]);
 
+    const isAdminOrOwner = currentUser?.roles.some(r => ['admin', 'owner'].includes(r));
+
     // UI State
     const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
-    const [selectedCabangIds, setSelectedCabangIds] = useState<string[]>([]);
+    const [selectedCabangIds, setSelectedCabangIds] = useState<string[]>(
+        isAdminOrOwner ? [] : (currentUser?.cabangId ? [currentUser.cabangId] : [])
+    );
     const [selectedUserIds, setSelectedUserIds] = useState<string[]>([]);
     const [selectedKategoriIds, setSelectedKategoriIds] = useState<string[]>([]);
     const [selectedKategoriPelangganIds, setSelectedKategoriPelangganIds] = useState<string[]>([]);
@@ -149,6 +153,31 @@ export default function AnalisaPivot() {
     };
 
     const collapseAll = () => setExpandedRows(new Set());
+
+    // Calculate available branches and users based on data in the selected period
+    const { availableCabangIds, availableUserIds } = useMemo(() => {
+        const cabs = new Set<string>();
+        const usrs = new Set<string>();
+
+        penjualan.forEach(p => {
+            if (p.status === 'batal' || p.status === 'draft') return;
+            
+            const d = format(new Date(p.tanggal), 'yyyy-MM-dd');
+            const inPeriod = isSingleDate ? (d === singleDate) : (d >= startDate && d <= endDate);
+            
+            if (inPeriod) {
+                if (p.cabangId) cabs.add(p.cabangId);
+                const sId = p.salesId || p.createdBy;
+                if (sId) usrs.add(sId);
+            }
+        });
+
+        return {
+            availableCabangIds: Array.from(cabs),
+            availableUserIds: Array.from(usrs)
+        };
+    }, [penjualan, isSingleDate, singleDate, startDate, endDate]);
+
 
     // 1. Flatten Data Source
     const flatData = useMemo(() => {
@@ -632,8 +661,11 @@ export default function AnalisaPivot() {
                                         setSelectedCabangIds={setSelectedCabangIds}
                                         selectedUserIds={selectedUserIds}
                                         setSelectedUserIds={setSelectedUserIds}
+                                        availableCabangIds={availableCabangIds}
+                                        availableUserIds={availableUserIds}
                                         className="!space-y-0 grid grid-cols-1 sm:flex sm:flex-row items-center gap-2"
                                     />
+
 
                                     {/* Kategori Filter */}
                                     <DropdownMenu>

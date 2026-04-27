@@ -1172,6 +1172,7 @@ export default function TambahPenjualan() {
                                                         // AND must be active
                                                         return (isGlobal || p.salesId === user?.id) && p.isActive;
                                                     })
+                                                    .sort((a, b) => a.nama.localeCompare(b.nama))
                                                     .map((p) => (
                                                         <CommandItem
                                                             key={p.id}
