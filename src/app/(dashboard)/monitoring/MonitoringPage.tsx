@@ -45,7 +45,7 @@ export default function Monitoring() {
     const router = useRouter();
     const {
         users, absensi, cabang: listCabang, pelanggan: listPelanggan, penjualan, setoran, mutasiBarang,
-        barang: listBarang, stokPengguna: listStokPengguna, targets: listTargets, kunjungan: listKunjungan, viewMode, kategoriPelanggan, profilPerusahaan, deletePelanggan, refresh
+        barang: listBarang, stokPengguna: listStokPengguna, targets: listTargets, kunjungan: listKunjungan, viewMode, kategoriPelanggan, profilPerusahaan, deletePelanggan, refresh, dbMode
     } = useDatabase();
 
     const [mapMode, setMapMode] = useState<MapMode>('pelanggan');
@@ -459,14 +459,14 @@ export default function Monitoring() {
             // Only Admin/Owner can see all sessions, others only their own
             if (!currentUser.roles.some(r => (['admin', 'owner'] as string[]).includes(r)) && viewMode !== 'me') return;
 
-            let query = supabase
-                .from('user_locations')
+            console.log("Fetching locations from schema:", dbMode);
+            let query = supabase.schema(dbMode).from('user_locations')
                 .select(`
                   id,
                   latitude,
                   longitude,
                   timestamp,
-                  users ( id, nama, roles, cabang_id )
+                  users!user_id ( id, nama )
               `)
                 .order('timestamp', { ascending: false })
                 .limit(100); // Batasi query untuk mencegah performa lemot di tab Tracking
@@ -505,6 +505,8 @@ export default function Monitoring() {
                     users: Array.isArray(d.users) ? d.users[0] : d.users as { id: string; nama: string; roles: string[]; cabang_id: string }
                 }));
                 setSessionLocations(formattedData);
+            } else if (error) {
+                console.error("Error fetching locations:", error);
             }
         };
 

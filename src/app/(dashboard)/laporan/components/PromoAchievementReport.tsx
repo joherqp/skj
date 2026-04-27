@@ -1,7 +1,6 @@
-'use client';
-
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useDatabase } from '@/contexts/DatabaseContext';
+import { useAuth } from '@/contexts/AuthContext';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -14,9 +13,13 @@ import { id } from 'date-fns/locale';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 
 export default function PromoAchievementReport() {
+  const { user: currentUser } = useAuth();
   const { promo, penjualan, pelanggan, barang } = useDatabase();
   const [selectedPromoId, setSelectedPromoId] = useState<string>('');
   const [searchQuery, setSearchQuery] = useState('');
+
+  const isAdminOrOwner = currentUser?.roles.some(r => ['admin', 'owner'].includes(r));
+  const isLeader = currentUser?.roles.includes('leader');
 
   // Filter only Event type promos
   const eventPromos = useMemo(() => {
@@ -32,7 +35,7 @@ export default function PromoAchievementReport() {
 
   // Calculate achievements for all customers for the selected promo
   const achievements = useMemo(() => {
-    if (!selectedPromo) return [];
+    if (!selectedPromo || !currentUser) return [];
 
     const startDate = new Date(selectedPromo.tanggalMulai);
     const endDate = selectedPromo.tanggalBerakhir ? new Date(selectedPromo.tanggalBerakhir) : new Date();
@@ -53,6 +56,18 @@ export default function PromoAchievementReport() {
     penjualan.forEach(p => {
       const saleDate = new Date(p.tanggal);
       
+      // Access Control: Same as other reports
+      let hasAccess = false;
+      if (isAdminOrOwner) {
+        hasAccess = true;
+      } else if (isLeader) {
+        hasAccess = p.cabangId === currentUser.cabangId;
+      } else {
+        hasAccess = (p.salesId || p.createdBy) === currentUser.id;
+      }
+      
+      if (!hasAccess) return;
+
       // Check if sale is within promo period and is PAID
       const isPaid = p.status === 'lunas' || p.isLunas === true;
       if (saleDate >= startDate && saleDate <= endDate && isPaid) {
@@ -115,7 +130,7 @@ export default function PromoAchievementReport() {
         a.kode.toLowerCase().includes(searchQuery.toLowerCase())
       )
       .sort((a, b) => b.totalQty - a.totalQty);
-  }, [selectedPromo, penjualan, pelanggan, searchQuery]);
+  }, [selectedPromo, penjualan, pelanggan, searchQuery, currentUser, isAdminOrOwner, isLeader]);
 
   return (
     <div className="p-4 space-y-4 max-w-7xl mx-auto">

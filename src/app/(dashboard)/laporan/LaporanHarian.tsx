@@ -67,6 +67,18 @@ interface SalesTargetDB {
     is_looping: boolean;
 }
 
+interface DailyDepositEntry {
+    id: string;
+    tanggal: Date;
+    jumlah: number;
+    status: 'pending' | 'diterima' | 'ditolak' | 'disetujui';
+    salesId?: string;
+    userId?: string;
+    cabangId?: string;
+    catatan?: string;
+    sumber: 'setoran' | 'pusat';
+}
+
 const fmt = (num: number) => {
     if (num === 0) return '0';
     if (num % 1 === 0) return num.toString();
@@ -90,10 +102,17 @@ export default function LaporanHarian() {
 
     const [selectedDate, setSelectedDate] = useState<string>(() => format(new Date(), 'yyyy-MM-dd'));
     const isAdminOrOwner = currentUser?.roles.some(r => ['admin', 'owner'].includes(r));
-    const [selectedCabangIds, setSelectedCabangIds] = useState<string[]>(
-        isAdminOrOwner ? [] : (currentUser?.cabangId ? [currentUser.cabangId] : [])
-    );
+    const [selectedCabangIds, setSelectedCabangIds] = useState<string[]>([]);
     const [selectedUserIds, setSelectedUserIds] = useState<string[]>([]);
+
+    // Sync selectedCabangIds with currentUser on load
+    useEffect(() => {
+        if (currentUser && !isAdminOrOwner && selectedCabangIds.length === 0) {
+            if (currentUser.cabangId) {
+                setSelectedCabangIds([currentUser.cabangId]);
+            }
+        }
+    }, [currentUser, isAdminOrOwner]);
     const [isGenerating, setIsGenerating] = useState(false);
     const [isFilterOpen, setIsFilterOpen] = useState(false);
 
@@ -109,15 +128,13 @@ export default function LaporanHarian() {
     useEffect(() => {
         const fetchPayments = async () => {
             const dayStart = startOfDay(new Date(selectedDate)).toISOString();
-            const dayEnd = endOfDay(new Date(selectedDate)).toISOString();
 
             setIsRefreshingPayments(true);
             try {
                 const { data, error } = await supabase
                     .from('pembayaran_penjualan')
                     .select('*')
-                    .gte('tanggal', dayStart)
-                    .lte('tanggal', dayEnd);
+                    .gte('tanggal', dayStart);
 
                 if (error) throw error;
                 setPembayaran(data || []);
@@ -151,6 +168,7 @@ export default function LaporanHarian() {
     }, []);
 
     const { availableCabangIds, availableUserIds } = useMemo(() => {
+        if (!currentUser) return { availableCabangIds: [], availableUserIds: [] };
         const date = new Date(selectedDate);
         const dayStart = startOfDay(date);
         const dayEnd = endOfDay(date);
@@ -176,9 +194,21 @@ export default function LaporanHarian() {
     }, [selectedDate, penjualan]);
 
     const reportData = useMemo(() => {
+        if (!currentUser) return null;
         const date = new Date(selectedDate);
         const dayStart = startOfDay(date);
         const dayEnd = endOfDay(date);
+
+        const effectiveCabangIds = (selectedCabangIds.length === 0 && !isAdminOrOwner && currentUser?.cabangId)
+            ? [currentUser.cabangId]
+            : selectedCabangIds;
+
+        const isGlobalView = isAdminOrOwner && effectiveCabangIds.length === 0;
+        const scopeUserIds = selectedUserIds.length > 0
+            ? selectedUserIds
+            : (isGlobalView
+                ? users.map(u => u.id)
+                : users.filter(u => u.cabangId && effectiveCabangIds.includes(u.cabangId)).map(u => u.id));
 
         // Filter sales for the day and branch/user
         const filteredSales = penjualan.filter(p => {
@@ -186,12 +216,12 @@ export default function LaporanHarian() {
             const inDate = pDate >= dayStart && pDate <= dayEnd;
             
             // Branch Filter
-            const inBranch = selectedCabangIds.length === 0 || (p.cabangId && selectedCabangIds.includes(p.cabangId));
+            const inBranch = isGlobalView || (p.cabangId && effectiveCabangIds.includes(p.cabangId));
             
             // User/Sales Filter
             const inUser = selectedUserIds.length === 0 || selectedUserIds.includes(p.salesId) || selectedUserIds.includes(p.createdBy);
 
-            return inDate && inBranch && inUser && p.status !== 'batal' && p.status !== 'draft';
+            return inDate && inBranch && inUser && p.status === 'lunas';
         });
 
         // 1. Sales Summary
@@ -252,9 +282,9 @@ export default function LaporanHarian() {
         }>();
 
         // Get relevant userIds for stock check (based on branch)
-        const branchUserIds = selectedCabangIds.length === 0
+        const branchUserIds = isGlobalView
             ? users.map(u => u.id)
-            : users.filter(u => u.cabangId && selectedCabangIds.includes(u.cabangId)).map(u => u.id);
+            : users.filter(u => u.cabangId && effectiveCabangIds.includes(u.cabangId)).map(u => u.id);
 
         barang.forEach(item => {
             // Current Stock for selected users
@@ -275,13 +305,13 @@ export default function LaporanHarian() {
             // Transactions AFTER selected day (for backward calculation)
             // Sales
             penjualan.forEach(p => {
-                if (p.status === 'batal' || p.status === 'draft') return;
+                if (p.status !== 'lunas') return;
                 const pDate = new Date(p.tanggal);
                 const isRelevantUser = branchUserIds.includes(p.salesId);
                 if (!isRelevantUser) return;
 
                 p.items.filter(pi => pi.barangId === item.id).forEach(pi => {
-                    const qty = pi.jumlah * (pi.konversi || 1);
+                    const qty = (pi.totalQty !== undefined) ? pi.totalQty : (pi.jumlah * (pi.konversi || 1));
                     if (isAfter(pDate, dayEnd)) {
                         if (pi.isBonus || pi.subtotal === 0) afterPromo += qty;
                         else afterSold += qty;
@@ -297,9 +327,12 @@ export default function LaporanHarian() {
                 if (m.status !== 'disetujui') return;
                 const mDate = new Date(m.tanggal);
 
-                // Scope Checks (Align with LaporanStok.tsx)
-                const isOriginScope = selectedCabangIds.length === 0 ? true : selectedCabangIds.includes(m.dariCabangId);
-                const isDestScope = selectedCabangIds.length === 0 ? true : selectedCabangIds.includes(m.keCabangId);
+                // Scope Checks - Resolve branch from user if cabangId is missing
+                const resolvedDariCabangId = m.dariCabangId || (m.dari_stok_id ? users.find(u => u.id === m.dari_stok_id)?.cabangId : null);
+                const resolvedKeCabangId = m.keCabangId || (m.ke_stok_id ? users.find(u => u.id === m.ke_stok_id)?.cabangId : null);
+
+                const isOriginScope = isGlobalView ? true : (resolvedDariCabangId ? effectiveCabangIds.includes(resolvedDariCabangId) : false);
+                const isDestScope = isGlobalView ? true : (resolvedKeCabangId ? effectiveCabangIds.includes(resolvedKeCabangId) : false);
 
                 // Skip if movement is internal to the current scope
                 if (isOriginScope && isDestScope) return;
@@ -308,7 +341,7 @@ export default function LaporanHarian() {
                 items.forEach((mi: any) => {
                     const bId = mi.barangId || mi.barang_id;
                     if (bId === item.id) {
-                        const qty = mi.totalQty !== undefined ? mi.totalQty : (mi.total_qty !== undefined ? mi.total_qty : mi.jumlah);
+                        const qty = (mi.totalQty !== undefined) ? mi.totalQty : (mi.jumlah * (mi.konversi || 1));
                         if (isAfter(mDate, dayEnd)) {
                             if (isOriginScope) afterOut += qty;
                             if (isDestScope) afterIn += qty;
@@ -324,14 +357,19 @@ export default function LaporanHarian() {
             persetujuan.forEach(p => {
                 if (p.jenis !== 'restock' || p.status !== 'disetujui' || !p.data) return;
                 const pData = p.data as Record<string, unknown>;
-                const pDate = new Date(p.tanggalPersetujuan || p.tanggalPengajuan);
-                const isRelevant = selectedCabangIds.length === 0 || (p.targetCabangId && selectedCabangIds.includes(p.targetCabangId)) || (p.targetUserId && selectedCabangIds.includes(users.find(u => u.id === p.targetUserId)?.cabangId || ''));
+                const isRelevant = isGlobalView || (p.targetCabangId && effectiveCabangIds.includes(p.targetCabangId)) || (p.targetUserId && effectiveCabangIds.includes(users.find(u => u.id === p.targetUserId)?.cabangId || ''));
                 if (!isRelevant) return;
 
-                const items = (pData.items as any[]) || (pData.barangId ? [{ barangId: pData.barangId, jumlah: pData.jumlah }] : []);
+                const items = (pData.items as any[]) || (pData.barangId || pData.barang_id ? [{ 
+                    barangId: pData.barangId || pData.barang_id, 
+                    jumlah: pData.jumlah,
+                    konversi: pData.konversi,
+                    totalQty: pData.totalQty
+                }] : []);
+                const pDate = new Date(p.tanggalPersetujuan || p.tanggalPengajuan);
                 items.forEach((pi: any) => {
                     if (pi.barangId === item.id) {
-                        const qty = pi.jumlah;
+                        const qty = (pi.totalQty !== undefined) ? pi.totalQty : (pi.jumlah * (pi.konversi || 1));
                         if (isAfter(pDate, dayEnd)) afterIn += qty;
                         else if (pDate >= dayStart && pDate <= dayEnd) masuk += qty;
                     }
@@ -341,7 +379,7 @@ export default function LaporanHarian() {
             // Penyesuaian Stok
             penyesuaianStok?.forEach(adj => {
                 if (adj.status !== 'disetujui' || adj.barangId !== item.id) return;
-                const isRelevant = selectedCabangIds.length === 0 || (adj.cabangId && selectedCabangIds.includes(adj.cabangId));
+                const isRelevant = isGlobalView || (adj.cabangId && effectiveCabangIds.includes(adj.cabangId));
                 if (!isRelevant) return;
 
                 const aDate = new Date(adj.tanggal);
@@ -378,12 +416,53 @@ export default function LaporanHarian() {
         });
 
         // 3. Financial Summary (Cash Reconciliation)
-        const dailySetoran = setoran.filter(s => {
+        const dailySetoranRegular: DailyDepositEntry[] = setoran.filter(s => {
             const sDate = new Date(s.tanggal);
             const inDate = sDate >= dayStart && sDate <= dayEnd;
-            const inBranch = selectedCabangIds.length === 0 || selectedCabangIds.includes(users.find(u => u.id === (s.salesId || s.userId))?.cabangId || '');
-            return inDate && inBranch;
+            const inBranch = isGlobalView || effectiveCabangIds.includes(s.cabangId || users.find(u => u.id === (s.salesId || s.userId))?.cabangId || '');
+            const depositUserId = s.salesId || s.userId;
+            const inUser = selectedUserIds.length === 0 || (depositUserId ? selectedUserIds.includes(depositUserId) : false);
+            return inDate && inBranch && inUser;
+        }).map(s => ({
+            id: s.id,
+            tanggal: new Date(s.tanggal),
+            jumlah: s.jumlah,
+            status: s.status,
+            salesId: s.salesId,
+            userId: s.userId,
+            cabangId: s.cabangId || users.find(u => u.id === (s.salesId || s.userId))?.cabangId,
+            catatan: s.catatan || s.keterangan,
+            sumber: 'setoran',
+        }));
+
+        const dailySetoranPusat: DailyDepositEntry[] = persetujuan.filter(p => {
+            if (p.jenis !== 'rencana_setoran') return false;
+            const pDate = new Date(p.tanggalPengajuan);
+            const inDate = pDate >= dayStart && pDate <= dayEnd;
+            if (!inDate) return false;
+
+            const payload = p.data || {};
+            const senderCabangId = typeof payload.senderCabangId === 'string' ? payload.senderCabangId : undefined;
+            const inBranch = isGlobalView || (senderCabangId ? effectiveCabangIds.includes(senderCabangId) : false);
+            const inUser = selectedUserIds.length === 0 || selectedUserIds.includes(p.diajukanOleh);
+
+            return inBranch && inUser;
+        }).map(p => {
+            const payload = p.data || {};
+            return {
+                id: p.id,
+                tanggal: new Date(p.tanggalPengajuan),
+                jumlah: Number(payload.amount || 0),
+                status: p.status,
+                salesId: p.diajukanOleh,
+                userId: p.diajukanOleh,
+                cabangId: typeof payload.senderCabangId === 'string' ? payload.senderCabangId : undefined,
+                catatan: p.catatan || (typeof payload.catatan === 'string' ? payload.catatan : undefined),
+                sumber: 'pusat',
+            };
         });
+
+        const dailySetoran = [...dailySetoranRegular, ...dailySetoranPusat];
 
         const totalSetoranValid = dailySetoran
             .filter(s => s.status === 'disetujui' || s.status === 'diterima')
@@ -393,14 +472,95 @@ export default function LaporanHarian() {
             .filter(s => s.status === 'pending')
             .reduce((acc, curr) => acc + curr.jumlah, 0);
 
-        // USER FEEDBACK: Ensure cancelled transactions are filtered out from payments
-        const validPembayaranToday = pembayaran.filter(p => {
+        const depositNotes = dailySetoran
+            .filter(s => s.catatan && s.catatan.trim().length > 0)
+            .sort((a, b) => b.tanggal.getTime() - a.tanggal.getTime())
+            .map(s => ({
+                id: s.id,
+                waktu: format(s.tanggal, 'HH:mm'),
+                salesName: users.find(u => u.id === (s.salesId || s.userId))?.nama || 'Unknown',
+                jumlah: s.jumlah,
+                status: s.status,
+                sumber: s.sumber,
+                catatan: s.catatan!.trim(),
+            }));
+
+        // 3. Financial Summary (Cash Reconciliation)
+        // Calculate Cash In from Today's Cash Sales (bayar - kembalian)
+        const cashFromTunaiSales = filteredSales
+            .filter(p => p.metodePembayaran === 'tunai')
+            .reduce((acc, curr) => acc + (curr.bayar || 0) - (curr.kembalian || 0), 0);
+
+        // Also include payments from pembayaran_penjualan table (for tempo payments that are being paid today)
+        const scopedPembayaran = pembayaran.filter(p => {
             const sale = penjualan.find(s => s.id === p.penjualanId);
-            return sale && sale.status !== 'batal';
+            if (!sale || sale.status === 'batal') return false;
+
+            const inBranch = isGlobalView || (sale.cabangId && effectiveCabangIds.includes(sale.cabangId));
+            const inUser = selectedUserIds.length === 0 || selectedUserIds.includes(sale.salesId) || selectedUserIds.includes(sale.createdBy);
+
+            return inBranch && inUser;
         });
 
-        // Cash collection today from all sources
-        const cashCollectionToday = validPembayaranToday.reduce((acc, curr) => acc + Number(curr.jumlah), 0);
+        const validPembayaranToday = scopedPembayaran.filter(p => {
+            const paymentDate = new Date(p.tanggal as string);
+            return paymentDate >= dayStart && paymentDate <= dayEnd;
+        });
+
+        const cashFromPayments = validPembayaranToday.reduce((acc, curr) => acc + Number(curr.jumlah), 0);
+
+        // Total Cash In = Cash from Tunai Sales + Payments from Table
+        const cashCollectionToday = cashFromTunaiSales + cashFromPayments;
+
+        const currentSaldoBelumSetor = saldoPengguna
+            .filter(s => scopeUserIds.includes(s.userId))
+            .reduce((sum, s) => sum + s.saldo, 0);
+
+        const cashInFromSelectedDayOnwardsSales = penjualan
+            .filter(p => {
+                const pDate = new Date(p.tanggal);
+                const inDate = pDate >= dayStart;
+                const inBranch = isGlobalView || (p.cabangId && effectiveCabangIds.includes(p.cabangId));
+                const inUser = selectedUserIds.length === 0 || selectedUserIds.includes(p.salesId) || selectedUserIds.includes(p.createdBy);
+                return inDate && inBranch && inUser && p.status === 'lunas' && p.metodePembayaran === 'tunai';
+            })
+            .reduce((acc, curr) => acc + (curr.bayar || 0) - (curr.kembalian || 0), 0);
+
+        const cashInFromSelectedDayOnwardsPayments = scopedPembayaran
+            .filter(p => new Date(p.tanggal as string) >= dayStart)
+            .reduce((acc, curr) => acc + Number(curr.jumlah), 0);
+
+        const cashOutFromSelectedDayOnwardsRegular = setoran
+            .filter(s => {
+                const sDate = new Date(s.tanggal);
+                const inDate = sDate >= dayStart;
+                const inBranch = isGlobalView || effectiveCabangIds.includes(s.cabangId || users.find(u => u.id === (s.salesId || s.userId))?.cabangId || '');
+                const depositUserId = s.salesId || s.userId;
+                const inUser = selectedUserIds.length === 0 || (depositUserId ? selectedUserIds.includes(depositUserId) : false);
+                const isApproved = s.status === 'disetujui' || s.status === 'diterima';
+                return inDate && inBranch && inUser && isApproved;
+            })
+            .reduce((acc, curr) => acc + curr.jumlah, 0);
+
+        const cashOutFromSelectedDayOnwardsPusat = persetujuan
+            .filter(p => {
+                if (p.jenis !== 'rencana_setoran' || p.status !== 'disetujui') return false;
+                const pDate = new Date(p.tanggalPengajuan);
+                if (pDate < dayStart) return false;
+
+                const payload = p.data || {};
+                const senderCabangId = typeof payload.senderCabangId === 'string' ? payload.senderCabangId : undefined;
+                const inBranch = isGlobalView || (senderCabangId ? effectiveCabangIds.includes(senderCabangId) : false);
+                const inUser = selectedUserIds.length === 0 || selectedUserIds.includes(p.diajukanOleh);
+
+                return inBranch && inUser;
+            })
+            .reduce((acc, curr) => acc + Number((curr.data || {}).amount || 0), 0);
+
+        const saldoBelumSetorSebelumnya = currentSaldoBelumSetor
+            - (cashInFromSelectedDayOnwardsSales + cashInFromSelectedDayOnwardsPayments)
+            + cashOutFromSelectedDayOnwardsRegular
+            + cashOutFromSelectedDayOnwardsPusat;
 
         // 5. Detailed Summaries
         const productSummaryMap = new Map<string, { nama: string; qty: number; total: number; satuan: string }>();
@@ -458,9 +618,19 @@ export default function LaporanHarian() {
         // Add cash & setoran to sales summary
         const salesSummaryList = Array.from(salesSummaryMap.values()).map(s => {
             const userId = users.find(u => u.nama === s.nama)?.id;
-            const userCash = userId ? validPembayaranToday
+            
+            // Cash from this salesman's Tunai Sales (bayar - kembalian)
+            const userCashFromSales = userId ? filteredSales
+                .filter(p => p.salesId === userId && p.metodePembayaran === 'tunai')
+                .reduce((acc, curr) => acc + (curr.bayar || 0) - (curr.kembalian || 0), 0) : 0;
+            
+            // Cash from payments table for this user
+            const userCashFromPayments = userId ? validPembayaranToday
                 .filter(p => p.createdBy === userId)
                 .reduce((acc, curr) => acc + Number(curr.jumlah), 0) : 0;
+            
+            // Total cash for this user
+            const userCash = userCashFromSales + userCashFromPayments;
 
             const userSetoran = userId ? dailySetoran
                 .filter(s => (s.salesId === userId || s.userId === userId) && (s.status === 'disetujui' || s.status === 'diterima'))
@@ -548,15 +718,22 @@ export default function LaporanHarian() {
             salesSummary: salesSummaryList.sort((a, b) => b.total - a.total),
             categorySummary: Array.from(categorySummaryMap.values()).sort((a, b) => b.total - a.total),
             finance: {
+                previous: saldoBelumSetorSebelumnya,
                 cashIn: cashCollectionToday,
                 cashOut: totalSetoranValid,
                 pending: totalSetoranPending,
-                net: cashCollectionToday - totalSetoranValid
-            }
+                net: saldoBelumSetorSebelumnya + cashCollectionToday - totalSetoranValid
+            },
+            depositNotes
         };
-    }, [selectedDate, selectedCabangIds, selectedUserIds, penjualan, barang, users, stokPengguna, persetujuan, setoran, cabang, satuan, mutasiBarang, penyesuaianStok, pembayaran, pelanggan, kategoriPelanggan]);
+    }, [selectedDate, selectedCabangIds, selectedUserIds, penjualan, barang, users, stokPengguna, persetujuan, setoran, saldoPengguna, cabang, satuan, mutasiBarang, penyesuaianStok, pembayaran, pelanggan, kategoriPelanggan, currentUser, isAdminOrOwner]);
 
     const handleDownloadPDF = async () => {
+        if (!reportData) {
+            toast.error('Data laporan belum siap');
+            return;
+        }
+
         setIsGenerating(true);
         try {
             const doc = new jsPDF('p', 'mm', 'a4');
@@ -632,10 +809,11 @@ export default function LaporanHarian() {
             autoTable(doc, {
                 startY: finalY1 + 4,
                 body: [
+                    ['Saldo Belum Setor Sebelumnya', formatRupiah(reportData.finance.previous)],
                     ['Total Omzet Penjualan (Billing)', formatRupiah(reportData.sales.totalOmzet)],
                     ['Total Kas Masuk (Actual Penerimaan)', formatRupiah(reportData.finance.cashIn)],
                     ['Total Sudah Disetorkan (Bank/Finance)', formatRupiah(reportData.finance.cashOut)],
-                    ['Selisih Kas di Tangan (Net Today)', formatRupiah(reportData.finance.net)],
+                    ['Nilai Belum Setor', formatRupiah(reportData.finance.net)],
                     ['Setoran Masih Pending (Menunggu)', formatRupiah(reportData.finance.pending)]
                 ],
                 theme: 'grid',
@@ -645,6 +823,28 @@ export default function LaporanHarian() {
                     1: { halign: 'right' }
                 }
             });
+
+            if (reportData.depositNotes.length > 0) {
+                const finalYFinance = (doc as unknown as { lastAutoTable: { finalY: number } }).lastAutoTable.finalY + 4;
+                autoTable(doc, {
+                    startY: finalYFinance,
+                    head: [['Waktu', 'Sales', 'Sumber', 'Status', 'Jumlah', 'Catatan']],
+                    body: reportData.depositNotes.map(note => [
+                        note.waktu,
+                        note.salesName,
+                        note.sumber === 'pusat' ? 'Setor Pusat' : 'Setoran',
+                        note.status,
+                        formatRupiah(note.jumlah),
+                        note.catatan,
+                    ]),
+                    theme: 'grid',
+                    headStyles: { fillColor: [22, 163, 74] },
+                    styles: { fontSize: 8 },
+                    columnStyles: {
+                        4: { halign: 'right' },
+                    }
+                });
+            }
 
             // 3. Pergerakan Stok
             const finalY2 = (doc as unknown as { lastAutoTable: { finalY: number } }).lastAutoTable.finalY + 10;
@@ -708,6 +908,27 @@ export default function LaporanHarian() {
             setIsGenerating(false);
         }
     };
+
+    if (!reportData) {
+        return (
+            <div className="animate-in fade-in duration-500">
+                <div className="p-4 space-y-4">
+                    <div className="flex items-center gap-3">
+                        <Button variant="ghost" size="sm" onClick={() => router.push('/laporan')} className="pr-2">
+                            <ArrowLeft className="w-4 h-4 mr-2" />
+                            Kembali
+                        </Button>
+                    </div>
+
+                    <Card className="shadow-sm border-slate-200">
+                        <CardContent className="p-8 text-center text-slate-500">
+                            Memuat data laporan harian...
+                        </CardContent>
+                    </Card>
+                </div>
+            </div>
+        );
+    }
 
     return (
         <div className="animate-in fade-in duration-500">
@@ -927,6 +1148,12 @@ export default function LaporanHarian() {
                         </CardHeader>
                         <CardContent className="p-4 space-y-3">
                             <div className="flex justify-between items-center py-1 border-b border-dashed">
+                                <span className="text-xs text-slate-500 font-medium">Saldo Belum Setor Sebelumnya</span>
+                                <span className={`text-sm font-bold ${reportData.finance.previous >= 0 ? 'text-red-600' : 'text-blue-600'}`}>
+                                    {formatRupiah(reportData.finance.previous)}
+                                </span>
+                            </div>
+                            <div className="flex justify-between items-center py-1 border-b border-dashed">
                                 <span className="text-xs text-slate-500 font-medium">Kas Masuk (Actual)</span>
                                 <span className="text-sm font-bold text-slate-700">{formatRupiah(reportData.finance.cashIn)}</span>
                             </div>
@@ -935,9 +1162,31 @@ export default function LaporanHarian() {
                                 <span className="text-sm font-bold text-green-600">{formatRupiah(reportData.finance.cashOut)}</span>
                             </div>
                             <div className="flex justify-between items-center py-1 bg-slate-50 px-2 rounded -mx-2">
-                                <span className="text-xs font-black uppercase text-slate-800">Sisa Kas (Net)</span>
+                                <span className="text-xs font-black uppercase text-slate-800">Nilai Belum Setor</span>
                                 <span className="text-sm font-black text-primary">{formatRupiah(reportData.finance.net)}</span>
                             </div>
+                            {reportData.depositNotes.length > 0 && (
+                                <div className="pt-2 border-t">
+                                    <div className="text-[10px] font-bold uppercase tracking-wide text-slate-500 mb-2">Catatan Setoran</div>
+                                    <div className="space-y-2">
+                                        {reportData.depositNotes.map((note) => (
+                                            <div key={note.id} className="rounded-md border border-slate-200 bg-slate-50/70 p-2">
+                                                <div className="flex items-center justify-between gap-2 text-[10px]">
+                                                    <span className="font-bold text-slate-700">{note.salesName}</span>
+                                                    <span className="text-slate-400">{note.waktu}</span>
+                                                </div>
+                                                <div className="flex items-center justify-between gap-2 text-[10px] mt-1">
+                                                    <span className={note.sumber === 'pusat' ? 'text-indigo-600 font-medium' : 'text-green-600 font-medium'}>
+                                                        {note.sumber === 'pusat' ? 'Setor Pusat' : 'Setoran'}
+                                                    </span>
+                                                    <span className="text-slate-500">{formatRupiah(note.jumlah)}</span>
+                                                </div>
+                                                <p className="text-[11px] text-slate-700 mt-1 leading-relaxed">{note.catatan}</p>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
                         </CardContent>
                     </Card>
 

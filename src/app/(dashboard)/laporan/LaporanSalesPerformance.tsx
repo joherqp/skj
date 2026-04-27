@@ -67,10 +67,17 @@ export default function LaporanSalesPerformance() {
   const isAdminOrOwner = user?.roles.some(r => ['admin', 'owner'].includes(r));
   const userCabangId = user?.cabangId;
 
-  const [selectedCabangIds, setSelectedCabangIds] = useState<string[]>(
-    isAdminOrOwner ? [] : (user?.cabangId ? [user.cabangId] : [])
-  );
+  const [selectedCabangIds, setSelectedCabangIds] = useState<string[]>([]);
   const [selectedUserIds, setSelectedUserIds] = useState<string[]>([]);
+
+  // Sync selectedCabangIds with currentUser on load
+  useEffect(() => {
+    if (user && !isAdminOrOwner && selectedCabangIds.length === 0) {
+      if (user.cabangId) {
+        setSelectedCabangIds([user.cabangId]);
+      }
+    }
+  }, [user, isAdminOrOwner]);
 
   // History State
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
@@ -86,13 +93,18 @@ export default function LaporanSalesPerformance() {
         const endDate = endOfMonth(startDate);
 
         // 1. Fetch Targets: Currently active fixed-date targets in this period OR Looping targets
-        const query = supabase
+        let query = supabase
           .from('sales_targets')
           .select('*')
           // Logic: 
           // 1. Looping targets must be Active to show (since they have no fixed end date implies they run until stopped)
           // 2. Fixed targets show if they overlap the period, regardless of current active status (History)
           .or(`and(is_looping.eq.true,is_active.eq.true),and(start_date.lte.${endDate.toISOString()},end_date.gte.${startDate.toISOString()})`);
+
+        // Security: Filter targets by branch if not admin
+        if (!isAdminOrOwner && userCabangId) {
+          query = query.eq('cabang_id', userCabangId);
+        }
 
         const { data: targetData, error: targetError } = await query;
         if (targetError) throw targetError;
@@ -121,8 +133,17 @@ export default function LaporanSalesPerformance() {
           .gte('tanggal', startDate.toISOString())
           .lte('tanggal', endDate.toISOString());
 
-        if (!isAdminOrOwner && userCabangId) {
-          salesQuery = salesQuery.eq('cabang_id', userCabangId);
+        if (!isAdminOrOwner) {
+          if (userCabangId) {
+            salesQuery = salesQuery.eq('cabang_id', userCabangId);
+          } else if (user) {
+             // User exists but has no branch, should not see anything if restricted
+             salesQuery = salesQuery.eq('cabang_id', 'none');
+          } else {
+             // User still loading, wait
+             setLoading(false);
+             return;
+          }
         } else if (selectedCabangIds.length === 1) {
           // For a single selection, use eq for efficiency; for multiple use in()
           salesQuery = salesQuery.eq('cabang_id', selectedCabangIds[0]);
@@ -273,6 +294,8 @@ export default function LaporanSalesPerformance() {
     XLSX.utils.book_append_sheet(wb, ws, "Sales Performance");
     XLSX.writeFile(wb, "Sales_Performance_Report.xlsx");
   };
+
+  if (!user) return null;
 
   return (
     <div className="animate-in fade-in duration-500">

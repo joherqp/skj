@@ -1,10 +1,9 @@
 'use client';
-import { createContext, type ReactNode, useCallback, useContext, useEffect, useState, useRef } from 'react';
+import { createContext, type ReactNode, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import { User as SupabaseUser } from '@supabase/supabase-js';
 import { User, UserRole } from '@/types';
 import { toast } from 'sonner';
-import { useRouter } from 'next/navigation';
 
 const AUTH_TIMEOUT_MS = 60000; // Increased to 60s for poor network conditions
 
@@ -45,8 +44,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [isLoading, setIsLoading] = useState(true);
   const isInitializingRef = useRef(false);
   const lastFocusRef = useRef<number>(Date.now());
-  const router = useRouter();
-
   const mapProfileToUser = (data: {
     id: string;
     username: string;
@@ -312,7 +309,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  const login = async (usernameOrEmail: string, password: string): Promise<boolean> => {
+  const login = useCallback(async (usernameOrEmail: string, password: string): Promise<boolean> => {
     try {
       console.warn('Email/password login is deprecated. Use Google Auth.');
       
@@ -353,9 +350,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       console.error('Email/password login exception:', error);
       return false;
     }
-  };
+  }, [loadUserProfile]);
 
-  const logout = async (): Promise<void> => {
+  const logout = useCallback(async (): Promise<void> => {
     try {
       await supabase.auth.signOut();
       setUser(null);
@@ -363,31 +360,41 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } catch (error) {
       console.error('Logout error:', error);
     }
-  };
+  }, []);
 
   const updatePassword = async (password: string): Promise<void> => {
     const { error } = await supabase.auth.updateUser({ password });
     if (error) throw error;
   };
 
+  const hasRole = useCallback((roles: UserRole[]) => {
+    if (!user || !user.isActive) return false;
+    return roles.some(role => user.roles.includes(role));
+  }, [user]);
+
+  const value = useMemo<AuthContextType>(() => ({
+    user,
+    isAuthenticated: !!user && user.isActive === true,
+    isLoading,
+    login,
+    logout,
+    supabaseUser,
+    updatePassword,
+    loginWithGoogle,
+    refreshUser,
+    hasRole,
+  }), [
+    user,
+    isLoading,
+    login,
+    logout,
+    supabaseUser,
+    refreshUser,
+    hasRole,
+  ]);
+
   return (
-    <AuthContext.Provider
-      value={{
-        user,
-        isAuthenticated: !!user && user.isActive === true,
-        isLoading,
-        login,
-        logout,
-        supabaseUser,
-        updatePassword,
-        loginWithGoogle,
-        refreshUser,
-        hasRole: (roles: UserRole[]) => {
-          if (!user || !user.isActive) return false;
-          return roles.some(role => user.roles.includes(role));
-        },
-      }}
-    >
+    <AuthContext.Provider value={value}>
       {children}
     </AuthContext.Provider>
   );

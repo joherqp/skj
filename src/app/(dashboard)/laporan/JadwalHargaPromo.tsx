@@ -51,9 +51,10 @@ export default function JadwalHargaPromo() {
     const router = useRouter();
     const { user } = useAuth();
     const { harga, promo, persetujuan, barang, satuan, cabang, kategoriPelanggan, users } = useDatabase();
+
+    if (!user) return null;
     const [activeTab, setActiveTab] = useState('aktif');
     const [selectedItem, setSelectedItem] = useState<ScheduleItem | null>(null);
-    const [displayLimit, setDisplayLimit] = useState(20);
     
     // Filters
     const [searchTerm, setSearchTerm] = useState('');
@@ -68,9 +69,6 @@ export default function JadwalHargaPromo() {
         }
     }, [user, selectedCabangIds.length]);
 
-    useEffect(() => {
-        setDisplayLimit(20);
-    }, [activeTab]);
 
     const getStatusColor = (status: string) => {
         switch (status) {
@@ -445,7 +443,7 @@ export default function JadwalHargaPromo() {
                             </div>
                         ) : (
                             <>
-                                {filteredItems.slice(0, displayLimit).map(item => (
+                                {filteredItems.map(item => (
                                     <Card
                                         key={`${item.type}-${item.id}`}
                                         className="overflow-hidden hover:bg-slate-50 transition-colors border shadow-sm cursor-pointer active:scale-[0.99]"
@@ -526,15 +524,6 @@ export default function JadwalHargaPromo() {
                                         </div>
                                     </Card>
                                 ))}
-                                {filteredItems.length > displayLimit && (
-                                    <Button
-                                        variant="ghost"
-                                        className="w-full mt-4 border-dashed text-muted-foreground"
-                                        onClick={() => setDisplayLimit(prev => prev + 20)}
-                                    >
-                                        Lihat Lainnya
-                                    </Button>
-                                )}
                             </>
                         )
                         }

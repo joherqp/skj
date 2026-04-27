@@ -3,11 +3,11 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { useAuth } from '@/contexts/AuthContext';
 import { useDatabase } from '@/contexts/DatabaseContext';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { 
   Clock, Package, Users, ShoppingCart, Wallet, BarChart3, 
   MapPin, Settings, CheckCircle, Bell, User, LogOut,
-  Truck, ArrowRightLeft, FileText, ClipboardList
 } from 'lucide-react';
 
 interface MenuItemProps {
@@ -20,29 +20,25 @@ interface MenuItemProps {
 }
 
 const MenuItem = ({ icon: Icon, label, description, path, badge, color = 'bg-primary/10 text-primary' }: MenuItemProps) => {
-  const router = useRouter();
-
   return (
-    <Card 
-      elevated 
-      className="cursor-pointer hover:border-primary/30 active:scale-[0.98] transition-all"
-      onClick={() => router.push(path)}
-    >
-      <CardContent className="p-4 flex items-center gap-3">
-        <div className={`p-3 rounded-xl ${color}`}>
-          <Icon className="w-5 h-5" />
-        </div>
-        <div className="flex-1">
-          <p className="font-semibold text-sm">{label}</p>
-          {description && (
-            <p className="text-xs text-muted-foreground">{description}</p>
+    <Link href={path} prefetch className="block">
+      <Card elevated className="cursor-pointer hover:border-primary/30 active:scale-[0.98] transition-all">
+        <CardContent className="p-4 flex items-center gap-3">
+          <div className={`p-3 rounded-xl ${color}`}>
+            <Icon className="w-5 h-5" />
+          </div>
+          <div className="flex-1">
+            <p className="font-semibold text-sm">{label}</p>
+            {description && (
+              <p className="text-xs text-muted-foreground">{description}</p>
+            )}
+          </div>
+          {badge && (
+            <Badge variant="destructive">{badge}</Badge>
           )}
-        </div>
-        {badge && (
-          <Badge variant="destructive">{badge}</Badge>
-        )}
-      </CardContent>
-    </Card>
+        </CardContent>
+      </Card>
+    </Link>
   );
 };
 

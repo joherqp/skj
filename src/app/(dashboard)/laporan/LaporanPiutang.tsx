@@ -51,10 +51,16 @@ export default function LaporanPiutang() {
   } = useDatabase();
 
   const isAdminOrOwner = currentUser?.roles.some(r => ['admin', 'owner'].includes(r));
-  const [selectedCabangIds, setSelectedCabangIds] = useState<string[]>(() => {
-    if (!isAdminOrOwner && currentUser?.cabangId) return [currentUser.cabangId];
-    return [];
-  });
+  const [selectedCabangIds, setSelectedCabangIds] = useState<string[]>([]);
+  
+  // Sync selectedCabangIds with currentUser on load
+  useEffect(() => {
+    if (currentUser && !isAdminOrOwner && selectedCabangIds.length === 0) {
+      if (currentUser.cabangId) {
+        setSelectedCabangIds([currentUser.cabangId]);
+      }
+    }
+  }, [currentUser, isAdminOrOwner]);
   const [selectedUserIds, setSelectedUserIds] = useState<string[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [sortBy, setSortBy] = useState<SortOption>('highest');
@@ -110,10 +116,15 @@ export default function LaporanPiutang() {
       };
   }, [pelanggan]);
 
+  const effectiveCabangIds = (selectedCabangIds.length === 0 && !isAdminOrOwner && currentUser?.cabangId)
+      ? [currentUser.cabangId]
+      : selectedCabangIds;
+
   // 2. Filter Customers by Branch AND Multi-Sales User
   const filteredPelanggan = pelanggan.filter(p => {
       // Branch Filter
-      if (selectedCabangIds.length > 0 && !selectedCabangIds.includes(p.cabangId || '')) return false;
+      const isGlobalView = isAdminOrOwner && effectiveCabangIds.length === 0;
+      if (!isGlobalView && !effectiveCabangIds.includes(p.cabangId || '')) return false;
 
       // User/Sales Filter (Multi-Select)
       if (selectedUserIds.length > 0) {

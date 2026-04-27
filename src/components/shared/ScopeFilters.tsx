@@ -54,8 +54,7 @@ export function ScopeFilters({
         .filter(c => {
             const matchesSearch = c.nama.toLowerCase().includes(cabangSearch.toLowerCase());
             const isAvailable = !availableCabangIds || availableCabangIds.includes(c.id);
-            if (cabangSearch) return matchesSearch;
-            return isAvailable;
+            return matchesSearch && isAvailable;
         })
         .sort((a, b) => a.nama.localeCompare(b.nama));
 
@@ -78,8 +77,7 @@ export function ScopeFilters({
             const matchesSearch = u.nama.toLowerCase().includes(userSearch.toLowerCase());
             const isAvailable = !availableUserIds || availableUserIds.includes(u.id);
             
-            if (userSearch) return matchesSearch;
-            return isAvailable;
+            return matchesSearch && isAvailable;
         })
         .sort((a, b) => a.nama.localeCompare(b.nama));
 

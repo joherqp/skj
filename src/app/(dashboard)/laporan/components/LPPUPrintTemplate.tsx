@@ -45,6 +45,13 @@ export interface LPPUData {
     saldoAkhir: number;
     currentSaldo: number;
   };
+  depositNotes: {
+    waktu: string;
+    sumber: 'setoran' | 'pusat';
+    status: string;
+    jumlah: number;
+    catatan: string;
+  }[];
 }
 
 interface LPPUPrintTemplateProps {
@@ -218,7 +225,7 @@ export function LPPUPrintTemplate({ id, date, salesName, companyProfile, data, c
             </div>
           )}
           <div className="flex justify-between items-center pt-1 mt-1 border-t border-slate-300">
-            <span className="font-bold text-slate-500 uppercase text-[8px] tracking-wider">(=) Saldo Akhir</span>
+            <span className="font-bold text-slate-500 uppercase text-[8px] tracking-wider">(=) Nilai Belum Setor</span>
             <span className={`font-bold text-base ${data.totals.saldoAkhir >= 0 ? 'text-red-500' : 'text-blue-600'}`}>
               {formatRupiah(data.totals.saldoAkhir)}
             </span>
@@ -233,6 +240,37 @@ export function LPPUPrintTemplate({ id, date, salesName, companyProfile, data, c
           </div>
         </div>
       </div>
+
+      {data.depositNotes.length > 0 && (
+        <div className="mb-8">
+          <div className="flex items-center gap-2 mb-3">
+            <div className="h-4 w-1 bg-emerald-500 rounded-full"></div>
+            <h3 className="font-bold text-xs uppercase tracking-wider text-slate-700">Catatan Setoran</h3>
+          </div>
+          <table className="w-full text-left border border-slate-200 rounded-lg overflow-hidden">
+            <thead className="bg-slate-100 text-[9px] font-bold text-slate-500 uppercase tracking-wider">
+              <tr>
+                <th className="py-2 px-2">Waktu</th>
+                <th className="py-2">Sumber</th>
+                <th className="py-2">Status</th>
+                <th className="py-2 text-right">Jumlah</th>
+                <th className="py-2 pr-2">Catatan</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100 text-slate-600">
+              {data.depositNotes.map((note, idx) => (
+                <tr key={idx}>
+                  <td className="py-2 px-2 font-mono text-[9px]">{note.waktu}</td>
+                  <td className="py-2 font-medium">{note.sumber === 'pusat' ? 'Setor Pusat' : 'Setoran'}</td>
+                  <td className="py-2 uppercase text-[9px]">{note.status}</td>
+                  <td className="py-2 text-right font-medium">{formatRupiah(note.jumlah).replace('Rp', '')}</td>
+                  <td className="py-2 pr-2 italic text-slate-500">{note.catatan}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
 
       {/* RIWAYAT STOK BARANG */}
       <div className="mb-8">

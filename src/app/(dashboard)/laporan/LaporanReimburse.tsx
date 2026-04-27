@@ -25,17 +25,25 @@ export default function LaporanReimburse() {
   const router = useRouter();
   const { user: currentUser } = useAuth();
   const { reimburse, users } = useDatabase();
+
+  if (!currentUser) return null;
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('disetujui');
   const [dateFilter, setDateFilter] = useState<string>('this_month');
   const [selectedDate, setSelectedDate] = useState(new Date());
   const isAdminOrOwner = currentUser?.roles.some(r => ['admin', 'owner'].includes(r));
-  const [selectedCabangIds, setSelectedCabangIds] = useState<string[]>(
-    isAdminOrOwner ? [] : (currentUser?.cabangId ? [currentUser.cabangId] : [])
-  );
+  const [selectedCabangIds, setSelectedCabangIds] = useState<string[]>([]);
+
+  // Sync selectedCabangIds with currentUser on load
+  useEffect(() => {
+    if (currentUser && !isAdminOrOwner && selectedCabangIds.length === 0) {
+      if (currentUser.cabangId) {
+        setSelectedCabangIds([currentUser.cabangId]);
+      }
+    }
+  }, [currentUser, isAdminOrOwner]);
   const [selectedUserIds, setSelectedUserIds] = useState<string[]>([]);
   const [previewImage, setPreviewImage] = useState<string | null>(null);
-  const [displayLimit, setDisplayLimit] = useState(20);
 
   // Week Logic
   const startDate = startOfWeek(selectedDate, { weekStartsOn: 0 }); // Sunday start
@@ -182,7 +190,8 @@ export default function LaporanReimburse() {
     }
 
     const itemUser = users.find(u => u.id === item.userId);
-    const matchCabang = selectedCabangIds.length === 0 || (itemUser?.cabangId && selectedCabangIds.includes(itemUser.cabangId));
+    const isGlobalView = isAdminOrOwner && selectedCabangIds.length === 0;
+    const matchCabang = isGlobalView || (itemUser?.cabangId && selectedCabangIds.includes(itemUser.cabangId));
     const matchUser = selectedUserIds.length === 0 || selectedUserIds.includes(item.userId);
 
     return matchSearch && matchStatus && matchDate && matchCabang && matchUser;
@@ -522,7 +531,7 @@ export default function LaporanReimburse() {
                         </TableRow>
                     ) : (
                         <>
-                        {filteredData.slice(0, displayLimit).map((item) => (
+                        {filteredData.map((item) => (
                             <TableRow key={item.id}>
                                 <TableCell>{formatTanggal(item.tanggal)}</TableCell>
                                 <TableCell>
@@ -558,19 +567,6 @@ export default function LaporanReimburse() {
                                 </TableCell>
                             </TableRow>
                         ))}
-                        {filteredData.length > displayLimit && (
-                            <TableRow>
-                                <TableCell colSpan={6} className="p-0 border-0 text-center">
-                                    <Button 
-                                        variant="ghost" 
-                                        className="w-full mt-4 border-dashed text-muted-foreground"
-                                        onClick={() => setDisplayLimit(prev => prev + 20)}
-                                    >
-                                        Lihat Lainnya
-                                    </Button>
-                                </TableCell>
-                            </TableRow>
-                        )}
                         </>
                     )}
                 </TableBody>

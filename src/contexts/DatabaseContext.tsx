@@ -1,5 +1,4 @@
 'use client';
-/* eslint-disable @typescript-eslint/no-explicit-any */
 import { createContext, type Dispatch, type ReactNode, type SetStateAction, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import {
@@ -49,8 +48,6 @@ export function useDatabase() {
 
 export function DatabaseProvider({ children }: { children: ReactNode }) {
   const { user: currentUser, isLoading: isAuthLoading } = useAuth();
-  const demoWarningShown = useRef(false);
-  const fetchWarningShown = useRef<Set<string>>(new Set());
   const isFetchingRef = useRef(false);
 
   // State definitions
@@ -275,7 +272,7 @@ export function DatabaseProvider({ children }: { children: ReactNode }) {
       console.error(`Error fetching ${tableName}:`, error);
       return [];
     }
-  }, []);
+  }, [getTableSchema]);
 
   // Load all data
   const loadAllData = useCallback(async (isManualRefresh = false) => {
@@ -505,7 +502,7 @@ export function DatabaseProvider({ children }: { children: ReactNode }) {
         }
       });
 
-      let { data, error } = await supabase
+      const { data, error } = await supabase
         .schema(getTableSchema(tableName))
         .from(tableName)
         .insert(dbItem)
@@ -526,7 +523,7 @@ export function DatabaseProvider({ children }: { children: ReactNode }) {
       if (error.hint) console.error('Error hint:', error.hint);
       throw error;
     }
-  }, [currentUser, isOnline]);
+  }, [currentUser, getTableSchema, isOnline]);
 
   const updateItem = useCallback(async <T,>(tableName: string, id: string, item: Record<string, unknown>, setter: Dispatch<SetStateAction<T[]>>) => {
     try {
@@ -572,7 +569,7 @@ export function DatabaseProvider({ children }: { children: ReactNode }) {
         }
       });
 
-      let { data, error } = await supabase
+      const { data, error } = await supabase
         .schema(getTableSchema(tableName))
         .from(tableName)
         .update(dbItem)
@@ -591,7 +588,7 @@ export function DatabaseProvider({ children }: { children: ReactNode }) {
       if (error.hint) console.error('Error hint:', error.hint);
       throw error;
     }
-  }, [currentUser, isOnline]);
+  }, [currentUser, getTableSchema, isOnline]);
 
   const deleteItem = useCallback(async <T,>(tableName: string, id: string, setter: Dispatch<SetStateAction<T[]>>) => {
     try {
@@ -601,7 +598,7 @@ export function DatabaseProvider({ children }: { children: ReactNode }) {
         throw new Error('Offline');
       }
 
-      let { error } = await supabase
+      const { error } = await supabase
         .schema(getTableSchema(tableName))
         .from(tableName)
         .delete()
@@ -614,7 +611,7 @@ export function DatabaseProvider({ children }: { children: ReactNode }) {
       console.error(`Error deleting ${tableName}:`, error);
       throw error;
     }
-  }, [isOnline]);
+  }, [getTableSchema, isOnline]);
 
   // Implement CRUD for all entities
 
@@ -652,7 +649,7 @@ export function DatabaseProvider({ children }: { children: ReactNode }) {
 
   const isAdminOrOwner = currentUser?.roles.includes('admin') || currentUser?.roles.includes('owner');
 
-  const value: DatabaseContextType = {
+  const value = useMemo<DatabaseContextType>(() => ({
     // State
     kategori,
     satuan,
@@ -805,7 +802,7 @@ export function DatabaseProvider({ children }: { children: ReactNode }) {
 
         delete dbItem.id;
 
-        let { data, error } = await supabase
+        const { data, error } = await supabase
           .from('absensi')
           .insert(dbItem)
           .select()
@@ -862,7 +859,7 @@ export function DatabaseProvider({ children }: { children: ReactNode }) {
     markNotifikasiRead: async (id) => {
       setNotifikasi(prev => prev.map(n => n.id === id ? { ...n, dibaca: true } : n));
       try {
-        let { error } = await supabase
+        const { error } = await supabase
           .from('notifikasi')
           .update({ dibaca: true })
           .eq('id', id);
@@ -881,7 +878,7 @@ export function DatabaseProvider({ children }: { children: ReactNode }) {
 
       setNotifikasi(prev => prev.map(n => unreadIds.includes(n.id) ? { ...n, dibaca: true } : n));
       try {
-        let { error } = await supabase
+        const { error } = await supabase
           .from('notifikasi')
           .update({ dibaca: true })
           .eq('user_id', currentUser.id)
@@ -1120,9 +1117,49 @@ export function DatabaseProvider({ children }: { children: ReactNode }) {
         setIsLoading(false);
       }
     },
-
-
-  };
+  }), [
+    absensi,
+    area,
+    barang,
+    cabang,
+    createItem,
+    currentUser,
+    dbMode,
+    deleteItem,
+    harga,
+    isAdminOrOwner,
+    isInitialized,
+    isLoading,
+    isOnline,
+    isRefreshing,
+    kategori,
+    kategoriPelanggan,
+    kunjungan,
+    loadAllData,
+    mutasiBarang,
+    notifikasi,
+    pelanggan,
+    penjualan,
+    penyesuaianStok,
+    permintaanBarang,
+    persetujuan,
+    pettyCash,
+    pettyCashBalance,
+    profilPerusahaan,
+    promo,
+    rekeningBank,
+    reimburse,
+    restock,
+    riwayatPelanggan,
+    saldoPengguna,
+    satuan,
+    setoran,
+    stokPengguna,
+    targets,
+    updateItem,
+    users,
+    viewMode,
+  ]);
 
   return (
     <DatabaseContext.Provider value={value}>

@@ -100,9 +100,7 @@ export default function AnalisaPivot() {
 
     // UI State
     const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
-    const [selectedCabangIds, setSelectedCabangIds] = useState<string[]>(
-        isAdminOrOwner ? [] : (currentUser?.cabangId ? [currentUser.cabangId] : [])
-    );
+    const [selectedCabangIds, setSelectedCabangIds] = useState<string[]>([]);
     const [selectedUserIds, setSelectedUserIds] = useState<string[]>([]);
     const [selectedKategoriIds, setSelectedKategoriIds] = useState<string[]>([]);
     const [selectedKategoriPelangganIds, setSelectedKategoriPelangganIds] = useState<string[]>([]);
@@ -115,6 +113,13 @@ export default function AnalisaPivot() {
         window.addEventListener('resize', checkMobile);
         return () => window.removeEventListener('resize', checkMobile);
     }, []);
+
+    // Sync selectedCabangIds with currentUser once loaded
+    useEffect(() => {
+        if (currentUser && !isAdminOrOwner && currentUser.cabangId) {
+            setSelectedCabangIds([currentUser.cabangId]);
+        }
+    }, [currentUser, isAdminOrOwner]);
 
     // Auto-select "Rokok" category on initial load
     useEffect(() => {
@@ -154,10 +159,12 @@ export default function AnalisaPivot() {
 
     const collapseAll = () => setExpandedRows(new Set());
 
-    // Calculate available branches and users based on data in the selected period
+    // Calculate available branches and users based on data in the selected period and access rights
     const { availableCabangIds, availableUserIds } = useMemo(() => {
         const cabs = new Set<string>();
         const usrs = new Set<string>();
+
+        const isLeader = currentUser?.roles.includes('leader');
 
         penjualan.forEach(p => {
             if (p.status === 'batal' || p.status === 'draft') return;
@@ -166,9 +173,22 @@ export default function AnalisaPivot() {
             const inPeriod = isSingleDate ? (d === singleDate) : (d >= startDate && d <= endDate);
             
             if (inPeriod) {
-                if (p.cabangId) cabs.add(p.cabangId);
-                const sId = p.salesId || p.createdBy;
-                if (sId) usrs.add(sId);
+                const pSalesId = p.salesId || p.createdBy;
+                
+                // Permission check for available filters
+                let canSee = false;
+                if (isAdminOrOwner) {
+                    canSee = true;
+                } else if (isLeader) {
+                    canSee = p.cabangId === currentUser?.cabangId;
+                } else {
+                    canSee = pSalesId === currentUser?.id;
+                }
+
+                if (canSee) {
+                    if (p.cabangId) cabs.add(p.cabangId);
+                    if (pSalesId) usrs.add(pSalesId);
+                }
             }
         });
 
@@ -176,7 +196,7 @@ export default function AnalisaPivot() {
             availableCabangIds: Array.from(cabs),
             availableUserIds: Array.from(usrs)
         };
-    }, [penjualan, isSingleDate, singleDate, startDate, endDate]);
+    }, [penjualan, isSingleDate, singleDate, startDate, endDate, currentUser, isAdminOrOwner]);
 
 
     // 1. Flatten Data Source

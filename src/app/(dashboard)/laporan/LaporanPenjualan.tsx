@@ -19,6 +19,18 @@ import * as XLSX from 'xlsx';
 import { createRoot } from 'react-dom/client';
 import { LPPUPrintTemplate } from '@/app/(dashboard)/laporan/components/LPPUPrintTemplate';
 
+interface DailyDepositEntry {
+    id: string;
+    tanggal: Date;
+    jumlah: number;
+    status: 'pending' | 'diterima' | 'ditolak' | 'disetujui';
+    salesId?: string;
+    userId?: string;
+    cabangId?: string;
+    catatan?: string;
+    sumber: 'setoran' | 'pusat';
+}
+
 export default function LaporanPenjualan() {
     const router = useRouter();
     const { user } = useAuth();
@@ -130,70 +142,126 @@ export default function LaporanPenjualan() {
             });
 
         // 3. Stock History
-        const stockHistoryMap = new Map<string, {
-            produk: string,
-            stockAwal: number,
-            masuk: number,
-            keluar: number,
-            terjual: number,
-            promo: number,
-            stockAkhir: number
-        }>();
-
-        const userStock = stokPengguna.filter(sp => sp.userId === user?.id);
-
-        const approvedRestocks = persetujuan?.filter(p => {
-            const pDate = new Date(p.tanggalPersetujuan || '');
-            const isToday = pDate >= dayStart && pDate <= dayEnd;
-            return isToday &&
-                p.status === 'disetujui' &&
-                (p.jenis === 'restock' || p.jenis === 'permintaan') &&
-                p.diajukanOleh === user?.id;
-        }) || [];
-
-        userStock.forEach(sp => {
-            const product = barang.find(b => b.id === sp.barangId);
-            if (!product) return;
+        const stockHistory = barang.map(product => {
+            const currentStock = stokPengguna
+                .filter(sp => sp.userId === user?.id && sp.barangId === product.id)
+                .reduce((sum, stock) => sum + stock.jumlah, 0);
 
             let masuk = 0;
-            approvedRestocks.forEach(p => {
-                const pData = p.data as PersetujuanData;
-                if (pData && pData.items) {
-                    const item = pData.items.find((i) => i.barangId === sp.barangId);
-                    if (item) masuk += Number(item.jumlah);
-                }
-            });
-
+            let keluar = 0;
             let terjual = 0;
             let promo = 0;
-            dailySales.forEach(p => {
-                p.items.filter(i => i.barangId === sp.barangId).forEach(i => {
-                    // Normalize to base unit (stok unit)
-                    const qtyNormalized = i.jumlah * (i.konversi || 1);
-                    terjual += qtyNormalized;
-                    if (i.harga === 0 || i.diskon === i.harga) {
-                        promo += qtyNormalized;
+
+            let afterRangeIn = 0;
+            let afterRangeOut = 0;
+            let afterRangeSold = 0;
+            let afterRangePromo = 0;
+
+            penjualan.forEach(p => {
+                if (p.status !== 'lunas' || p.salesId !== user?.id) return;
+
+                const pDate = new Date(p.tanggal);
+                p.items.forEach(item => {
+                    if (item.barangId !== product.id) return;
+
+                    const qty = item.totalQty !== undefined ? item.totalQty : (item.jumlah * (item.konversi || 1));
+                    const isPromoItem = item.isBonus || item.harga === 0 || item.subtotal === 0;
+
+                    if (pDate > dayEnd) {
+                        if (isPromoItem) afterRangePromo += qty;
+                        else afterRangeSold += qty;
+                    } else if (pDate >= dayStart && pDate <= dayEnd) {
+                        if (isPromoItem) promo += qty;
+                        else terjual += qty;
                     }
                 });
             });
 
-            const keluar = 0;
-            const stockAkhir = sp.jumlah;
-            const stockAwal = stockAkhir - masuk + keluar + terjual;
+            persetujuan.forEach(p => {
+                if (p.status !== 'disetujui' || !p.data) return;
 
-            if (stockAwal !== 0 || stockAkhir !== 0 || masuk !== 0 || terjual !== 0) {
-                stockHistoryMap.set(sp.barangId, {
-                    produk: product.nama,
-                    stockAwal,
-                    masuk,
-                    keluar,
-                    terjual,
-                    promo,
-                    stockAkhir
+                const pDate = new Date(p.tanggalPersetujuan || p.tanggalPengajuan);
+                const pData = p.data as PersetujuanData & {
+                    barang_id?: string;
+                    konversi?: number;
+                    totalQty?: number;
+                    items?: Array<{
+                        barangId: string;
+                        jumlah: number;
+                        satuanId?: string;
+                        konversi?: number;
+                        totalQty?: number;
+                    }>;
+                };
+
+                const itemsToProcess = Array.isArray(pData.items) ? [...pData.items] : [];
+                if (itemsToProcess.length === 0 && (pData.barangId || pData.barang_id)) {
+                    itemsToProcess.push({
+                        barangId: (pData.barangId || pData.barang_id) as string,
+                        jumlah: Number(pData.jumlah || 0),
+                        satuanId: pData.satuanId,
+                        konversi: pData.konversi,
+                        totalQty: pData.totalQty,
+                    });
+                }
+
+                if (itemsToProcess.length === 0) return;
+
+                const addIn = (qty: number) => {
+                    if (pDate > dayEnd) afterRangeIn += qty;
+                    else if (pDate >= dayStart && pDate <= dayEnd) masuk += qty;
+                };
+
+                const addOut = (qty: number) => {
+                    if (pDate > dayEnd) afterRangeOut += qty;
+                    else if (pDate >= dayStart && pDate <= dayEnd) keluar += qty;
+                };
+
+                itemsToProcess.forEach(item => {
+                    if (item.barangId !== product.id) return;
+
+                    const qty = item.totalQty !== undefined ? item.totalQty : (Number(item.jumlah) * (item.konversi || 1));
+
+                    if (p.jenis === 'restock') {
+                        if (p.targetUserId === user?.id || p.diajukanOleh === user?.id) {
+                            addIn(qty);
+                        }
+                        return;
+                    }
+
+                    if (p.jenis === 'permintaan') {
+                        if (p.diajukanOleh === user?.id) addIn(qty);
+                        if (p.targetUserId === user?.id) addOut(qty);
+                        return;
+                    }
+
+                    if (p.jenis === 'mutasi' || p.jenis === 'mutasi_stok') {
+                        if (p.diajukanOleh === user?.id) addOut(qty);
+                        if (p.targetUserId === user?.id) addIn(qty);
+                    }
                 });
-            }
-        });
-        const stockHistory = Array.from(stockHistoryMap.values());
+            });
+
+            const stockAkhir = currentStock - afterRangeIn + afterRangeOut + afterRangeSold + afterRangePromo;
+            const stockAwal = stockAkhir - masuk + keluar + terjual + promo;
+
+            return {
+                produk: product.nama,
+                stockAwal,
+                masuk,
+                keluar,
+                terjual,
+                promo,
+                stockAkhir
+            };
+        }).filter(item =>
+            item.stockAwal !== 0 ||
+            item.masuk !== 0 ||
+            item.keluar !== 0 ||
+            item.terjual !== 0 ||
+            item.promo !== 0 ||
+            item.stockAkhir !== 0
+        );
 
         // 4. Bills
         const unpaidSales = penjualan.filter(p =>
@@ -233,11 +301,44 @@ export default function LaporanPenjualan() {
             .reduce((acc, curr) => acc + (curr.bayar || 0) - (curr.kembalian || 0), 0);
 
         // 3. Integrate Actual Setoran (Bank Settlements)
-        const dailySetoran = setoran.filter(s => {
+        const dailySetoranRegular: DailyDepositEntry[] = setoran.filter(s => {
             const sDateStr = format(new Date(s.tanggal), 'yyyy-MM-dd');
             const selectedDateStr = format(selectedDate, 'yyyy-MM-dd');
             return sDateStr === selectedDateStr && ((s.salesId === user?.id) || (s.userId === user?.id));
+        }).map(s => ({
+            id: s.id,
+            tanggal: new Date(s.tanggal),
+            jumlah: s.jumlah,
+            status: s.status,
+            salesId: s.salesId,
+            userId: s.userId,
+            cabangId: s.cabangId,
+            catatan: s.catatan || s.keterangan,
+            sumber: 'setoran',
+        }));
+
+        const dailySetoranPusat: DailyDepositEntry[] = persetujuan.filter(p => {
+            if (p.jenis !== 'rencana_setoran') return false;
+            if (p.diajukanOleh !== user?.id) return false;
+
+            const pDateStr = format(new Date(p.tanggalPengajuan), 'yyyy-MM-dd');
+            return pDateStr === format(selectedDate, 'yyyy-MM-dd');
+        }).map(p => {
+            const payload = p.data || {};
+            return {
+                id: p.id,
+                tanggal: new Date(p.tanggalPengajuan),
+                jumlah: Number(payload.amount || 0),
+                status: p.status,
+                salesId: p.diajukanOleh,
+                userId: p.diajukanOleh,
+                cabangId: typeof payload.senderCabangId === 'string' ? payload.senderCabangId : undefined,
+                catatan: p.catatan || (typeof payload.catatan === 'string' ? payload.catatan : undefined),
+                sumber: 'pusat',
+            };
         });
+
+        const dailySetoran = [...dailySetoranRegular, ...dailySetoranPusat];
 
         const totalSetoranHariIni = dailySetoran
             .filter(s => s.status === 'disetujui' || s.status === 'diterima')
@@ -246,6 +347,17 @@ export default function LaporanPenjualan() {
         const totalPendingSetoran = dailySetoran
             .filter(s => s.status === 'pending')
             .reduce((acc, curr) => acc + curr.jumlah, 0);
+
+        const depositNotes = dailySetoran
+            .filter(s => s.catatan && s.catatan.trim().length > 0)
+            .sort((a, b) => b.tanggal.getTime() - a.tanggal.getTime())
+            .map(s => ({
+                waktu: format(s.tanggal, 'HH:mm'),
+                sumber: s.sumber,
+                status: s.status,
+                jumlah: s.jumlah,
+                catatan: s.catatan!.trim(),
+            }));
 
         // 4. Saldo Logic (Current vs Previous)
         const userSaldoRecord = saldoPengguna.find(s => s.userId === user?.id);
@@ -260,11 +372,22 @@ export default function LaporanPenjualan() {
         });
         const cashInFromSelectedDayOnwards = activitiesFromSelectedDayOnwards.reduce((acc, curr) => acc + (curr.bayar || 0) - (curr.kembalian || 0), 0);
 
-        const depositsFromSelectedDayOnwards = setoran.filter(s => {
+        const depositsFromSelectedDayOnwardsRegular = setoran.filter(s => {
             const sDate = new Date(s.tanggal);
             return sDate >= dayStart && (s.status === 'disetujui' || s.status === 'diterima') && ((s.salesId === user?.id) || (s.userId === user?.id));
-        });
-        const cashOutFromSelectedDayOnwards = depositsFromSelectedDayOnwards.reduce((acc, curr) => acc + curr.jumlah, 0);
+        }).map(s => s.jumlah);
+
+        const depositsFromSelectedDayOnwardsPusat = persetujuan.filter(p => {
+            if (p.jenis !== 'rencana_setoran') return false;
+            if (p.diajukanOleh !== user?.id) return false;
+            if (p.status !== 'disetujui') return false;
+
+            const pDate = new Date(p.tanggalPengajuan);
+            return pDate >= dayStart;
+        }).map(p => Number((p.data || {}).amount || 0));
+
+        const cashOutFromSelectedDayOnwards = [...depositsFromSelectedDayOnwardsRegular, ...depositsFromSelectedDayOnwardsPusat]
+            .reduce((acc, curr) => acc + curr, 0);
 
         const saldoSebelumnya = currentSaldo - cashInFromSelectedDayOnwards + cashOutFromSelectedDayOnwards;
 
@@ -285,7 +408,8 @@ export default function LaporanPenjualan() {
                 saldoSebelumnya: saldoSebelumnya,
                 saldoAkhir: saldoAkhir,
                 currentSaldo: currentSaldo // Still keeping real-time current for reference if needed
-            }
+            },
+            depositNotes
         };
     }, [selectedDate, penjualan, barang, pelanggan, user, stokPengguna, persetujuan, saldoPengguna, setoran]);
 
@@ -345,7 +469,7 @@ export default function LaporanPenjualan() {
     const handleDownloadExcel = () => {
         setIsGenerating(true);
         try {
-            const { salesSummary, notes, stockHistory, bills, totals } = reportData;
+            const { salesSummary, notes, stockHistory, bills, totals, depositNotes } = reportData;
             const dateStr = format(selectedDate, 'yyyy-MM-dd');
             const salesName = user?.nama || 'Admin';
 
@@ -364,10 +488,19 @@ export default function LaporanPenjualan() {
                 [totals.saldoSebelumnya >= 0 ? "Saldo Sebelumnya (Hutang Setoran)" : "Saldo Sebelumnya (Lebih Setor)", totals.saldoSebelumnya],
                 ["(+) Penjualan Hari Ini", totals.setoranTunai],
                 ["(-) Sudah Disetorkan ke Finance", totals.totalSetoran],
-                ["(=) Saldo Akhir", totals.saldoAkhir]
+                ["(=) Nilai Belum Setor", totals.saldoAkhir]
             ];
             const wsSummary = XLSX.utils.aoa_to_sheet(summaryData);
             XLSX.utils.book_append_sheet(wb, wsSummary, "Ringkasan");
+
+            const depositNotesData = [
+                ["Catatan Setoran"],
+                [],
+                ["Waktu", "Sumber", "Status", "Jumlah", "Catatan"],
+                ...depositNotes.map(n => [n.waktu, n.sumber === 'pusat' ? 'Setor Pusat' : 'Setoran', n.status, n.jumlah, n.catatan])
+            ];
+            const wsDepositNotes = XLSX.utils.aoa_to_sheet(depositNotesData);
+            XLSX.utils.book_append_sheet(wb, wsDepositNotes, "Catatan Setoran");
 
             // Sheet 2: Nota
             const notesData = [
@@ -410,6 +543,8 @@ export default function LaporanPenjualan() {
         }
     };
 
+
+    if (!user) return null;
 
     return (
         <div className="animate-in fade-in duration-500">
@@ -526,11 +661,33 @@ export default function LaporanPenjualan() {
                                         </div>
                                     )}
                                     <div className="flex justify-between items-center pt-1 mt-2 border-t-2 border-slate-200">
-                                        <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">(=) Saldo Akhir</span>
+                                        <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">(=) Nilai Belum Setor</span>
                                         <span className={`text-lg font-black ${reportData.totals.saldoAkhir >= 0 ? 'text-red-600' : 'text-blue-600'}`}>
                                             {formatRupiah(reportData.totals.saldoAkhir)}
                                         </span>
                                     </div>
+                                    {reportData.depositNotes.length > 0 && (
+                                        <div className="pt-2 border-t">
+                                            <div className="text-[10px] font-bold uppercase tracking-wide text-slate-500 mb-2">Catatan Setoran</div>
+                                            <div className="space-y-2">
+                                                {reportData.depositNotes.map((note, idx) => (
+                                                    <div key={`${note.waktu}-${idx}`} className="rounded-md border border-slate-200 bg-white/80 p-2">
+                                                        <div className="flex items-center justify-between gap-2 text-[10px]">
+                                                            <span className={note.sumber === 'pusat' ? 'text-indigo-600 font-medium' : 'text-green-600 font-medium'}>
+                                                                {note.sumber === 'pusat' ? 'Setor Pusat' : 'Setoran'}
+                                                            </span>
+                                                            <span className="text-slate-400">{note.waktu}</span>
+                                                        </div>
+                                                        <div className="flex items-center justify-between gap-2 text-[10px] mt-1">
+                                                            <span className="uppercase text-slate-500">{note.status}</span>
+                                                            <span className="text-slate-700 font-medium">{formatRupiah(note.jumlah)}</span>
+                                                        </div>
+                                                        <p className="text-[11px] text-slate-700 mt-1 italic">{note.catatan}</p>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    )}
                                 </CardContent>
                             </Card>
                         </div>
@@ -601,11 +758,11 @@ export default function LaporanPenjualan() {
                                             reportData.stockHistory.map((item, idx) => (
                                                 <TableRow key={idx}>
                                                     <TableCell className="font-medium">{item.produk}</TableCell>
-                                                    <TableCell className="text-right text-muted-foreground">{item.stockAwal}</TableCell>
-                                                    <TableCell className="text-right text-green-600">{item.masuk > 0 ? `+${item.masuk}` : '-'}</TableCell>
-                                                    <TableCell className="text-right text-red-600">{item.terjual > 0 ? `-${item.terjual}` : '-'}</TableCell>
-                                                    <TableCell className="text-right">{item.promo > 0 ? item.promo : '-'}</TableCell>
-                                                    <TableCell className="text-right font-bold">{item.stockAkhir}</TableCell>
+                                                    <TableCell className="text-right text-muted-foreground">{item.stockAwal.toLocaleString('id-ID')}</TableCell>
+                                                    <TableCell className="text-right text-green-600">{item.masuk > 0 ? `+${item.masuk.toLocaleString('id-ID')}` : '-'}</TableCell>
+                                                    <TableCell className="text-right text-red-600">{item.terjual > 0 ? `-${item.terjual.toLocaleString('id-ID')}` : '-'}</TableCell>
+                                                    <TableCell className="text-right">{item.promo > 0 ? item.promo.toLocaleString('id-ID') : '-'}</TableCell>
+                                                    <TableCell className="text-right font-bold">{item.stockAkhir.toLocaleString('id-ID')}</TableCell>
                                                 </TableRow>
                                             ))
                                         )}

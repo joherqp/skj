@@ -15,11 +15,21 @@ import { canAccessPath } from "@/lib/permissions";
 
 interface MainLayoutProps {
   children: ReactNode;
-  title?: string;
   className?: string;
 }
 
-export const MainLayout = ({ children, title, className }: MainLayoutProps) => {
+const PREFETCH_ROUTES = [
+  '/beranda',
+  '/barang',
+  '/pelanggan',
+  '/penjualan',
+  '/setoran',
+  '/laporan',
+  '/persetujuan',
+  '/monitoring',
+];
+
+export const MainLayout = ({ children, className }: MainLayoutProps) => {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isDesktopCollapsed, setIsDesktopCollapsed] = useState(false);
   const [mounted, setMounted] = useState(false);
@@ -39,6 +49,18 @@ export const MainLayout = ({ children, title, className }: MainLayoutProps) => {
       router.replace(`/login?${searchParams.toString()}`);
     }
   }, [isAuthenticated, isAuthLoading, pathname, router]);
+
+  useEffect(() => {
+    if (!isAuthenticated) return;
+
+    const timeoutId = window.setTimeout(() => {
+      PREFETCH_ROUTES.forEach((route) => {
+        router.prefetch(route);
+      });
+    }, 300);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [isAuthenticated, router]);
 
   // Check role-based access
   const isAuthorized = !isAuthenticated || canAccessPath(pathname, user?.roles || []);
@@ -93,7 +115,7 @@ export const MainLayout = ({ children, title, className }: MainLayoutProps) => {
 
         {/* Mobile Bottom Nav (Hidden on Desktop) */}
         <div className="lg:hidden">
-          <BottomNav onMenuClick={() => setIsSidebarOpen(true)} />
+          <BottomNav />
         </div>
       </div>
     </div>

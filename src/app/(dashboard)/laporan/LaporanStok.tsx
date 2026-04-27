@@ -64,14 +64,20 @@ export default function LaporanStok() {
     } = useDatabase();
 
     // Filters
-    const [selectedCabangIds, setSelectedCabangIds] = useState<string[]>(() => {
-        if (currentUser?.roles.includes('admin') || currentUser?.roles.includes('owner')) {
-            return [];
-        }
-        return currentUser?.cabangId ? [currentUser.cabangId] : [];
-    });
+    const [selectedCabangIds, setSelectedCabangIds] = useState<string[]>([]);
     const [selectedUserIds, setSelectedUserIds] = useState<string[]>([]);
     const [search, setSearch] = useState('');
+
+    const isAdminOrOwner = currentUser?.roles.includes('admin') || currentUser?.roles.includes('owner');
+
+    // Sync selectedCabangIds with currentUser on load
+    useEffect(() => {
+        if (currentUser && !isAdminOrOwner && selectedCabangIds.length === 0) {
+            if (currentUser.cabangId) {
+                setSelectedCabangIds([currentUser.cabangId]);
+            }
+        }
+    }, [currentUser, isAdminOrOwner]);
 
     // Date Filters
     const [isSingleDate, setIsSingleDate] = useState(true);
@@ -88,12 +94,9 @@ export default function LaporanStok() {
         return dateRange;
     }, [isSingleDate, singleDate, dateRange]);
 
-    const [displayLimit, setDisplayLimit] = useState(20);
 
     type SortKey = 'nama' | 'stokAwal' | 'masuk' | 'keluar' | 'terjual' | 'promo' | 'stokAkhir';
     const [sortConfig, setSortConfig] = useState<{ key: SortKey; direction: 'asc' | 'desc' }>({ key: 'nama', direction: 'asc' });
-
-    const isAdminOrOwner = currentUser?.roles.includes('admin') || currentUser?.roles.includes('owner');
 
     // Filter Users based on selected Branch and Role, considering Date Range for inactive users
     // Calculate available branches and users based on data in the selected period
@@ -165,11 +168,21 @@ export default function LaporanStok() {
             }
         });
 
+        const resultCabangIds = Array.from(cabs);
+        const resultUserIds = Array.from(usrs);
+
+        if (!isAdminOrOwner && currentUser?.cabangId) {
+            return {
+                availableCabangIds: resultCabangIds.filter(id => id === currentUser.cabangId),
+                availableUserIds: resultUserIds.filter(id => users.find(u => u.id === id)?.cabangId === currentUser.cabangId)
+            };
+        }
+
         return {
-            availableCabangIds: Array.from(cabs),
-            availableUserIds: Array.from(usrs)
+            availableCabangIds: resultCabangIds,
+            availableUserIds: resultUserIds
         };
-    }, [effectiveDateRange, penjualan, mutasiBarang, persetujuan, penyesuaianStok, stokPengguna, users]);
+    }, [effectiveDateRange, penjualan, mutasiBarang, persetujuan, penyesuaianStok, stokPengguna, users, isAdminOrOwner, currentUser]);
 
     // Filter Users based on selected Branch and Role, considering Date Range for inactive users
     const relevantUsers = useMemo(() => {
@@ -208,6 +221,7 @@ export default function LaporanStok() {
 
     // Extract calculation logic to a reusable function so we can calculate per-user
     const calculateStockReport = (specFilterUser: string) => {
+        if (!currentUser) return [];
         if (!effectiveDateRange?.from || !effectiveDateRange?.to) return [];
 
         const startDate = effectiveDateRange.from;
@@ -226,17 +240,24 @@ export default function LaporanStok() {
             let currentStock = 0;
 
             // Filter users to consider for stock
-            const isGlobalView = selectedCabangIds.length === 0;
+            const isGlobalView = isAdminOrOwner && selectedCabangIds.length === 0;
 
-            let targetUsers = users;
+            let targetUsers: User[] = [];
             if (specFilterUser !== 'all') {
                 targetUsers = users.filter(u => u.id === specFilterUser);
-            } else if (!isGlobalView) {
-                // Branch Scope: filter by selected cabang IDs
+            } else if (selectedUserIds.length > 0) {
+                targetUsers = users.filter(u => selectedUserIds.includes(u.id));
+            } else if (selectedCabangIds.length > 0) {
                 targetUsers = users.filter(u => u.cabangId && selectedCabangIds.includes(u.cabangId));
-            } else {
-                // Global (no cabang filter)
+            } else if (!isAdminOrOwner && currentUser?.cabangId) {
+                // Non-admin: Force their branch if no selection
+                targetUsers = users.filter(u => u.cabangId === currentUser.cabangId);
+            } else if (isGlobalView) {
+                // Admin: Global view (all users)
                 targetUsers = users;
+            } else {
+                // Default fallback (should rarely happen)
+                targetUsers = users.filter(u => u.cabangId === currentUser?.cabangId);
             }
 
             const targetUserIds = targetUsers.map(u => u.id);
@@ -261,13 +282,15 @@ export default function LaporanStok() {
 
             // --- Process Penjualan (Sales) ---
             penjualan.forEach(p => {
-                if (p.status !== 'lunas') return; // Changed from selesai to lunas
+                if (p.status !== 'lunas') return;
                 // Check if this sale is relevant to our scope
                 const isRelevant = specFilterUser !== 'all'
                     ? p.salesId === specFilterUser
                     : selectedCabangIds.length > 0
                         ? selectedCabangIds.includes(p.cabangId || '')
-                        : true;
+                        : (!isAdminOrOwner && currentUser?.cabangId)
+                            ? p.cabangId === currentUser.cabangId
+                            : isAdminOrOwner; // Admin sees all if no filter
 
                 if (!isRelevant) return;
 
@@ -301,9 +324,12 @@ export default function LaporanStok() {
                 if (m.status !== 'disetujui') return;
                 const mDate = new Date(m.tanggal);
 
-                // Scope Checks
-                let isOriginScope = selectedCabangIds.length > 0 ? selectedCabangIds.includes(m.dariCabangId || '') : true;
-                let isDestScope = selectedCabangIds.length > 0 ? selectedCabangIds.includes(m.keCabangId || '') : true;
+                // Scope Checks - Resolve branch from user if cabangId is missing
+                const resolvedDariCabangId = m.dariCabangId || (m.dari_stok_id ? users.find(u => u.id === m.dari_stok_id)?.cabangId : null);
+                const resolvedKeCabangId = m.keCabangId || (m.ke_stok_id ? users.find(u => u.id === m.ke_stok_id)?.cabangId : null);
+
+                let isOriginScope = selectedCabangIds.length > 0 ? selectedCabangIds.includes(resolvedDariCabangId || '') : isAdminOrOwner;
+                let isDestScope = selectedCabangIds.length > 0 ? selectedCabangIds.includes(resolvedKeCabangId || '') : isAdminOrOwner;
 
                 // User Scope Checks
                 if (specFilterUser !== 'all') {
@@ -329,7 +355,8 @@ export default function LaporanStok() {
                 items.forEach((mi: any) => {
                     const bId = mi.barangId;
                     if (bId === item.id) {
-                        const qty = mi.jumlah;
+                        // Correct calculation: use totalQty or multiply by konversi
+                        const qty = (mi.totalQty !== undefined) ? mi.totalQty : (mi.jumlah * (mi.konversi || 1));
                         if (isAfter(mDate, endDateEndOfDay)) {
                             if (isOriginScope) afterRangeOut += qty; // We lost it after range
                             if (isDestScope) afterRangeIn += qty;   // We got it after range
@@ -348,13 +375,15 @@ export default function LaporanStok() {
 
                 // Use type 'any' or an extended interface here to cleanly access both structures
                 const pData = p.data;
-                const itemsToProcess: { barangId: string; jumlah: number }[] = (pData.items as any[]) || [];
+                const itemsToProcess: any[] = (pData.items as any[]) || [];
 
                 // Handle single item restock where data is not in an array
                 if (!pData.items && (pData.barangId || pData.barang_id)) {
                     itemsToProcess.push({
                         barangId: (pData.barangId || pData.barang_id) as string,
                         jumlah: (pData.jumlah || 0) as number,
+                        konversi: (pData.konversi || 1) as number,
+                        totalQty: pData.totalQty as number | undefined
                     });
                 }
 
@@ -366,13 +395,13 @@ export default function LaporanStok() {
                     ? p.targetUserId === specFilterUser
                     : selectedCabangIds.length > 0
                         ? selectedCabangIds.includes(p.targetCabangId || '') || (p.targetUserId && selectedCabangIds.some(cId => users.find(u => u.id === p.targetUserId)?.cabangId === cId))
-                        : true;
+                        : isAdminOrOwner;
 
                 if (!isRelevant) return;
 
                 itemsToProcess.forEach((pi) => {
                     if (pi.barangId === item.id) {
-                        const qty = pi.jumlah;
+                        const qty = (pi.totalQty !== undefined) ? pi.totalQty : (pi.jumlah * (pi.konversi || 1));
                         if (isAfter(pDate, endDateEndOfDay)) {
                             afterRangeIn += qty;
                         } else if (pDate >= startDateStartOfDay && pDate <= endDateEndOfDay) {
@@ -386,7 +415,7 @@ export default function LaporanStok() {
             penyesuaianStok.forEach(adj => {
                 if (adj.status !== 'disetujui' || adj.barangId !== item.id) return;
 
-                const isRelevant = selectedCabangIds.length > 0 ? selectedCabangIds.includes(adj.cabangId || '') : true;
+                const isRelevant = selectedCabangIds.length > 0 ? selectedCabangIds.includes(adj.cabangId || '') : isAdminOrOwner;
                 if (!isRelevant) return; // Skip if filtered out
                 if (specFilterUser !== 'all') return; // Skip for user specific
 
@@ -852,7 +881,7 @@ export default function LaporanStok() {
                                 </TableRow>
                             </TableHeader>
                             <TableBody>
-                                {filteredStockReport.slice(0, displayLimit).map((item) => {
+                                {filteredStockReport.map((item) => {
                                     // Hide if no movement and no stock
                                     if (item.stokAwal === 0 && item.masuk === 0 && item.keluar === 0 && item.terjual === 0 && item.promo === 0 && item.stokAkhir === 0) return null;
 
@@ -909,19 +938,6 @@ export default function LaporanStok() {
                                         </TableRow>
                                     );
                                 })}
-                                {filteredStockReport.length > displayLimit && (
-                                    <TableRow>
-                                        <TableCell colSpan={6} className="p-0 border-0 text-center">
-                                            <Button
-                                                variant="ghost"
-                                                className="w-full mt-4 border-dashed text-muted-foreground"
-                                                onClick={() => setDisplayLimit(prev => prev + 20)}
-                                            >
-                                                Lihat Lainnya
-                                            </Button>
-                                        </TableCell>
-                                    </TableRow>
-                                )}
                                 {filteredStockReport.length === 0 && (
                                     <TableRow>
                                         <TableCell colSpan={6} className="text-center h-24 text-muted-foreground">

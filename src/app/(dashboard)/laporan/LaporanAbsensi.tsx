@@ -35,14 +35,22 @@ export default function LaporanAbsensi() {
   const router = useRouter();
   const { user: currentUser } = useAuth();
   const { absensi, users, cabang, penjualan } = useDatabase();
-  const [filterCabang, setFilterCabang] = useState<string>(() => {
-      const isGlobal = currentUser?.roles.includes('admin') || currentUser?.roles.includes('owner');
-      if (isGlobal) return 'all';
-      return currentUser?.cabangId || '';
-  });
+
+  if (!currentUser) return null;
+  const [filterCabang, setFilterCabang] = useState<string>('none');
+
+  // Sync filterCabang with currentUser on load
+  useEffect(() => {
+    if (currentUser && filterCabang === 'none') {
+      const isGlobal = currentUser.roles.some(r => ['admin', 'owner'].includes(r));
+      if (isGlobal) {
+        setFilterCabang('all');
+      } else if (currentUser.cabangId) {
+        setFilterCabang(currentUser.cabangId);
+      }
+    }
+  }, [currentUser, filterCabang]);
   const [selectedDate, setSelectedDate] = useState(new Date());
-  const [displayLimit, setDisplayLimit] = useState(20);
-  const [logLimit, setLogLimit] = useState(20);
 
   const isAdminOrOwner = currentUser?.roles.includes('admin') || currentUser?.roles.includes('owner');
 
@@ -53,10 +61,10 @@ export default function LaporanAbsensi() {
 
     // 1. Global Access
     if (isGlobal) {
-        if (filterCabang !== 'all') {
-            return users.filter(u => u.cabangId === filterCabang).sort((a, b) => a.nama.localeCompare(b.nama));
+        if (filterCabang === 'all') {
+            return users.sort((a, b) => a.nama.localeCompare(b.nama));
         }
-        return users.sort((a, b) => a.nama.localeCompare(b.nama));
+        return users.filter(u => u.cabangId === filterCabang).sort((a, b) => a.nama.localeCompare(b.nama));
     }
 
     // 2. Others (Leader/Sales): Access Branch Members
@@ -349,7 +357,7 @@ export default function LaporanAbsensi() {
                                 </tr>
                             ) : (
                                 <>
-                                {displayData.slice(0, displayLimit).map((row) => (
+                                {displayData.map((row) => (
                                 <tr key={row.user.id} className="hover:bg-muted/50">
                                     <td className="p-2 border-r font-medium">{row.user.nama}</td>
                                     {row.attendance.map((att, idx) => (
@@ -364,19 +372,6 @@ export default function LaporanAbsensi() {
                                     <td className="p-2 text-center font-bold">{row.total}</td>
                                 </tr>
                             ))}
-                             {displayData.length > displayLimit && (
-                                <tr>
-                                    <td colSpan={9} className="p-0 border-0 text-center">
-                                        <Button 
-                                            variant="ghost" 
-                                            className="w-full mt-4 border-dashed text-muted-foreground"
-                                            onClick={() => setDisplayLimit(prev => prev + 20)}
-                                        >
-                                            Lihat Lainnya
-                                        </Button>
-                                    </td>
-                                </tr>
-                             )}
                             </>
                             )}
                             <tr className="bg-green-100 font-bold">
@@ -400,7 +395,7 @@ export default function LaporanAbsensi() {
             <CardHeader><CardTitle>Detail Log Aktivitas</CardTitle></CardHeader>
             <CardContent>
                 <div className="space-y-4">
-                    {weeklyAttendance.slice(0, logLimit).map((item) => { 
+                    {weeklyAttendance.map((item) => { 
                          const user = users.find(u => u.id === item.userId);
                          return (
                             <div key={item.id} className="p-3 border rounded-lg hover:bg-muted/50 space-y-2">
@@ -427,15 +422,6 @@ export default function LaporanAbsensi() {
                             </div>
                          );
                     })}
-                    {weeklyAttendance.length > logLimit && (
-                        <Button 
-                            variant="ghost" 
-                            className="w-full mt-4 border-dashed text-muted-foreground"
-                            onClick={() => setLogLimit(prev => prev + 20)}
-                        >
-                            Lihat Lainnya
-                        </Button>
-                    )}
                     {weeklyAttendance.length === 0 && <p className="text-center text-muted-foreground py-4">Tidak ada log aktivitas minggu ini</p>}
                 </div>
             </CardContent>
