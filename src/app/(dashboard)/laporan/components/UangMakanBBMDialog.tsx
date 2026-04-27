@@ -26,7 +26,7 @@ interface UangMakanBBMDialogProps {
 export const UangMakanBBMDialog = ({ open, onOpenChange }: UangMakanBBMDialogProps) => {
     const { 
         absensi, reimburse, updateReimburse, addPettyCash,
-        users, karyawan, pettyCash,
+        users, pettyCash,
         viewMode, cabang, profilPerusahaan
     } = useDatabase();
     const { user } = useAuth();
@@ -147,8 +147,6 @@ export const UangMakanBBMDialog = ({ open, onOpenChange }: UangMakanBBMDialogPro
         const days = eachDayOfInterval({ start: sDate, end: eDate });
     
         const summary = branchUsers.map(u => {
-          const emp = karyawan.find(k => k.id === u.karyawanId || k.nama === u.nama);
-    
           const userAbsensi = absensi.filter(a => {
             const d = new Date(a.tanggal);
             return d >= sDate && d <= eDate && a.userId === u.id && a.status === 'hadir';
@@ -165,7 +163,7 @@ export const UangMakanBBMDialog = ({ open, onOpenChange }: UangMakanBBMDialogPro
           return {
             userId: u.id,
             nama: u.nama,
-            posisi: emp?.posisi || 'Staff',
+            posisi: u.posisi || 'Staff',
             hariKerja: userAbsensi.length,
             nominalUangMakan: totalUangMakan,
             nominalReimburse: totalReimburse,
@@ -317,7 +315,7 @@ export const UangMakanBBMDialog = ({ open, onOpenChange }: UangMakanBBMDialogPro
                     });
                 }
   
-                toast.success(`Berhasil memproses pembayaran ${formatRupiah(totalDisbursement)} untuk ${data.summary.length} karyawan via ${paymentMethod === 'pettycash' ? 'Kas Kecil' : 'Pusat Langsung'}.`);
+                toast.success(`Berhasil memproses pembayaran ${formatRupiah(totalDisbursement)} untuk ${data.summary.length} pengguna via ${paymentMethod === 'pettycash' ? 'Kas Kecil' : 'Pusat Langsung'}.`);
                 setIsPaymentConfirmOpen(false);
                 onOpenChange(false);
             } else {

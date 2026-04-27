@@ -61,7 +61,6 @@ export default function Backup() {
     // Data
     barang: "Data Barang",
     pelanggan: "Data Pelanggan",
-    karyawan: "Data Karyawan",
     users: "Data Users",
     harga: "Harga",
     promo: "Data Promo",
@@ -484,7 +483,7 @@ export default function Backup() {
             let failCount = 0;
 
             const priorityOrder = ['cabang', 'area', 'profilPerusahaan', 'kategori', 'satuan', 'kategoriPelanggan', 'rekeningBank'];
-            const secondOrder = ['users', 'karyawan', 'barang', 'pelanggan', 'harga', 'promo'];
+            const secondOrder = ['users', 'barang', 'pelanggan', 'harga', 'promo'];
             const tertiaryOrder = ['penjualan', 'setoran', 'absensi', 'permintaanBarang', 'mutasiBarang', 'penyesuaianStok', 'pettyCash', 'reimburse', 'persetujuan', 'notifikasi'];
             
             const orderedKeys = [

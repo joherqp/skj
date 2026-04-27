@@ -49,8 +49,6 @@ export const peranData = [];
 // User Accounts
 
 
-// Karyawan / Employees
-export const karyawanData = [];
 
 // Pelanggan
 export const pelangganData: Pelanggan[] = [];

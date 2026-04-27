@@ -132,14 +132,14 @@ export function UangMakanBBMPrintTemplate({
         {/* Main Table */}
         <div className="mb-4 flex items-center gap-2">
             <div className="h-4 w-1 bg-indigo-700 rounded-full"></div>
-            <h3 className="text-xs font-black uppercase tracking-wider text-indigo-900">Ringkasan per Karyawan</h3>
+            <h3 className="text-xs font-black uppercase tracking-wider text-indigo-900">Ringkasan per Pengguna</h3>
         </div>
 
         <table className="w-full border-collapse rounded-xl overflow-hidden border border-indigo-100 shadow-sm">
           <thead className="bg-indigo-700 text-white uppercase text-[8px] font-bold">
             <tr>
               <th className="p-3 text-center w-10">No</th>
-              <th className="p-3 text-left">Nama Karyawan</th>
+              <th className="p-3 text-left">Nama Pengguna</th>
               <th className="p-3 text-left w-32">Posisi</th>
               <th className="p-3 text-center w-20">Hadir</th>
               <th className="p-3 text-right w-32">Uang Makan</th>
@@ -265,7 +265,7 @@ export function UangMakanBBMPrintTemplate({
                     />
                     <div className="w-full text-[8px] font-bold uppercase tracking-tight">
                         <div className="flex justify-between border-b border-slate-100 pb-1 mb-1">
-                            <span className="text-slate-400">Karyawan</span>
+                            <span className="text-slate-400">Pengguna</span>
                             <span className="text-slate-900">{log.nama}</span>
                         </div>
                         <div className="flex justify-between border-b border-slate-100 pb-1 mb-1">

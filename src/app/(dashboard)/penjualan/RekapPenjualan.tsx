@@ -19,7 +19,7 @@ import { ScopeFilters } from '@/components/shared/ScopeFilters';
 export default function RekapPenjualan() {
     const router = useRouter();
     const { user } = useAuth();
-    const { penjualan, pelanggan, users, cabang, karyawan, viewMode, profilPerusahaan, barang, kategoriPelanggan } = useDatabase();
+    const { penjualan, pelanggan, users, cabang, viewMode, profilPerusahaan, barang, kategoriPelanggan } = useDatabase();
     const [isSingleDate, setIsSingleDate] = useState(true);
     const [singleDate, setSingleDate] = useState(() => {
         return new Date().toLocaleDateString('sv').split('T')[0];
@@ -128,8 +128,7 @@ export default function RekapPenjualan() {
             const sId = p.salesId || p.createdBy;
             if (!stats[sId]) {
                 const u = users.find(user => user.id === sId);
-                const k = karyawan.find(k => k.userAccountId === sId);
-                stats[sId] = { name: k?.nama || u?.nama || 'Sales', omzet: 0, qty: 0, promo: 0, count: 0 };
+                stats[sId] = { name: u?.nama || 'Sales', omzet: 0, qty: 0, promo: 0, count: 0 };
             }
             stats[sId].omzet += p.total;
             stats[sId].count += 1;
@@ -143,7 +142,7 @@ export default function RekapPenjualan() {
             });
         });
         return Object.values(stats).sort((a, b) => b.omzet - a.omzet);
-    }, [filtered, users, karyawan]);
+    }, [filtered, users]);
 
     // Category Performance Aggregation
     const categoryPerformance = useMemo(() => {
@@ -503,9 +502,8 @@ export default function RekapPenjualan() {
                                         const customerName = (customer?.nama || 'Umum').toUpperCase();
 
                                         const salesId = item.salesId || item.createdBy;
-                                        const linkedEmployee = karyawan.find(k => k.userAccountId === salesId);
                                         const salesPerson = users.find(u => u.id === salesId);
-                                        const salesName = linkedEmployee?.nama || salesPerson?.nama || 'Sales';
+                                        const salesName = salesPerson?.nama || 'Sales';
 
                                         return (
                                             <div key={item.id} onClick={() => router.push(`/penjualan/${item.id}`)} className="group p-3 sm:p-4 hover:bg-muted/30 transition-colors flex flex-col sm:flex-row items-stretch sm:items-center gap-3 sm:gap-4 cursor-pointer">

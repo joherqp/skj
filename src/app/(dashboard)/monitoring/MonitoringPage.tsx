@@ -44,8 +44,8 @@ export default function Monitoring() {
     const { user: currentUser } = useAuth();
     const router = useRouter();
     const {
-        users, absensi, cabang: listCabang, pelanggan: listPelanggan, penjualan, setoran, mutasiBarang, karyawan: listKaryawan,
-        viewMode, kategoriPelanggan, profilPerusahaan, deletePelanggan, refresh
+        users, absensi, cabang: listCabang, pelanggan: listPelanggan, penjualan, setoran, mutasiBarang,
+        barang: listBarang, stokPengguna: listStokPengguna, targets: listTargets, kunjungan: listKunjungan, viewMode, kategoriPelanggan, profilPerusahaan, deletePelanggan, refresh
     } = useDatabase();
 
     const [mapMode, setMapMode] = useState<MapMode>('pelanggan');
@@ -723,28 +723,27 @@ export default function Monitoring() {
                 });
 
                 // CHECK FOR HOME (Home Detection for self or colleagues)
-                const nearbyKaryawanHome = listKaryawan.find(k => {
-                    if (!k.koordinat) return false;
-                    if (!k.koordinat) return false;
+                const nearbyUserHome = users.find(u => {
+                    if (!u.koordinat) return false;
                     let hLat: number | undefined;
                     let hLng: number | undefined;
 
-                    if (typeof k.koordinat === 'string') {
-                        const [lat, lng] = k.koordinat.split(',').map(s => parseFloat(s.trim()));
+                    if (typeof u.koordinat === 'string') {
+                        const [lat, lng] = u.koordinat.split(',').map(s => parseFloat(s.trim()));
                         if (!isNaN(lat) && !isNaN(lng)) {
                             hLat = lat;
                             hLng = lng;
                         }
                     } else {
-                        hLat = k.koordinat.latitude || k.koordinat.lat;
-                        hLng = k.koordinat.longitude || k.koordinat.lng;
+                        hLat = u.koordinat.latitude || u.koordinat.lat;
+                        hLng = u.koordinat.longitude || u.koordinat.lng;
                     }
                     if (hLat === undefined || hLng === undefined) return false;
                     return getDistance(item.lat!, item.lng!, hLat, hLng) < 100;
                 });
 
-                const isHome = !!nearbyKaryawanHome;
-                const isOwnHome = nearbyKaryawanHome?.userAccountId === item.userId;
+                const isHome = !!nearbyUserHome;
+                const isOwnHome = nearbyUserHome?.id === item.userId;
 
                 // CHECK FOR NEARBY CUSTOMER (Proximity/Visit Detection)
                 const nearbyCustomer = listPelanggan.find(p => {
@@ -754,13 +753,13 @@ export default function Monitoring() {
 
                 if (isHome) {
                     currentStay.type = 'visit';
-                    currentStay.title = `Rumah: ${nearbyKaryawanHome?.nama}`;
+                    currentStay.title = `Rumah: ${nearbyUserHome?.nama}`;
                     currentStay.description = isOwnHome
                         ? `Berada di rumah sendiri (${currentStay.duration} mnt)`
-                        : `Sedang berkunjung ke rumah ${nearbyKaryawanHome?.nama} (${currentStay.duration} mnt)`;
+                        : `Sedang berkunjung ke rumah ${nearbyUserHome?.nama} (${currentStay.duration} mnt)`;
                     const d = currentStay.data as DynamicActivityData;
                     d.isHome = true;
-                    d.ownerName = nearbyKaryawanHome?.nama;
+                    d.ownerName = nearbyUserHome?.nama;
                 } else if (nearbyCabang) {
                     currentStay.type = 'visit';
                     currentStay.title = `Basecamp: ${nearbyCabang.nama}`;
@@ -784,7 +783,7 @@ export default function Monitoring() {
         // Filter out very short stays (pings) if they are just single pings but keep them if they are meaningful
         // Or just return everything sorted
         return processed.sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime());
-    }, [sessionLocations, absensi, penjualan, setoran, mutasiBarang, dateRange, selectedSessionUsers, users, listPelanggan, listCabang, listKaryawan, currentUser?.roles, currentUser?.cabangId, activeTab]);
+    }, [sessionLocations, absensi, penjualan, setoran, mutasiBarang, dateRange, selectedSessionUsers, users, listPelanggan, listCabang, currentUser?.roles, currentUser?.cabangId, activeTab]);
 
 
     return (

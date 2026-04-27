@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { ArrowLeft, Info } from 'lucide-react';
+import { ArrowLeft, Info, Eye, EyeOff } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -16,6 +16,7 @@ export default function LoginPage() {
     const [showEmailLogin, setShowEmailLogin] = useState(false);
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
+    const [showPassword, setShowPassword] = useState(false);
     const { loginWithGoogle, login, isAuthenticated, isLoading: isAuthLoading } = useAuth();
     const router = useRouter();
     const searchParams = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : null;
@@ -145,14 +146,31 @@ export default function LoginPage() {
                                             disabled={isLoading}
                                             required
                                         />
-                                        <Input
-                                            type="password"
-                                            placeholder="Password"
-                                            value={password}
-                                            onChange={(e) => setPassword(e.target.value)}
-                                            disabled={isLoading}
-                                            required
-                                        />
+                                        <div className="relative">
+                                            <Input
+                                                type={showPassword ? "text" : "password"}
+                                                placeholder="Password"
+                                                value={password}
+                                                onChange={(e) => setPassword(e.target.value)}
+                                                disabled={isLoading}
+                                                required
+                                                className="pr-10"
+                                            />
+                                            <Button
+                                                type="button"
+                                                variant="ghost"
+                                                size="sm"
+                                                className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent"
+                                                onClick={() => setShowPassword(!showPassword)}
+                                                disabled={isLoading}
+                                            >
+                                                {showPassword ? (
+                                                    <EyeOff className="h-4 w-4 text-zinc-400" />
+                                                ) : (
+                                                    <Eye className="h-4 w-4 text-zinc-400" />
+                                                )}
+                                            </Button>
+                                        </div>
                                     </div>
                                     <Button
                                         type="submit"

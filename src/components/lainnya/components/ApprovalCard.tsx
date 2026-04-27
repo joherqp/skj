@@ -23,7 +23,7 @@ export const getIcon = (jenis: string) => {
         case 'rencana_setoran': return <FileText className="text-indigo-500" />;
         case 'setoran': return <FileText className="text-blue-500" />;
         case 'reimburse': return <FileText className="text-pink-500" />;
-        case 'mutasi_karyawan': return <ArrowLeftRight className="text-cyan-500" />;
+        case 'mutasi_user': return <ArrowLeftRight className="text-cyan-500" />;
         case 'opname': return <FileText className="text-rose-500" />;
         case 'mutasi_pelanggan': return <ArrowLeftRight className="text-orange-500" />;
         default: return <FileText className="text-gray-500" />;
@@ -74,9 +74,9 @@ export function ApprovalCard({
     const formatUserDetail = (userId?: string, payload?: PersetujuanPayload) => {
         if (!userId || userId === 'Unknown') {
             // Try to find name in payload
-            const payloadName = payload?.userName || payload?.namaUser || payload?.nama || payload?.operator || payload?.karyawanNama || (payload as any)?.diajukanOlehName;
+            const payloadName = payload?.userName || payload?.namaUser || payload?.nama || payload?.operator || (payload as any)?.diajukanOlehName;
             if (payloadName && payloadName !== 'Unknown') return payloadName;
-            if (userId === 'Unknown') return 'Sistem/Karyawan';
+            if (userId === 'Unknown') return 'Sistem/Pengguna';
             return '-';
         }
         
@@ -92,7 +92,7 @@ export function ApprovalCard({
             if (typeof userId === 'string' && userId.length < 20 && !userId.includes('-') && isNaN(Number(userId))) return userId;
             
             // Check payload fallbacks
-            const payloadName = payload?.userName || payload?.namaUser || payload?.nama || payload?.operator || payload?.karyawanNama;
+            const payloadName = payload?.userName || payload?.namaUser || payload?.nama || payload?.operator;
             if (payloadName && payloadName !== 'Unknown') return payloadName;
 
             return typeof userId === 'string' && userId.length > 15 ? `User ${userId.substring(0, 8)}` : `User ${userId}`;
@@ -402,10 +402,10 @@ export function ApprovalCard({
                     </div>
                 );
 
-            case 'mutasi_karyawan':
+            case 'mutasi_user':
                 return (
                     <div className="mt-2 p-3 bg-indigo-50 border border-indigo-100 rounded text-sm">
-                        <p className="font-semibold text-indigo-800 text-xs uppercase mb-1">Perubahan Data Karyawan</p>
+                        <p className="font-semibold text-indigo-800 text-xs uppercase mb-1">Perubahan Data Pengguna</p>
                         {d.isCabangChanged && (
                             <p>Cabang: <span className="line-through text-red-400 mr-2">{cabang.find(c => c.id === d.oldCabangId)?.nama || '-'}</span>
                                 <ArrowLeftRight className="inline w-3 h-3 mx-1" />

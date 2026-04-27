@@ -256,7 +256,7 @@ export default function LaporanReimburse() {
     try {
         const dataToExport = filteredData.map(item => ({
             Tanggal: format(new Date(item.tanggal), 'yyyy-MM-dd'),
-            Karyawan: formatUserDetail(item.userId),
+            Pengguna: formatUserDetail(item.userId),
             Kategori: item.kategori,
             Keterangan: item.keterangan,
             Jumlah: item.jumlah,
@@ -434,7 +434,7 @@ export default function LaporanReimburse() {
                     <table className="w-full text-sm">
                         <thead className="bg-pink-600 text-white">
                             <tr>
-                                <th className="p-2 text-left font-medium min-w-[150px]">Nama Karyawan</th>
+                                <th className="p-2 text-left font-medium min-w-[150px]">Nama Pengguna</th>
                                 {daysOfWeek.map(day => (
                                     <th key={day.toString()} className="p-2 text-center font-medium min-w-[80px] border-l border-pink-500">
                                         {format(day, 'EEEE', { locale: id }).replace('Minggu', 'Mgg').replace('Senin', 'Sen').replace('Selasa','Sel').replace('Rabu','Rab').replace('Kamis','Kam').replace('Jumat','Jum').replace('Sabtu','Sab')}
@@ -487,7 +487,7 @@ export default function LaporanReimburse() {
                 <div className="relative flex-1">
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                     <Input
-                        placeholder="Cari karyawan atau keterangan pengeluaran..."
+                        placeholder="Cari pengguna atau keterangan pengeluaran..."
                         className="pl-10 h-11 rounded-xl"
                         value={searchTerm}
                         onChange={(e) => setSearchTerm(e.target.value)}
@@ -505,7 +505,7 @@ export default function LaporanReimburse() {
                 <TableHeader>
                     <TableRow>
                         <TableHead>Tanggal</TableHead>
-                        <TableHead>Karyawan</TableHead>
+                        <TableHead>Pengguna</TableHead>
                         <TableHead>Keterangan</TableHead>
                         <TableHead>Jumlah</TableHead>
                         <TableHead>Status</TableHead>

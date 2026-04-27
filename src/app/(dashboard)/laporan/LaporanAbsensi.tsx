@@ -214,7 +214,7 @@ export default function LaporanAbsensi() {
         const validRows = tableData.filter(r => r.total > 0);
 
         // Sheet 1: Matrix Recap
-        const headers = ["Nama Karyawan", ...daysOfWeek.map(d => format(d, 'EEEE, dd MMM', { locale: id })), "Total"];
+        const headers = ["Nama Pengguna", ...daysOfWeek.map(d => format(d, 'EEEE, dd MMM', { locale: id })), "Total"];
         const rows = validRows.map(row => {
              const attStatuses = row.attendance.map(a => a.status === '-' ? '' : a.status);
              return [row.user.nama, ...attStatuses, row.total];
@@ -345,7 +345,7 @@ export default function LaporanAbsensi() {
                         <tbody className="divide-y">
                             {displayData.length === 0 ? (
                                 <tr>
-                                    <td colSpan={9} className="p-4 text-center text-muted-foreground">Tidak ada data karyawan</td>
+                                    <td colSpan={9} className="p-4 text-center text-muted-foreground">Tidak ada data user</td>
                                 </tr>
                             ) : (
                                 <>

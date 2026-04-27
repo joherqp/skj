@@ -36,7 +36,7 @@ export default function LaporanPenjualan() {
     }
 
     const {
-        penjualan, barang, pelanggan, profilPerusahaan, users, karyawan,
+        penjualan, barang, pelanggan, profilPerusahaan, users,
         stokPengguna, persetujuan, cabang: listCabang, kategoriPelanggan, satuan, setoran, saldoPengguna
     } = useDatabase();
 

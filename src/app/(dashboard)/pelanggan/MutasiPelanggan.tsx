@@ -18,7 +18,7 @@ import { SearchableSelect } from '@/components/ui/searchable-select';
 export default function MutasiPelanggan() {
   const router = useRouter();
   const { user } = useAuth();
-  const { pelanggan, users, addPersetujuan, updatePelanggan, addRiwayatPelanggan, karyawan, cabang } = useDatabase();
+  const { pelanggan, users, addPersetujuan, updatePelanggan, addRiwayatPelanggan, cabang } = useDatabase();
   
   const [selectedPelangganIds, setSelectedPelangganIds] = useState<string[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
@@ -233,7 +233,7 @@ export default function MutasiPelanggan() {
                   placeholder="Pilih sales..."
                   searchPlaceholder="Cari sales..."
                   options={salesUsers.map(sales => {
-                      const linkedEmp = karyawan.find(k => k.userAccountId === sales.id);
+                      const linkedEmp = users.find(u => u.id === sales.id);
                       const displayName = linkedEmp?.nama || sales.nama || sales.username;
                       const branchName = cabang.find(c => c.id === sales.cabangId)?.nama || 'Unknown Branch';
                       return {

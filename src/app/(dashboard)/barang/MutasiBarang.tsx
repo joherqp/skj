@@ -31,7 +31,7 @@ interface MutasiBarangFormProps {
 
 export function MutasiBarangForm({ embedded, onSuccess, onCancel }: MutasiBarangFormProps) {
   const { user } = useAuth();
-  const { barang, addMutasiBarang, addPersetujuan, addNotifikasi, users, cabang, karyawan, satuan, stokPengguna, persetujuan } = useDatabase();
+  const { barang, addMutasiBarang, addPersetujuan, addNotifikasi, users, cabang, satuan, stokPengguna, persetujuan } = useDatabase();
   
   const [isConfirmOpen, setIsConfirmOpen] = useState(false);
   const [formData, setFormData] = useState({
@@ -45,13 +45,8 @@ export function MutasiBarangForm({ embedded, onSuccess, onCancel }: MutasiBarang
       const myCabangId = user?.cabangId;
       if (!myCabangId) return false;
 
-      let userCabangId = u.cabangId;
-      if (u.karyawanId) {
-          const linkedKaryawan = karyawan.find(k => k.id === u.karyawanId);
-          if (linkedKaryawan) {
-              userCabangId = linkedKaryawan.cabangId;
-          }
-      }
+      // Use u.cabangId directly as karyawan is now merged into users
+      const userCabangId = u.cabangId;
 
       // STRICT: Same branch only
       const isCabangMatch = userCabangId === myCabangId;

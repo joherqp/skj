@@ -1,6 +1,6 @@
 'use client';
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { createContext, type Dispatch, type ReactNode, type SetStateAction, useCallback, useContext, useEffect, useRef, useState } from 'react';
+import { createContext, type Dispatch, type ReactNode, type SetStateAction, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import {
   DatabaseContextType,
@@ -9,7 +9,6 @@ import {
   Barang,
   Pelanggan,
   User,
-  Karyawan,
   Penjualan,
   Setoran,
   Absensi,
@@ -30,7 +29,8 @@ import {
   PettyCash,
   PembayaranPenjualan,
   Restock,
-  RiwayatPelanggan
+  RiwayatPelanggan,
+  SalesTarget
 } from '@/types';
 import { toCamelCase, toSnakeCase } from '@/lib/utils';
 import { playNotificationSound } from '@/lib/notificationSound';
@@ -64,7 +64,7 @@ export function DatabaseProvider({ children }: { children: ReactNode }) {
   const [barang, setBarang] = useState<Barang[]>([]);
   const [pelanggan, setPelanggan] = useState<Pelanggan[]>([]);
   const [users, setUsers] = useState<User[]>([]);
-  const [karyawan, setKaryawan] = useState<Karyawan[]>([]);
+
   const [penjualan, setPenjualan] = useState<Penjualan[]>([]);
   const [setoran, setSetoran] = useState<Setoran[]>([]);
   const [absensi, setAbsensi] = useState<Absensi[]>([]);
@@ -80,6 +80,7 @@ export function DatabaseProvider({ children }: { children: ReactNode }) {
   const [reimburse, setReimburse] = useState<Reimburse[]>([]);
   const [pettyCash, setPettyCash] = useState<PettyCash[]>([]);
   const [restock, setRestock] = useState<Restock[]>([]);
+  const [targets, setTargets] = useState<SalesTarget[]>([]);
 
   // Profil Perusahaan
   const [profilPerusahaan, setProfilPerusahaan] = useState<ProfilPerusahaan>({
@@ -92,56 +93,9 @@ export function DatabaseProvider({ children }: { children: ReactNode }) {
     deskripsi: ''
   });
 
-  // Database Mode
-  const [dbMode, setDbModeState] = useState<'public' | 'demo'>('public');
 
 
-  const setDbMode = useCallback((mode: 'public' | 'demo') => {
-    setDbModeState(mode);
-  }, []);
 
-  const getErrorCode = useCallback((error: unknown): string => {
-    const err = error as { code?: string; status?: number; message?: string };
-    if (err?.code) return err.code;
-    if (typeof err?.status === 'number') return String(err.status);
-    if (err?.message?.includes('The schema must be one of')) return 'PGRST106';
-    return 'unknown';
-  }, []);
-
-  const shouldFallbackToPublic = useCallback((error: unknown): boolean => {
-    if (dbMode !== 'demo') return false;
-    const code = getErrorCode(error);
-    return ['PGRST106', 'PGRST205', '42P01', '406'].includes(code);
-  }, [dbMode, getErrorCode]);
-
-  useEffect(() => {
-    if (dbMode !== 'demo') return;
-
-    let cancelled = false;
-    const validateDemoSchema = async () => {
-      const { error } = await supabase
-        .schema('demo')
-        .from('profil_perusahaan')
-        .select('id')
-        .limit(1);
-
-      if (cancelled || !error) return;
-
-      const code = (error as { code?: string }).code;
-      if (code === 'PGRST106') {
-        setDbModeState('public');
-        if (!demoWarningShown.current) {
-          toast.error("Schema 'demo' belum aktif di Supabase API. Mode dikembalikan ke public.");
-          demoWarningShown.current = true;
-        }
-      }
-    };
-
-    void validateDemoSchema();
-    return () => {
-      cancelled = true;
-    };
-  }, [dbMode]);
 
   // UI State
   const [pettyCashBalance, setPettyCashBalance] = useState(0);
@@ -151,28 +105,37 @@ export function DatabaseProvider({ children }: { children: ReactNode }) {
   const isInitializedRef = useRef(false);
   const [viewMode, setViewMode] = useState<'all' | 'me'>('all');
 
+  // Calculate dbMode (Demo Mode Logic)
+  const dbMode = useMemo(() => {
+    const isGlobalDemo = profilPerusahaan.config?.isDemo || false;
+    const userBranch = cabang.find(c => c.id === currentUser?.cabangId);
+    const isBranchDemo = userBranch?.isDemo || false;
+    
+    // Look up current user in our local users state to get latest isDemo status
+    const me = users.find(u => u.id === currentUser?.id) || currentUser;
+    const isUserDemo = me?.isDemo || false;
+
+    return (isGlobalDemo || isBranchDemo || isUserDemo) ? 'demo' : 'public';
+  }, [profilPerusahaan.config?.isDemo, cabang, users, currentUser]);
+
   // Feature: Offline Sync
   const [isOnline, setIsOnline] = useState(true);
   // Feature: Other tables
   const [penyesuaianStok, setPenyesuaianStok] = useState<any[]>([]);
   const [permintaanBarang, setPermintaanBarang] = useState<any[]>([]);
 
-  // Monitor Online Status
   useEffect(() => {
-    // Correctly initialize isOnline on mount
     setIsOnline(navigator.onLine);
-
     const handleOnline = () => { setIsOnline(true); toast.success('Online'); };
     const handleOffline = () => { setIsOnline(false); toast.warning('Offline Mode'); };
-
     window.addEventListener('online', handleOnline);
     window.addEventListener('offline', handleOffline);
-
     return () => {
       window.removeEventListener('online', handleOnline);
       window.removeEventListener('offline', handleOffline);
     };
-  }, [dbMode]);
+  }, []);
+
 
   // Process Offline Queue
   const processQueue = useCallback(async () => {
@@ -188,13 +151,12 @@ export function DatabaseProvider({ children }: { children: ReactNode }) {
   }, [isOnline, processQueue]);
 
   // Helper for realtime updates
-  const handleRealtimeUpdate = useCallback(<T extends { id: string }>(prev: T[], event: string, newItem: T, oldItem: T) => {
+  const handleRealtimeUpdate = useCallback(<T extends { id: string }>(prev: T[], event: string, newItem: any, oldItem: any) => {
     // Safety check
     if (!prev) prev = [];
 
     if (event === 'INSERT') {
       if (!newItem || !newItem.id) {
-        console.warn('Realtime INSERT received invalid item:', newItem);
         return prev;
       }
       // Avoid duplicates
@@ -216,66 +178,58 @@ export function DatabaseProvider({ children }: { children: ReactNode }) {
 
   // Realtime Subscription
   useEffect(() => {
-    console.log('Setting up Realtime Subscription...');
+    console.log('Setting up Realtime Subscription for public and demo schemas...');
+    
+    const updateLocalState = (tableName: string, newItem: unknown, oldItem: unknown, eventType: string) => {
+      const camelNew = newItem ? toCamelCase(newItem) : null;
+      const safeOld = oldItem || {};
+
+      switch (tableName) {
+        case 'notifikasi':
+          setNotifikasi(prev => handleRealtimeUpdate(prev, eventType, camelNew, safeOld));
+          if (eventType === 'INSERT' && camelNew && (camelNew as any).userId === currentUser?.id) {
+            const n = camelNew as Notifikasi;
+            const toastType = n.jenis === 'error' ? 'error' : n.jenis === 'success' ? 'success' : n.jenis === 'warning' ? 'warning' : 'info';
+            toast[toastType](n.pesan || 'Notification', { description: n.judul, duration: 5000 });
+            playNotificationSound();
+          }
+          break;
+        case 'persetujuan': setPersetujuan(prev => handleRealtimeUpdate(prev, eventType, camelNew, safeOld)); break;
+        case 'penjualan': setPenjualan(prev => handleRealtimeUpdate(prev, eventType, camelNew, safeOld)); break;
+        case 'absensi': setAbsensi(prev => handleRealtimeUpdate(prev, eventType, camelNew, safeOld)); break;
+        case 'kunjungan': setKunjungan(prev => handleRealtimeUpdate(prev, eventType, camelNew, safeOld)); break;
+        case 'riwayat_pelanggan': setRiwayatPelanggan(prev => handleRealtimeUpdate(prev, eventType, camelNew, safeOld)); break;
+        case 'stok_pengguna': setStokPengguna(prev => handleRealtimeUpdate(prev, eventType, camelNew, safeOld)); break;
+        case 'users': setUsers(prev => handleRealtimeUpdate(prev, eventType, camelNew, safeOld)); break;
+        case 'profil_perusahaan': if (camelNew) setProfilPerusahaan(camelNew as ProfilPerusahaan); break;
+      }
+    };
+
     const changes = supabase
       .channel('db-changes')
-      .on('postgres_changes', { event: '*', schema: dbMode }, (payload) => {
-        console.log('Realtime Change Received:', payload);
-        const { table, eventType, new: newRecord, old: oldRecord } = payload;
-
-        const updateLocalState = (tableName: string, newItem: unknown, oldItem: unknown) => {
-          const camelNew = newItem ? toCamelCase(newItem) : null;
-          // For DELETE, oldItem usually only has ID in 'old' property if replica identity is small
-          const safeOld = oldItem || {};
-
-          switch (tableName) {
-            case 'notifikasi':
-              console.log('Updating notifikasi state from realtime...');
-              setNotifikasi(prev => handleRealtimeUpdate(prev, eventType, camelNew, safeOld));
-
-              // Show Toast or System Notification for new notifications (logic simplified for brevity)
-              if (eventType === 'INSERT' && camelNew && (camelNew as any).userId === currentUser?.id) {
-                const n = camelNew as Notifikasi;
-                const toastType = n.jenis === 'error' ? 'error' :
-                  n.jenis === 'success' ? 'success' :
-                    n.jenis === 'warning' ? 'warning' : 'info';
-
-                toast[toastType](n.pesan || 'Notification', {
-                  description: n.judul,
-                  duration: 5000,
-                });
-                playNotificationSound();
-              }
-              break;
-            case 'persetujuan': setPersetujuan(prev => handleRealtimeUpdate(prev, eventType, camelNew, safeOld)); break;
-            case 'penjualan': setPenjualan(prev => handleRealtimeUpdate(prev, eventType, camelNew, safeOld)); break;
-            case 'absensi': setAbsensi(prev => handleRealtimeUpdate(prev, eventType, camelNew, safeOld)); break;
-            case 'kunjungan': setKunjungan(prev => handleRealtimeUpdate(prev, eventType, camelNew, safeOld)); break;
-            case 'riwayat_pelanggan': setRiwayatPelanggan(prev => handleRealtimeUpdate(prev, eventType, camelNew, safeOld)); break;
-            case 'stok_pengguna': setStokPengguna(prev => handleRealtimeUpdate(prev, eventType, camelNew, safeOld)); break;
-            case 'barang': setBarang(prev => handleRealtimeUpdate(prev, eventType, camelNew, safeOld)); break;
-            case 'profil_perusahaan':
-              if (camelNew) {
-                setProfilPerusahaan(camelNew as ProfilPerusahaan);
-              }
-              break;
-          }
-        };
-
-        updateLocalState(table, newRecord, oldRecord);
+      .on('postgres_changes', { event: '*', schema: 'public' }, (payload) => {
+        updateLocalState(payload.table, payload.new, payload.old, payload.eventType);
       })
-      .subscribe((status) => {
-        console.log(`Realtime Subscription Status: ${status}`);
-      });
+      .on('postgres_changes', { event: '*', schema: 'demo' }, (payload) => {
+        if (dbMode === 'demo') {
+          updateLocalState(payload.table, payload.new, payload.old, payload.eventType);
+        }
+      })
+      .subscribe();
 
     return () => {
-      console.log('Cleaning up Realtime Subscription...');
       supabase.removeChannel(changes);
     };
-  }, [currentUser, dbMode, handleRealtimeUpdate]);
+  }, [currentUser, handleRealtimeUpdate, dbMode]);
+
+  // Helper to determine schema for a table
+  const getTableSchema = useCallback((tableName: string, currentMode: 'public' | 'demo' = dbMode) => {
+    const publicOnlyTables = ['profil_perusahaan', 'cabang', 'users', 'area', 'kategori', 'satuan', 'rekening_bank', 'kategori_pelanggan'];
+    return publicOnlyTables.includes(tableName) ? 'public' : currentMode;
+  }, [dbMode]);
 
   // Generic fetch function
-  const fetchData = useCallback(async <T,>(tableName: string, daysToFetch: number = 30): Promise<T[]> => {
+  const fetchData = useCallback(async <T,>(tableName: string, daysToFetch: number = 30, schemaOverride?: 'public' | 'demo'): Promise<T[]> => {
     try {
       let sortColumn = 'created_at';
       let dateFilterColumn: string | null = null;
@@ -294,8 +248,10 @@ export function DatabaseProvider({ children }: { children: ReactNode }) {
         }
       }
 
+      const schema = schemaOverride || getTableSchema(tableName);
+
       let query = supabase
-        .schema(dbMode)
+        .schema(schema)
         .from(tableName)
         .select('*')
         .order(sortColumn, { ascending: false });
@@ -311,50 +267,15 @@ export function DatabaseProvider({ children }: { children: ReactNode }) {
       }
 
       const { data, error } = await query;
-
-      if (error) {
-        if (shouldFallbackToPublic(error)) {
-          const fallbackQuery = supabase
-            .from(tableName)
-            .select('*')
-            .order(sortColumn, { ascending: false });
-
-          const fallbackWithDate = dateFilterColumn
-            ? fallbackQuery.gte(dateFilterColumn, (() => {
-              const limitDate = new Date();
-              limitDate.setDate(limitDate.getDate() - daysToFetch);
-              limitDate.setHours(0, 0, 0, 0);
-              return limitDate.toISOString();
-            })())
-            : fallbackQuery;
-
-          const { data: fallbackData, error: fallbackError } = await fallbackWithDate;
-          if (fallbackError) throw fallbackError;
-          return toCamelCase(fallbackData || []) as T[];
-        }
-        throw error;
-      }
+      if (error) throw error;
 
       const result = toCamelCase(data || []) as T[];
-      if (tableName === 'absensi' || tableName === 'penjualan') {
-        console.log(`fetchData [${tableName}]: Loaded ${result.length} records (Last ${daysToFetch} Days).`);
-      }
       return result;
     } catch (error) {
-      const noisyCodes = new Set(['PGRST106', 'PGRST205', '42P01']);
-      const code = getErrorCode(error);
-      const key = `${dbMode}:${tableName}:${code}`;
-      if (noisyCodes.has(code)) {
-        if (!fetchWarningShown.current.has(key)) {
-          console.warn(`Skip fetch ${tableName} (${dbMode}): ${code}`);
-          fetchWarningShown.current.add(key);
-        }
-      } else {
-        console.error(`Error fetching ${tableName}:`, error);
-      }
+      console.error(`Error fetching ${tableName}:`, error);
       return [];
     }
-  }, [dbMode, getErrorCode, shouldFallbackToPublic]);
+  }, []);
 
   // Load all data
   const loadAllData = useCallback(async (isManualRefresh = false) => {
@@ -367,127 +288,125 @@ export function DatabaseProvider({ children }: { children: ReactNode }) {
 
     isFetchingRef.current = true;
     try {
-      // If already initialized, use isRefreshing to avoid yellow flicker
       if (isManualRefresh || isInitialized) {
         setIsRefreshing(true);
       } else {
         setIsLoading(true);
       }
 
-      // 1. Fetch Company Profile FIRST to get settings (daysToFetch)
-      let daysLimit = 30; // Default
-      try {
-        const profileQuery = supabase
-          .schema(dbMode)
-          .from('profil_perusahaan')
-          .select('*')
-          .limit(1);
-
-        let { data: profileData, error: profileError } = await profileQuery.maybeSingle();
-        if (profileError && shouldFallbackToPublic(profileError)) {
-          const fallback = await supabase
-            .from('profil_perusahaan')
-            .select('*')
-            .limit(1)
-            .maybeSingle();
-          profileData = fallback.data;
-          profileError = fallback.error;
-        }
-
-        if (profileError) {
-          console.warn('Profile fetch error, using default settings:', profileError);
-        } else if (profileData) {
-          const profile = toCamelCase(profileData) as ProfilPerusahaan;
-          setProfilPerusahaan(profile);
-
-          if (profile.config && profile.config.daysToFetch) {
-            daysLimit = profile.config.daysToFetch;
-          }
-        }
-      } catch (err) {
-        console.warn('Failed to fetch company profile', err);
-      }
-
-      console.log(`Loading data with retention limit: ${daysLimit} days`);
-
-      // Helper to safely fetch data without throwing
-      const safeFetch = async <T,>(tableName: string, daysToFetch: number = 30): Promise<T[]> => {
-        try {
-          return await fetchData<T>(tableName, daysToFetch);
-        } catch (err) {
-          console.warn(`Failed to fetch ${tableName}, returning empty array.`, err);
-          return [];
-        }
-      };
-
-      // Load master data in parallel
-      const results = await Promise.allSettled([
-        safeFetch<Kategori>('kategori'),
-        safeFetch<Satuan>('satuan'),
-        safeFetch<KategoriPelanggan>('kategori_pelanggan'),
-        safeFetch<RekeningBank>('rekening_bank'),
-        safeFetch<Area>('area'),
-        safeFetch<Cabang>('cabang'),
-        safeFetch<Barang>('barang'),
-        safeFetch<Pelanggan>('pelanggan'),
-        safeFetch<User>('users'),
-        safeFetch<Karyawan>('karyawan'),
-        safeFetch<Penjualan>('penjualan', daysLimit),
-        safeFetch<Setoran>('setoran', daysLimit),
-        safeFetch<Absensi>('absensi', daysLimit),
-        safeFetch<Kunjungan>('kunjungan', daysLimit),
-        safeFetch<RiwayatPelanggan>('riwayat_pelanggan', daysLimit),
-        safeFetch<Notifikasi>('notifikasi', daysLimit),
-        safeFetch<Persetujuan>('persetujuan', daysLimit),
-        safeFetch<Harga>('harga'),
-        safeFetch<StokPengguna>('stok_pengguna'),
-        safeFetch<Promo>('promo'),
-        safeFetch<MutasiBarang>('mutasi_barang', daysLimit),
-        safeFetch<SaldoPengguna>('saldo_pengguna'),
-        safeFetch<Reimburse>('reimburse', daysLimit),
-        safeFetch<PettyCash>('petty_cash', daysLimit),
-        safeFetch<Restock>('restock', daysLimit),
+      // 1. Fetch CORE Data from PUBLIC schema first (this determines our dbMode)
+      const [profileRes, cabangRes, usersRes] = await Promise.all([
+        supabase.from('profil_perusahaan').select('*').limit(1).maybeSingle(),
+        supabase.from('cabang').select('*').order('nama'),
+        supabase.from('users').select('*').order('nama')
       ]);
 
-      // Extract results
-      const getResult = <T,>(index: number): T[] => {
-        const result = results[index];
-        return result.status === 'fulfilled' ? (result.value as T[]) : [];
-      };
+      const profile = profileRes.data ? (toCamelCase(profileRes.data) as ProfilPerusahaan) : null;
+      const branches = (cabangRes.data ? toCamelCase(cabangRes.data) : []) as Cabang[];
+      const allUsers = (usersRes.data ? toCamelCase(usersRes.data) : []) as User[];
 
-      setKategori(getResult<Kategori>(0));
-      setSatuan(getResult<Satuan>(1));
-      setKategoriPelanggan(getResult<KategoriPelanggan>(2));
-      setRekeningBank(getResult<RekeningBank>(3));
-      setArea(getResult<Area>(4));
-      setCabang(getResult<Cabang>(5));
-      setBarang(getResult<Barang>(6));
-      setPelanggan(getResult<Pelanggan>(7));
-      setUsers(getResult<User>(8));
-      setKaryawan(getResult<Karyawan>(9));
-      setPenjualan(getResult<Penjualan>(10));
-      setSetoran(getResult<Setoran>(11));
-      setAbsensi(getResult<Absensi>(12));
-      setKunjungan(getResult<Kunjungan>(13));
-      setRiwayatPelanggan(getResult<RiwayatPelanggan>(14));
-      setNotifikasi(getResult<Notifikasi>(15));
-      setPersetujuan(getResult<Persetujuan>(16));
-      setHarga(getResult<Harga>(17));
-      setStokPengguna(getResult<StokPengguna>(18));
-      setPromo(getResult<Promo>(19));
-      setMutasiBarang(getResult<MutasiBarang>(20));
-      setSaldoPengguna(getResult<SaldoPengguna>(21));
+      if (profile) setProfilPerusahaan(profile);
+      setCabang(branches);
+      setUsers(allUsers);
 
-      setReimburse(getResult<Reimburse>(22));
-      const loadedPettyCash = getResult<PettyCash>(23);
-      setPettyCash(loadedPettyCash);
-      if (loadedPettyCash && loadedPettyCash.length > 0) {
-        setPettyCashBalance(loadedPettyCash[0].saldoAkhir);
+      // Determine effective mode for this fetch session
+      const isGlobalDemo = profile?.config?.isDemo || false;
+      const meInAllUsers = allUsers.find(u => u.id === currentUser.id) || currentUser;
+      const userBranch = branches.find(c => c.id === meInAllUsers.cabangId);
+      const isBranchDemo = userBranch?.isDemo || false;
+      const isUserDemo = meInAllUsers.isDemo || false;
+
+      const effectiveMode = (isGlobalDemo || isBranchDemo || isUserDemo) ? 'demo' : 'public';
+      const daysLimit = profile?.config?.daysToFetch || 30;
+
+      console.log(`Loading data in mode: ${effectiveMode}`);
+
+      // 2. Fetch Master Data and Transactions using the effectiveMode
+      const [
+        kategoriRes,
+        satuanRes,
+        kategoriPelangganRes,
+        rekeningBankRes,
+        areaRes,
+        barangRes,
+        pelangganRes,
+        penjualanRes,
+        setoranRes,
+        absensiRes,
+        kunjunganRes,
+        riwayatPelangganRes,
+        notifikasiRes,
+        persetujuanRes,
+        hargaRes,
+        stokRes,
+        promoRes,
+        mutasiRes,
+        saldoRes,
+        reimburseRes,
+        pettyCashRes,
+        restockRes,
+        penyesuaianRes,
+        permintaanRes,
+        targetsRes
+      ] = await Promise.all([
+        fetchData<Kategori>('kategori', 30, effectiveMode),
+        fetchData<Satuan>('satuan', 30, effectiveMode),
+        fetchData<KategoriPelanggan>('kategori_pelanggan', 30, effectiveMode),
+        fetchData<RekeningBank>('rekening_bank', 30, effectiveMode),
+        fetchData<Area>('area', 30, effectiveMode),
+        fetchData<Barang>('barang', 30, effectiveMode),
+        fetchData<Pelanggan>('pelanggan', 30, effectiveMode),
+        fetchData<Penjualan>('penjualan', daysLimit, effectiveMode),
+        fetchData<Setoran>('setoran', daysLimit, effectiveMode),
+        fetchData<Absensi>('absensi', daysLimit, effectiveMode),
+        fetchData<Kunjungan>('kunjungan', daysLimit, effectiveMode),
+        fetchData<RiwayatPelanggan>('riwayat_pelanggan', daysLimit, effectiveMode),
+        fetchData<Notifikasi>('notifikasi', daysLimit, effectiveMode),
+        fetchData<Persetujuan>('persetujuan', daysLimit, effectiveMode),
+        fetchData<Harga>('harga', 30, effectiveMode),
+        fetchData<StokPengguna>('stok_pengguna', 30, effectiveMode),
+        fetchData<Promo>('promo', 30, effectiveMode),
+        fetchData<MutasiBarang>('mutasi_barang', daysLimit, effectiveMode),
+        fetchData<SaldoPengguna>('saldo_pengguna', 30, effectiveMode),
+        fetchData<Reimburse>('reimburse', daysLimit, effectiveMode),
+        fetchData<PettyCash>('petty_cash', daysLimit, effectiveMode),
+        fetchData<Restock>('restock', daysLimit, effectiveMode),
+        fetchData<any>('penyesuaian_stok', daysLimit, effectiveMode),
+        fetchData<any>('permintaan_barang', daysLimit, effectiveMode),
+        fetchData<SalesTarget>('sales_targets', 30, effectiveMode)
+      ]);
+
+      setKategori(kategoriRes);
+      setSatuan(satuanRes);
+      setKategoriPelanggan(kategoriPelangganRes);
+      setRekeningBank(rekeningBankRes);
+      setArea(areaRes);
+      setBarang(barangRes);
+      setPelanggan(pelangganRes);
+      setPenjualan(penjualanRes);
+      setSetoran(setoranRes);
+      setAbsensi(absensiRes);
+      setKunjungan(kunjunganRes);
+      setRiwayatPelanggan(riwayatPelangganRes);
+      setNotifikasi(notifikasiRes);
+      setPersetujuan(persetujuanRes);
+      setHarga(hargaRes);
+      setStokPengguna(stokRes);
+      setPromo(promoRes);
+      setMutasiBarang(mutasiRes);
+      setSaldoPengguna(saldoRes);
+      setReimburse(reimburseRes);
+      setPettyCash(pettyCashRes);
+      setRestock(restockRes);
+      setPenyesuaianStok(penyesuaianRes);
+      setPermintaanBarang(permintaanRes);
+      setTargets(targetsRes);
+
+      if (pettyCashRes && pettyCashRes.length > 0) {
+        setPettyCashBalance(pettyCashRes[0].saldoAkhir);
       } else {
         setPettyCashBalance(0);
       }
-      setRestock(getResult<Restock>(24));
-
     } catch (error) {
       console.error('Error loading data:', error);
     } finally {
@@ -500,7 +419,7 @@ export function DatabaseProvider({ children }: { children: ReactNode }) {
         setTimeout(() => setIsRefreshing(false), 1000);
       }
     }
-  }, [currentUser?.id, dbMode, fetchData, shouldFallbackToPublic]);
+  }, [currentUser, isInitialized, fetchData, isAuthLoading]);
 
   // Handle app visibility/focus to refresh data
   const lastRefreshRef = useRef<number>(Date.now());
@@ -541,7 +460,7 @@ export function DatabaseProvider({ children }: { children: ReactNode }) {
     try {
       const dbItem = toSnakeCase(item) as Record<string, unknown>;
 
-      const excludeAuditColumns = ['karyawan', 'area', 'cabang', 'kategori', 'satuan', 'rekening_bank', 'kategori_pelanggan', 'peran', 'persetujuan', 'users', 'harga', 'notifikasi', 'stok_pengguna', 'absensi', 'saldo_pengguna', 'reimburse', 'petty_cash', 'permintaan_barang', 'penyesuaian_stok', 'kunjungan', 'riwayat_pelanggan', 'pembayaran_penjualan'];
+      const excludeAuditColumns = ['area', 'cabang', 'kategori', 'satuan', 'rekening_bank', 'kategori_pelanggan', 'peran', 'persetujuan', 'users', 'harga', 'notifikasi', 'stok_pengguna', 'absensi', 'saldo_pengguna', 'reimburse', 'petty_cash', 'permintaan_barang', 'penyesuaian_stok', 'kunjungan', 'riwayat_pelanggan', 'pembayaran_penjualan'];
 
       if (currentUser && !excludeAuditColumns.includes(tableName)) {
         dbItem.created_by = currentUser.id;
@@ -562,7 +481,7 @@ export function DatabaseProvider({ children }: { children: ReactNode }) {
       const uuidColumns = [
         'referensi_id', 'diajukan_oleh', 'disetujui_oleh', 'target_cabang_id', 'target_user_id',
         'cabang_id', 'user_id', 'sales_id', 'pelanggan_id', 'barang_id', 'satuan_id', 'kategori_id',
-        'rekening_bank_id', 'karyawan_id', 'area_id', 'dari_cabang_id', 'ke_cabang_id',
+        'rekening_bank_id', 'area_id', 'dari_cabang_id', 'ke_cabang_id',
         'user_account_id', 'penjualan_id', 'syarat_barang_id', 'bonus_produk_id', 'bonus_barang_id',
         'penerima_id', 'dibuat_oleh', 'updated_by', 'created_by', 'persetujuan_id', 'reimburse_id',
         'parent_id', 'kategori_pelanggan_id', 'rekening_id'
@@ -587,21 +506,12 @@ export function DatabaseProvider({ children }: { children: ReactNode }) {
       });
 
       let { data, error } = await supabase
-        .schema(dbMode)
+        .schema(getTableSchema(tableName))
         .from(tableName)
         .insert(dbItem)
         .select()
         .maybeSingle();
 
-      if (error && shouldFallbackToPublic(error)) {
-        const fallback = await supabase
-          .from(tableName)
-          .insert(dbItem)
-          .select()
-          .maybeSingle();
-        data = fallback.data;
-        error = fallback.error;
-      }
 
       if (error) throw error;
 
@@ -616,13 +526,13 @@ export function DatabaseProvider({ children }: { children: ReactNode }) {
       if (error.hint) console.error('Error hint:', error.hint);
       throw error;
     }
-  }, [currentUser, dbMode, isOnline, shouldFallbackToPublic]);
+  }, [currentUser, isOnline]);
 
   const updateItem = useCallback(async <T,>(tableName: string, id: string, item: Record<string, unknown>, setter: Dispatch<SetStateAction<T[]>>) => {
     try {
       const dbItem = toSnakeCase(item) as Record<string, unknown>;
 
-      const excludeAuditColumns = ['karyawan', 'area', 'cabang', 'kategori', 'satuan', 'rekening_bank', 'kategori_pelanggan', 'peran', 'persetujuan', 'users', 'harga', 'notifikasi', 'stok_pengguna', 'absensi', 'saldo_pengguna', 'permintaan_barang', 'penyesuaian_stok', 'kunjungan', 'riwayat_pelanggan', 'pembayaran_penjualan'];
+      const excludeAuditColumns = ['area', 'cabang', 'kategori', 'satuan', 'rekening_bank', 'kategori_pelanggan', 'peran', 'persetujuan', 'users', 'harga', 'notifikasi', 'stok_pengguna', 'absensi', 'saldo_pengguna', 'permintaan_barang', 'penyesuaian_stok', 'kunjungan', 'riwayat_pelanggan', 'pembayaran_penjualan'];
 
       if (currentUser && !excludeAuditColumns.includes(tableName)) {
         dbItem.updated_by = currentUser.id;
@@ -638,7 +548,7 @@ export function DatabaseProvider({ children }: { children: ReactNode }) {
       const uuidColumns = [
         'referensi_id', 'diajukan_oleh', 'disetujui_oleh', 'target_cabang_id', 'target_user_id',
         'cabang_id', 'user_id', 'sales_id', 'pelanggan_id', 'barang_id', 'satuan_id', 'kategori_id',
-        'rekening_bank_id', 'karyawan_id', 'area_id', 'dari_cabang_id', 'ke_cabang_id',
+        'rekening_bank_id', 'area_id', 'dari_cabang_id', 'ke_cabang_id',
         'user_account_id', 'penjualan_id', 'syarat_barang_id', 'bonus_produk_id', 'bonus_barang_id',
         'penerima_id', 'dibuat_oleh', 'updated_by', 'created_by', 'persetujuan_id', 'reimburse_id',
         'parent_id', 'kategori_pelanggan_id', 'rekening_id'
@@ -663,23 +573,13 @@ export function DatabaseProvider({ children }: { children: ReactNode }) {
       });
 
       let { data, error } = await supabase
-        .schema(dbMode)
+        .schema(getTableSchema(tableName))
         .from(tableName)
         .update(dbItem)
         .eq('id', id)
         .select()
         .maybeSingle();
 
-      if (error && shouldFallbackToPublic(error)) {
-        const fallback = await supabase
-          .from(tableName)
-          .update(dbItem)
-          .eq('id', id)
-          .select()
-          .maybeSingle();
-        data = fallback.data;
-        error = fallback.error;
-      }
 
       if (error) throw error;
 
@@ -691,7 +591,7 @@ export function DatabaseProvider({ children }: { children: ReactNode }) {
       if (error.hint) console.error('Error hint:', error.hint);
       throw error;
     }
-  }, [currentUser, dbMode, isOnline, shouldFallbackToPublic]);
+  }, [currentUser, isOnline]);
 
   const deleteItem = useCallback(async <T,>(tableName: string, id: string, setter: Dispatch<SetStateAction<T[]>>) => {
     try {
@@ -702,18 +602,10 @@ export function DatabaseProvider({ children }: { children: ReactNode }) {
       }
 
       let { error } = await supabase
-        .schema(dbMode)
+        .schema(getTableSchema(tableName))
         .from(tableName)
         .delete()
         .eq('id', id);
-
-      if (error && shouldFallbackToPublic(error)) {
-        const fallback = await supabase
-          .from(tableName)
-          .delete()
-          .eq('id', id);
-        error = fallback.error;
-      }
 
       if (error) throw error;
 
@@ -722,7 +614,7 @@ export function DatabaseProvider({ children }: { children: ReactNode }) {
       console.error(`Error deleting ${tableName}:`, error);
       throw error;
     }
-  }, [dbMode, isOnline, shouldFallbackToPublic]);
+  }, [isOnline]);
 
   // Implement CRUD for all entities
 
@@ -774,8 +666,8 @@ export function DatabaseProvider({ children }: { children: ReactNode }) {
     saldoPengguna,
     pelanggan,
     users,
-    karyawan,
     penjualan,
+
     setoran,
     absensi,
     kunjungan,
@@ -799,6 +691,7 @@ export function DatabaseProvider({ children }: { children: ReactNode }) {
     setViewMode,
     pendingSyncCount: 0,
     isAdminOrOwner,
+    dbMode,
     refresh: () => loadAllData(true),
     repairUser: async () => {
       // No-op or refresh implementation
@@ -913,21 +806,11 @@ export function DatabaseProvider({ children }: { children: ReactNode }) {
         delete dbItem.id;
 
         let { data, error } = await supabase
-          .schema(dbMode)
           .from('absensi')
           .insert(dbItem)
           .select()
           .single();
 
-        if (error && shouldFallbackToPublic(error)) {
-          const fallback = await supabase
-            .from('absensi')
-            .insert(dbItem)
-            .select()
-            .single();
-          data = fallback.data;
-          error = fallback.error;
-        }
 
         if (error) throw error;
 
@@ -947,10 +830,7 @@ export function DatabaseProvider({ children }: { children: ReactNode }) {
     updateAbsensi: (id, item) => updateItem('absensi', id, item, setAbsensi),
     deleteAbsensi: (id) => deleteItem('absensi', id, setAbsensi),
 
-    // Karyawan
-    addKaryawan: (item) => createItem('karyawan', item, setKaryawan),
-    updateKaryawan: (id, item) => updateItem('karyawan', id, item, setKaryawan),
-    deleteKaryawan: (id) => deleteItem('karyawan', id, setKaryawan),
+
 
     // Users
     addUser: (item) => {
@@ -983,18 +863,10 @@ export function DatabaseProvider({ children }: { children: ReactNode }) {
       setNotifikasi(prev => prev.map(n => n.id === id ? { ...n, dibaca: true } : n));
       try {
         let { error } = await supabase
-          .schema(dbMode)
           .from('notifikasi')
           .update({ dibaca: true })
           .eq('id', id);
 
-        if (error && shouldFallbackToPublic(error)) {
-          const fallback = await supabase
-            .from('notifikasi')
-            .update({ dibaca: true })
-            .eq('id', id);
-          error = fallback.error;
-        }
         if (error) throw error;
       } catch (error) {
         console.warn('Failed to sync markNotifikasiRead:', error);
@@ -1010,20 +882,11 @@ export function DatabaseProvider({ children }: { children: ReactNode }) {
       setNotifikasi(prev => prev.map(n => unreadIds.includes(n.id) ? { ...n, dibaca: true } : n));
       try {
         let { error } = await supabase
-          .schema(dbMode)
           .from('notifikasi')
           .update({ dibaca: true })
           .eq('user_id', currentUser.id)
           .eq('dibaca', false);
 
-        if (error && shouldFallbackToPublic(error)) {
-          const fallback = await supabase
-            .from('notifikasi')
-            .update({ dibaca: true })
-            .eq('user_id', currentUser.id)
-            .eq('dibaca', false);
-          error = fallback.error;
-        }
         if (error) throw error;
       } catch (error) {
         console.warn('Failed to sync markAllNotifikasiRead:', error);
@@ -1049,20 +912,15 @@ export function DatabaseProvider({ children }: { children: ReactNode }) {
         }
 
         const { data: existing } = await supabase
-          .schema(dbMode)
           .from('profil_perusahaan')
           .select('id')
           .limit(1)
           .single();
 
-        // This is where setProfil errors might occur if types aren't matched
-        // Assuming setProfilPerusahaan is strictly typed as React.Dispatch<React.SetStateAction<ProfilPerusahaan>>
-
         let result: ProfilPerusahaan;
 
         if (existing) {
           const { data, error } = await supabase
-            .schema(dbMode)
             .from('profil_perusahaan')
             .update(dbItem)
             .eq('id', existing.id)
@@ -1073,7 +931,6 @@ export function DatabaseProvider({ children }: { children: ReactNode }) {
           result = toCamelCase(data) as ProfilPerusahaan;
         } else {
           const { data, error } = await supabase
-            .schema(dbMode)
             .from('profil_perusahaan')
             .insert(dbItem)
             .select()
@@ -1082,6 +939,7 @@ export function DatabaseProvider({ children }: { children: ReactNode }) {
           if (error) throw error;
           result = toCamelCase(data) as ProfilPerusahaan;
         }
+
 
         setProfilPerusahaan(result);
         return result;
@@ -1129,11 +987,11 @@ export function DatabaseProvider({ children }: { children: ReactNode }) {
         // or overwrite it. In our case, useApprovalAction calculates the full new sum
         // so overwriting with the calculated sum is correct.
         const { data, error } = await supabase
-          .schema(dbMode)
           .from('stok_pengguna')
           .upsert(dbItem, { onConflict: 'user_id,barang_id' })
           .select()
           .single();
+
         if (error) throw error;
         const inserted = toCamelCase(data) as StokPengguna;
         setStokPengguna(prev => {
@@ -1199,6 +1057,12 @@ export function DatabaseProvider({ children }: { children: ReactNode }) {
     updateRestock: (id, item) => updateItem('restock', id, item, setRestock),
     deleteRestock: (id) => deleteItem('restock', id, setRestock),
 
+    // Sales Target
+    targets,
+    addTarget: (item) => createItem('sales_targets', item, setTargets),
+    updateTarget: (id, item) => updateItem('sales_targets', id, item, setTargets),
+    deleteTarget: (id) => deleteItem('sales_targets', id, setTargets),
+
     // Merge Pelanggan
     mergePelanggan: async (targetId: string, sourceId: string) => {
       try {
@@ -1206,7 +1070,6 @@ export function DatabaseProvider({ children }: { children: ReactNode }) {
 
         // 1. Update Penjualan
         const { error: err1 } = await supabase
-          .schema(dbMode)
           .from('penjualan')
           .update({ pelanggan_id: targetId })
           .eq('pelanggan_id', sourceId);
@@ -1214,7 +1077,6 @@ export function DatabaseProvider({ children }: { children: ReactNode }) {
 
         // 2. Update Kunjungan
         const { error: err2 } = await supabase
-          .schema(dbMode)
           .from('kunjungan')
           .update({ pelanggan_id: targetId })
           .eq('pelanggan_id', sourceId);
@@ -1222,7 +1084,6 @@ export function DatabaseProvider({ children }: { children: ReactNode }) {
 
         // 3. Update Riwayat Pelanggan
         const { error: err3 } = await supabase
-          .schema(dbMode)
           .from('riwayat_pelanggan')
           .update({ pelanggan_id: targetId })
           .eq('pelanggan_id', sourceId);
@@ -1235,7 +1096,6 @@ export function DatabaseProvider({ children }: { children: ReactNode }) {
         if (target && source) {
           const newSisaKredit = (target.sisaKredit || 0) + (source.sisaKredit || 0);
           const { error: err4 } = await supabase
-            .schema(dbMode)
             .from('pelanggan')
             .update({ sisa_kredit: newSisaKredit })
             .eq('id', targetId);
@@ -1244,11 +1104,11 @@ export function DatabaseProvider({ children }: { children: ReactNode }) {
 
         // 5. Delete Source Pelanggan
         const { error: err5 } = await supabase
-          .schema(dbMode)
           .from('pelanggan')
           .delete()
           .eq('id', sourceId);
         if (err5) throw err5;
+
 
         toast.success('Pelanggan berhasil disatukan');
         await loadAllData(true);
@@ -1261,9 +1121,7 @@ export function DatabaseProvider({ children }: { children: ReactNode }) {
       }
     },
 
-    // Database Mode
-    dbMode,
-    setDbMode,
+
   };
 
   return (

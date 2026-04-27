@@ -2,7 +2,7 @@ import { supabase } from '@/lib/supabase';
 import { useDatabase } from '@/contexts/DatabaseContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
-import { PersetujuanPayload, Karyawan } from '@/types';
+import { PersetujuanPayload } from '@/types';
 import { formatRupiah } from '@/lib/utils';
 import { Persetujuan as PersetujuanType, Setoran, Reimburse, MutasiBarang, Barang, StokPengguna } from '@/types';
 
@@ -13,7 +13,6 @@ export const useApprovalAction = () => {
         setoran, updateSetoran,
         mutasiBarang, updateMutasiBarang,
         barang, updateBarang,
-        updateKaryawan, karyawan,
         addHarga, updateHarga,
         stokPengguna, addStokPengguna, updateStokPengguna,
         satuan: satuanList, users, addNotifikasi,
@@ -399,22 +398,17 @@ export const useApprovalAction = () => {
                     }
                 }
                     break;
-                case 'mutasi_karyawan':
-                    // Logic for Employee Update
+                case 'mutasi_user':
+                    // Logic for User/Employee Update
                     if (data) {
                         const d = data as PersetujuanPayload;
-                        const { isCabangChanged, isStatusChanged, oldCabangId, oldStatus, ...employeeData } = d as Record<string, unknown>;
-                        await updateKaryawan(refId, employeeData as Partial<Karyawan>);
-
-                        // If Cabang changed, update linked User too
-                        if (isCabangChanged) {
-                            const linkedUser = users.find(u => u.karyawanId === refId);
-                            if (linkedUser) {
-                                await updateUser(linkedUser.id, { cabangId: String(employeeData.cabangId) });
-                                toast.success(`User linked to employee updated to new branch.`);
-                            }
-                        }
-                        toast.success('Mutasi karyawan disetujui');
+                        // Since Karyawan is merged into User, we just update the User record directly
+                        // refId should be the userId
+                        const { isCabangChanged, isStatusChanged, oldCabangId, oldStatus, ...userData } = d as Record<string, any>;
+                        
+                        await updateUser(refId, userData);
+                        
+                        toast.success('Mutasi pengguna disetujui');
                     }
                     break;
                 case 'pembatalan_penjualan': {

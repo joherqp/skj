@@ -28,7 +28,7 @@ interface AuthContextType {
   user: User | null;
   isAuthenticated: boolean;
   isLoading: boolean;
-  login: (username: string, password: string) => Promise<boolean>;
+  login: (usernameOrEmail: string, password: string) => Promise<boolean>;
   logout: () => Promise<void>;
   supabaseUser: SupabaseUser | null;
   updatePassword: (password: string) => Promise<void>;
@@ -55,11 +55,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     telepon: string;
     roles: string[];
     cabang_id: string | null;
-    karyawan_id?: string | null;
-    avatar_url?: string | null;
     kode_unik?: string | null;
     is_active: boolean;
     created_at: string;
+    posisi?: string | null;
+    alamat?: string | null;
+    provinsi?: string | null;
+    kota?: string | null;
+    kecamatan?: string | null;
+    kelurahan?: string | null;
+    kode_pos?: string | null;
+    koordinat?: any | null;
+    is_demo?: boolean | null;
+    start_date?: string | null;
+    end_date?: string | null;
+    avatar_url?: string | null;
   }): User => ({
     id: data.id,
     username: data.username,
@@ -68,11 +78,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     telepon: data.telepon,
     roles: data.roles as UserRole[],
     cabangId: data.cabang_id,
-    karyawanId: data.karyawan_id,
-    avatarUrl: data.avatar_url,
+    avatarUrl: data.avatar_url || undefined,
     kodeUnik: data.kode_unik || undefined,
     isActive: data.is_active,
     createdAt: new Date(data.created_at),
+    posisi: data.posisi || undefined,
+    alamat: data.alamat || undefined,
+    provinsi: data.provinsi || undefined,
+    kota: data.kota || undefined,
+    kecamatan: data.kecamatan || undefined,
+    kelurahan: data.kelurahan || undefined,
+    kodePos: data.kode_pos || undefined,
+    koordinat: data.koordinat || undefined,
+    isDemo: data.is_demo || false,
+    startDate: data.start_date ? new Date(data.start_date) : undefined,
+    endDate: data.end_date ? new Date(data.end_date) : undefined,
   });
 
   // Load user profile from database with retry logic
@@ -292,17 +312,30 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  const login = async (username: string, password: string): Promise<boolean> => {
+  const login = async (usernameOrEmail: string, password: string): Promise<boolean> => {
     try {
       console.warn('Email/password login is deprecated. Use Google Auth.');
-      const email = username.includes('@') ? username : `${username}@cvskj.local`;
+      
+      let email = usernameOrEmail;
+
+      // Lookup email by username using RPC (bypasses RLS for unauthenticated users)
+      const { data: foundEmail, error: rpcError } = await supabase.rpc('get_user_email_by_username', { 
+        p_username: usernameOrEmail 
+      });
+
+      if (!rpcError && foundEmail) {
+        email = foundEmail;
+      }
 
       const { data, error } = await supabase.auth.signInWithPassword({
         email,
         password,
       });
 
-      if (error) return false;
+      if (error) {
+        console.error('Login error:', error.message);
+        return false;
+      }
 
       if (data.user) {
         const profile = await loadUserProfile(data.user);

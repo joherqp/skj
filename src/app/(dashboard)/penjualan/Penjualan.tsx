@@ -47,7 +47,7 @@ import { Barang, Pelanggan, Penjualan as PenjualanType, Satuan } from '@/types';
 export default function Penjualan() {
   const { user } = useAuth();
   const {
-    penjualan, pelanggan, barang, satuan, users, karyawan,
+    penjualan, pelanggan, barang, satuan, users,
     viewMode, setViewMode, cabang: listCabang, profilPerusahaan
   } = useDatabase();
   const [search, setSearch] = useState('');
@@ -592,7 +592,7 @@ ${user?.nama || 'Sales'}`;
 
                 // Resolve Sales Name
                 const salesId = item.salesId || item.createdBy;
-                const linkedEmployee = karyawan.find(k => k.userAccountId === salesId);
+                const linkedEmployee = users.find(u => u.id === salesId);
                 const salesPerson = users.find(u => u.id === salesId);
                 const salesName = linkedEmployee?.nama || salesPerson?.nama || 'Sales';
 

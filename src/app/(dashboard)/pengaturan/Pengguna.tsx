@@ -9,9 +9,11 @@ import { User as UserType, UserRole } from '@/types'; // Updated import
 import { Switch } from '@/components/ui/switch';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Search } from "lucide-react";
 import { useState } from 'react';
 import { toast } from 'sonner';
+import { Button } from '@/components/ui/button';
+import { LocationPicker, extractAddressFromCoordinates } from '@/components/map/components/LocationPicker';
+import { MapPin, Locate, Search } from "lucide-react";
 
 // Local UserRole removed, using imported one
 
@@ -20,7 +22,7 @@ import { toast } from 'sonner';
 
 
 export default function Pengguna() {
-  const { users, addUser, updateUser, deleteUser, addKaryawan, karyawan, isAdminOrOwner, cabang } = useDatabase();
+  const { users, addUser, updateUser, deleteUser, isAdminOrOwner, cabang } = useDatabase();
 
   const roleLabels: Record<UserRole, string> = {
     admin: 'Administrator',
@@ -42,15 +44,16 @@ export default function Pengguna() {
                      activeTab === 'aktif' ? user.isActive : !user.isActive;
     
     const matchSearch = searchQuery === '' || 
+                        user.nama.toLowerCase().includes(searchQuery.toLowerCase()) || 
                         user.username.toLowerCase().includes(searchQuery.toLowerCase()) || 
                         user.email.toLowerCase().includes(searchQuery.toLowerCase());
                         
     return matchTab && matchSearch;
-  }).sort((a, b) => a.username.localeCompare(b.username));
+  }).sort((a, b) => a.nama.localeCompare(b.nama));
 
   return (
     <SettingsCrud<UserType>
-      title="Pengelolaan Pengguna Login"
+      title="Pengelolaan Pengguna"
       icon={User}
       items={filteredUsers}
       extraContent={
@@ -65,7 +68,7 @@ export default function Pengguna() {
             <div className="relative w-full sm:w-72">
                 <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
                 <Input
-                    placeholder="Cari Username / Email..."
+                    placeholder="Cari Nama / Username / Email..."
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
                     className="pl-8"
@@ -74,21 +77,14 @@ export default function Pengguna() {
         </div>
       }
       columns={[
+        { key: 'nama', label: 'Nama Lengkap' },
         { key: 'username', label: 'Username' },
-        { key: 'email', label: 'Email' },
         { 
-          key: 'karyawanId', 
-          label: 'Terhubung ke Karyawan',
+          key: 'cabangId', 
+          label: 'Cabang',
           render: (item) => {
-             const linked = karyawan.find(k => k.id === item.karyawanId);
-             return linked ? (
-               <div className="flex items-center gap-1 text-xs">
-                 <UserCheck className="w-3 h-3 text-green-600" />
-                 <span className="font-medium text-green-700">{linked.nama}</span>
-               </div>
-             ) : (
-               <span className="text-muted-foreground text-xs italic">Tidak terhubung</span>
-             );
+             const c = cabang.find(c => c.id === item.cabangId);
+             return c ? c.nama : '-';
           }
         },
         {
@@ -106,13 +102,28 @@ export default function Pengguna() {
         },
         {
           key: 'kodeUnik',
-          label: 'Kode Unik',
+          label: 'ID Sales',
           render: (item) => (
             <span className="font-mono font-bold text-primary">{item.kodeUnik || '-'}</span>
           )
         }
       ]}
-      initialFormState={{ username: '', email: '', roles: ['staff'], cabangId: '', isActive: true, kodeUnik: '', startDate: undefined, endDate: undefined } as unknown as UserType}
+      initialFormState={{ 
+        nama: '', 
+        namaPanggilan: '',
+        username: '', 
+        email: '', 
+        telepon: '',
+        roles: ['staff'], 
+        cabangId: '', 
+        isActive: true, 
+        kodeUnik: '', 
+        posisi: '',
+        alamat: '',
+        koordinat: { lat: 0, lng: 0 },
+        startDate: undefined, 
+        endDate: undefined 
+      } as unknown as UserType}
       onSave={(item) => {
         // Validation: Kode Unik must be unique
         if (item.kodeUnik) {
@@ -123,55 +134,30 @@ export default function Pengguna() {
           );
           
           if (duplicate) {
-            toast.error(`Kode Unik "${kodeToCheck}" sudah digunakan oleh ${duplicate.username}!`);
+            toast.error(`Kode Unik "${kodeToCheck}" sudah digunakan oleh ${duplicate.nama}!`);
             return false;
           }
         }
 
         const exists = users.find(u => u.id === item.id);
         const isUserAdminOrOwner = item.roles?.some((r: UserRole) => ['admin', 'owner'].includes(r));
-        const finalCabangId = isUserAdminOrOwner ? null : (item.cabangId || '550e8400-e29b-41d4-a716-446655440002');
+        const finalCabangId = isUserAdminOrOwner ? null : (item.cabangId || null);
 
         if (exists) {
-          // Convert to snake_case for DB
-          const updateData = {
+          updateUser(item.id, {
             ...item,
             cabangId: finalCabangId,
-            kode_unik: item.kodeUnik?.toUpperCase().trim()
-          };
-          updateUser(item.id, updateData);
+            kodeUnik: item.kodeUnik?.toUpperCase().trim()
+          });
         } else {
-          // Auto-create Karyawan logic
-          const newUserId = self.crypto.randomUUID();
-          const newKaryawanId = self.crypto.randomUUID();
-          
-          // Create User linked to Karyawan
-          const { id: _ignored, ...userData } = item;
           addUser({
-            ...userData,
-            id: newUserId,
-            kode_unik: item.kodeUnik?.toUpperCase().trim(),
-            // Ensure mandatory fields for users table
-            nama: item.username, // Default name to username if not provided
-            telepon: '-',
+            ...item,
+            id: self.crypto.randomUUID(),
             cabangId: finalCabangId,
-            isActive: true,
-            karyawanId: newKaryawanId
-          } as any); // eslint-disable-line @typescript-eslint/no-explicit-any
-
-          // Create Karyawan linked to User
-          addKaryawan({
-            id: newKaryawanId,
-            nama: item.username, 
-            posisi: 'Staff', 
-            telepon: '-', 
-            status: 'aktif',
-            cabangId: finalCabangId, 
-            userAccountId: newUserId // Linking to users.id
-          } as any); // eslint-disable-line @typescript-eslint/no-explicit-any
+            kodeUnik: item.kodeUnik?.toUpperCase().trim()
+          });
         }
         
-        // Auto switch tab to match status
         setActiveTab(item.isActive ? 'aktif' : 'nonaktif');
       }}
       onDelete={(id) => deleteUser(id)}
@@ -191,135 +177,248 @@ export default function Pengguna() {
         };
 
         return (
-          <>
-            <div className="bg-yellow-50 p-3 rounded-md mb-4 border border-yellow-200">
-              <p className="text-sm text-yellow-800">
-                <strong>Penting:</strong> Setelah menambah pengguna di sini, Anda 
-                <strong> WAJIB</strong> membuat akun login dengan email yang sama di 
-                <strong> Supabase Dashboard {'>'} Authentication</strong>.
-              </p>
-            </div>
-
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="username">Username</Label>
-                <Input
-                  id="username"
-                  name="username"
-                  value={formData.username}
-                  onChange={handleChange}
-                  placeholder="Username (contoh: sales1)"
-                  required
-                />
+          <div className="space-y-6 max-h-[70vh] overflow-y-auto px-1">
+            {/* Login Info */}
+            <section className="space-y-4">
+              <h3 className="text-sm font-semibold flex items-center gap-2 border-b pb-2">
+                <Lock className="w-4 h-4" /> Informasi Akun & Login
+              </h3>
+              <div className="bg-yellow-50 p-3 rounded-md border border-yellow-200">
+                <p className="text-[11px] text-yellow-800">
+                  <strong>Penting:</strong> Email harus sama persis dengan yang didaftarkan di Supabase Auth.
+                </p>
               </div>
-              <div className="space-y-2">
-                <Label htmlFor="kodeUnik">
-                  Kode Unik Sales (3 Huruf) {!isAdminOrOwner && <span className="text-[10px] text-muted-foreground">(Hanya Admin)</span>}
-                </Label>
-                <Input
-                  id="kodeUnik"
-                  name="kodeUnik"
-                  value={formData.kodeUnik || ''}
-                  onChange={(e) => {
-                    const value = e.target.value.replace(/[^A-Za-z]/g, '').toUpperCase().slice(0, 3);
-                    handleChange({
-                      target: { name: 'kodeUnik', value }
-                    } as any);
-                  }}
-                  placeholder="ABC"
-                  maxLength={3}
-                  disabled={!isAdminOrOwner}
-                  className="font-mono font-bold uppercase disabled:opacity-75 disabled:bg-muted"
-                />
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="username">Username</Label>
+                  <Input
+                    id="username"
+                    name="username"
+                    value={formData.username}
+                    onChange={handleChange}
+                    placeholder="sales_jkt_01"
+                    required
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="email">Email Login</Label>
+                  <Input
+                    id="email"
+                    name="email"
+                    type="email"
+                    value={formData.email || ''}
+                    onChange={handleChange}
+                    placeholder="sales1@cvskj.com"
+                    required
+                  />
+                </div>
               </div>
-            </div>
-            
-            <div className="space-y-2">
-              <Label htmlFor="email">Email Login</Label>
-              <Input
-                id="email"
-                name="email"
-                type="email"
-                value={formData.email || ''}
-                onChange={handleChange}
-                placeholder="Email untuk login (contoh: sales1@cvskj.com)"
-                required
-              />
-              <p className="text-xs text-muted-foreground">
-                Email ini harus sama persis dengan yang didaftarkan di Supabase Auth.
-              </p>
-            </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="cabangId">Penempatan Cabang</Label>
-              <select
-                id="cabangId"
-                name="cabangId"
-                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-                value={formData.cabangId || ''}
-                onChange={handleChange}
-                disabled={formData.roles?.some((r: UserRole) => ['admin', 'owner'].includes(r))}
-              >
-                <option value="">Pilih Cabang...</option>
-                {[...cabang].sort((a, b) => a.nama.localeCompare(b.nama)).map(c => (
-                  <option key={c.id} value={c.id}>{c.nama}</option>
-                ))}
-              </select>
-              {formData.roles?.some((r: UserRole) => ['admin', 'owner'].includes(r)) && (
-                <p className="text-[10px] text-blue-600">Admin/Owner otomatis akses semua cabang (Pusat).</p>
-              )}
-            </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="cabangId">Penempatan Cabang</Label>
+                  <select
+                    id="cabangId"
+                    name="cabangId"
+                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    value={formData.cabangId || ''}
+                    onChange={handleChange}
+                    disabled={formData.roles?.some((r: UserRole) => ['admin', 'owner'].includes(r))}
+                  >
+                    <option value="">Pilih Cabang...</option>
+                    {[...cabang].sort((a, b) => a.nama.localeCompare(b.nama)).map(c => (
+                      <option key={c.id} value={c.id}>{c.nama}</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="kodeUnik">Kode Unik Sales (3 Huruf)</Label>
+                  <Input
+                    id="kodeUnik"
+                    name="kodeUnik"
+                    value={formData.kodeUnik || ''}
+                    onChange={(e) => {
+                      const value = e.target.value.replace(/[^A-Za-z]/g, '').toUpperCase().slice(0, 3);
+                      handleChange({ target: { name: 'kodeUnik', value } } as any);
+                    }}
+                    placeholder="ABC"
+                    maxLength={3}
+                    className="font-mono font-bold uppercase"
+                  />
+                </div>
+              </div>
 
-            <div className="space-y-2">
-              <Label>Peran (Bisa lebih dari satu)</Label>
-              <div className="grid grid-cols-2 gap-2 mt-2 border rounded-md p-3">
-                {(Object.keys(roleLabels) as UserRole[]).map((roleKey) => (
-                  <div key={roleKey} className="flex items-center space-x-2">
-                    <Checkbox
-                      id={`role-${roleKey}`}
-                      checked={formData.roles?.includes(roleKey)}
-                      onCheckedChange={(checked) => handleRoleChange(roleKey, checked as boolean)}
+              <div className="space-y-2">
+                <Label>Peran (Bisa lebih dari satu)</Label>
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 mt-2 border rounded-md p-3 bg-muted/10">
+                  {(Object.keys(roleLabels) as UserRole[]).map((roleKey) => (
+                    <div key={roleKey} className="flex items-center space-x-2">
+                      <Checkbox
+                        id={`role-${roleKey}`}
+                        checked={formData.roles?.includes(roleKey)}
+                        onCheckedChange={(checked) => handleRoleChange(roleKey, checked as boolean)}
+                      />
+                      <Label htmlFor={`role-${roleKey}`} className="text-xs">
+                        {roleLabels[roleKey]}
+                      </Label>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </section>
+
+            {/* Employee Info */}
+            <section className="space-y-4">
+              <h3 className="text-sm font-semibold flex items-center gap-2 border-b pb-2">
+                <UserCheck className="w-4 h-4" /> Data Diri Pengguna
+              </h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="nama">Nama Lengkap</Label>
+                  <Input
+                    id="nama"
+                    name="nama"
+                    value={formData.nama}
+                    onChange={handleChange}
+                    placeholder="Nama sesuai KTP"
+                    required
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="namaPanggilan">Nama Panggilan</Label>
+                  <Input
+                    id="namaPanggilan"
+                    name="namaPanggilan"
+                    value={formData.namaPanggilan || ''}
+                    onChange={handleChange}
+                    placeholder="Nama panggilan..."
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="posisi">Posisi / Jabatan</Label>
+                  <Input
+                    id="posisi"
+                    name="posisi"
+                    value={formData.posisi || ''}
+                    onChange={handleChange}
+                    placeholder="Contoh: Sales Marketing"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="telepon">Nomor Telepon</Label>
+                  <Input
+                    id="telepon"
+                    name="telepon"
+                    value={formData.telepon || ''}
+                    onChange={handleChange}
+                    placeholder="08..."
+                    type="tel"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Status Akun</Label>
+                  <div className="flex items-center space-x-2 border h-10 px-3 rounded-md bg-muted/20">
+                    <Switch
+                      id="isActive"
+                      checked={formData.isActive}
+                      onCheckedChange={(checked) => handleChange({
+                        target: { name: 'isActive', value: checked, type: 'checkbox', checked: checked }
+                      } as any)}
                     />
-                    <Label htmlFor={`role-${roleKey}`} className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
-                      {roleLabels[roleKey]}
+                    <Label htmlFor="isActive" className="text-xs cursor-pointer">
+                      {formData.isActive ? 'Aktif' : 'Nonaktif'}
                     </Label>
                   </div>
-                ))}
+                </div>
               </div>
-            </div>
 
-            <div className="flex items-center space-x-2 border p-3 rounded-md bg-muted/20">
-              <Switch
-                id="isActive"
-                checked={formData.isActive}
-                onCheckedChange={(checked) => handleChange({
-                  target: { name: 'isActive', value: checked, type: 'checkbox', checked: checked }
-                } as unknown as React.ChangeEvent<HTMLInputElement>)}
-              />
-              <Label htmlFor="isActive" className="cursor-pointer">
-                Status Akun Aktif {formData.isActive ? '(Bisa Login)' : '(Tidak Bisa Login)'}
-              </Label>
-            </div>
+              <div className="space-y-2">
+                <Label htmlFor="alamat">Alamat Lengkap & Titik GPS</Label>
+                <div className="relative">
+                  <Input
+                    id="alamat"
+                    name="alamat"
+                    value={formData.alamat || ''}
+                    onChange={handleChange}
+                    placeholder="Jl. Contoh No. 123..."
+                    className="pr-10"
+                  />
+                  <Button
+                    type="button"
+                    size="icon"
+                    variant="ghost"
+                    className="absolute right-0 top-0 h-10 w-10 text-primary hover:bg-primary/10"
+                    onClick={async () => {
+                      try {
+                        const { getCurrentLocation } = await import('@/lib/gps');
+                        const loc = await getCurrentLocation();
+                        handleChange({ target: { name: 'koordinat', value: { lat: loc.latitude, lng: loc.longitude } } } as any);
+                        if (loc.alamat) {
+                          handleChange({ target: { name: 'alamat', value: loc.alamat } } as any);
+                        }
+                        toast.success('Lokasi berhasil ditemukan');
+                      } catch (error) {
+                        toast.error('Gagal mendapatkan lokasi');
+                      }
+                    }}
+                  >
+                    <Locate className="h-4 w-4" />
+                  </Button>
+                </div>
+                {formData.koordinat && typeof formData.koordinat !== 'string' && (formData.koordinat.lat !== 0 || formData.koordinat.latitude !== 0) && (
+                  <p className="text-[10px] text-muted-foreground flex items-center gap-1">
+                    <MapPin className="h-3 w-3" />
+                    Koordinat: {formData.koordinat.lat || formData.koordinat.latitude}, {formData.koordinat.lng || formData.koordinat.longitude}
+                  </p>
+                )}
+              </div>
 
-            <div className="grid grid-cols-2 gap-4">
-               <div className="space-y-2">
-                  <Label>Tanggal Masuk / Mulai Aktif</Label>
-                  <Input 
-                    type="date" 
-                    value={formData.startDate ? new Date(formData.startDate).toISOString().split('T')[0] : ''}
-                    onChange={(e) => handleChange({ target: { name: 'startDate', value: e.target.value ? new Date(e.target.value) : null } } as unknown as React.ChangeEvent<HTMLInputElement>)}
-                  />
-               </div>
-               <div className="space-y-2">
-                  <Label>Tanggal Keluar / Nonaktif (Opsional)</Label>
-                  <Input 
-                    type="date"
-                    value={formData.endDate ? new Date(formData.endDate).toISOString().split('T')[0] : ''}
-                    onChange={(e) => handleChange({ target: { name: 'endDate', value: e.target.value ? new Date(e.target.value) : null } } as unknown as React.ChangeEvent<HTMLInputElement>)}
-                  />
-               </div>
-            </div>
-          </>
+              <div className="mt-4">
+                <Label className="mb-2 block text-sm text-muted-foreground italic">Klik Peta untuk pin lokasi pengguna</Label>
+                <LocationPicker
+                  position={typeof formData.koordinat === 'string' ? { lat: 0, lng: 0 } : { lat: formData.koordinat?.lat || formData.koordinat?.latitude || 0, lng: formData.koordinat?.lng || formData.koordinat?.longitude || 0 }}
+                  onLocationSelect={async (lat, lng) => {
+                    handleChange({ target: { name: 'koordinat', value: { lat, lng } } } as any);
+                    try {
+                      const address = await extractAddressFromCoordinates(lat, lng);
+                      if (address) {
+                        handleChange({ target: { name: 'alamat', value: address } } as any);
+                        toast.success('Alamat diperbarui dari peta');
+                      }
+                    } catch (error) {
+                      console.error(error);
+                    }
+                  }}
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                 <div className="space-y-2">
+                    <Label>Tanggal Masuk</Label>
+                    <Input 
+                      type="date" 
+                      value={formData.startDate ? new Date(formData.startDate).toISOString().split('T')[0] : ''}
+                      onChange={(e) => handleChange({ target: { name: 'startDate', value: e.target.value ? new Date(e.target.value) : null } } as any)}
+                    />
+                 </div>
+                 <div className="space-y-2">
+                    <Label>Tanggal Resign</Label>
+                    <Input 
+                      type="date"
+                      value={formData.endDate ? new Date(formData.endDate).toISOString().split('T')[0] : ''}
+                      onChange={(e) => handleChange({ target: { name: 'endDate', value: e.target.value ? new Date(e.target.value) : null } } as any)}
+                    />
+                 </div>
+              </div>
+            </section>
+          </div>
         );
       }}
     />

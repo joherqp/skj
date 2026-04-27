@@ -6,7 +6,8 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { useAuth } from '@/contexts/AuthContext';
 import {
   User, Mail, Phone, MapPin, Shield,
-  LogOut, ChevronRight, Beaker, BellRing, Key, Edit2, Check, X
+  LogOut, ChevronRight, Beaker, BellRing, Key, Edit2, Check, X,
+  Eye, EyeOff
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
@@ -33,11 +34,11 @@ const roleLabels: Record<string, string> = {
 };
 
 export default function Profil() {
-  const { user, logout, refreshUser } = useAuth();
-  const { karyawan, cabang: listCabang, dbMode, setDbMode, updateUser, users } = useDatabase();
+  const { user, logout, refreshUser, updatePassword } = useAuth();
+  const { cabang: listCabang, updateUser, users } = useDatabase();
   const router = useRouter();
 
-  const linkedKaryawan = karyawan.find(k => k.userAccountId === user?.id);
+  const displayUser = users.find(u => u.id === user?.id);
 
   const [mounted, setMounted] = useState(false);
   const [notificationEnabled, setNotificationEnabled] = useState(false);
@@ -45,6 +46,11 @@ export default function Profil() {
   const [isTestingNotification, setIsTestingNotification] = useState(false);
   const [isEditingKode, setIsEditingKode] = useState(false);
   const [newKode, setNewKode] = useState(user?.kodeUnik || '');
+  const [showPasswordForm, setShowPasswordForm] = useState(false);
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [showPasswords, setShowPasswords] = useState(false);
+  const [isUpdatingPassword, setIsUpdatingPassword] = useState(false);
 
   // Helper functions
   const getInitials = (name: string) => {
@@ -107,22 +113,53 @@ export default function Profil() {
     }
   };
 
-  // Get Cabang from Karyawan data (priority) or User data
-  const displayCabangId = linkedKaryawan?.cabangId || user?.cabangId;
+  const handleUpdatePassword = async () => {
+    if (!newPassword || !confirmPassword) {
+      toast.error('Silakan isi kedua kolom password.');
+      return;
+    }
+
+    if (newPassword !== confirmPassword) {
+      toast.error('Konfirmasi password tidak cocok.');
+      return;
+    }
+
+    if (newPassword.length < 6) {
+      toast.error('Password minimal 6 karakter.');
+      return;
+    }
+
+    setIsUpdatingPassword(true);
+    try {
+      await updatePassword(newPassword);
+      toast.success('Password berhasil diperbarui');
+      setNewPassword('');
+      setConfirmPassword('');
+      setShowPasswordForm(false);
+    } catch (error: any) {
+      console.error('Error updating password:', error);
+      toast.error(error.message || 'Gagal memperbarui password');
+    } finally {
+      setIsUpdatingPassword(false);
+    }
+  };
+
+  // Get Cabang from User data
+  const displayCabangId = displayUser?.cabangId || user?.cabangId;
   const displayCabang = displayCabangId ? listCabang.find(c => c.id === displayCabangId) : null;
 
   const profileItems = [
-    { icon: User, label: 'Nama Lengkap', value: linkedKaryawan?.nama || user?.nama },
+    { icon: User, label: 'Nama Lengkap', value: displayUser?.nama || user?.nama },
     { icon: User, label: 'Username', value: user?.username },
-    { icon: Shield, label: 'Jabatan', value: linkedKaryawan?.posisi || '-' },
+    { icon: Shield, label: 'Jabatan', value: displayUser?.posisi || '-' },
     { icon: Shield, label: 'Peran', value: user?.roles ? user.roles.map(r => roleLabels[r]).join(', ') : '-' },
     { icon: MapPin, label: 'Cabang', value: displayCabang?.nama || '-' },
-    { icon: Phone, label: 'Telepon', value: linkedKaryawan?.telepon || user?.telepon || '-' },
+    { icon: Phone, label: 'Telepon', value: displayUser?.telepon || user?.telepon || '-' },
     { icon: Mail, label: 'Email', value: user?.email || '-' }, // Email usually in Account
 
-    // Detailed Location from Karyawan (New)
-    { icon: MapPin, label: 'Alamat', value: linkedKaryawan?.alamat || '-' },
-    { icon: MapPin, label: 'Kota/Kab', value: linkedKaryawan?.kota ? `${linkedKaryawan.kota}, ${linkedKaryawan.provinsi || ''}` : '-' },
+    // Detailed Location
+    { icon: MapPin, label: 'Alamat', value: displayUser?.alamat || '-' },
+    { icon: MapPin, label: 'Kota/Kab', value: displayUser?.kota ? `${displayUser.kota}, ${displayUser.provinsi || ''}` : '-' },
   ];
 
   return (
@@ -141,7 +178,7 @@ export default function Profil() {
               </Avatar>
             </div>
             <div className="pt-12 text-center">
-              <h2 className="text-xl font-bold">{linkedKaryawan?.nama || user?.nama}</h2>
+              <h2 className="text-xl font-bold">{displayUser?.nama || user?.nama}</h2>
               <Badge variant="default" className="mt-2">
                 {user?.roles ? user.roles.map(r => roleLabels[r]).join(', ') : '-'}
               </Badge>
@@ -161,20 +198,7 @@ export default function Profil() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="flex items-center justify-between p-2">
-              <div className="space-y-0.5">
-                <Label htmlFor="demo-mode" className="text-sm font-medium">Beralih ke Demo</Label>
-                <p className="text-xs text-muted-foreground">
-                  Gunakan schema 'demo' untuk uji coba tanpa merusak data real.
-                </p>
-              </div>
-              <Switch
-                id="demo-mode"
-                disabled={!mounted}
-                checked={mounted && dbMode === 'demo'}
-                onCheckedChange={(checked) => setDbMode(checked ? 'demo' : 'public')}
-              />
-            </div>
+
             <div className="flex items-center justify-between p-2 border-t mt-2">
               <div className="space-y-0.5">
                 <Label htmlFor="all-notif" className="text-sm font-medium flex items-center gap-2">
@@ -345,6 +369,92 @@ export default function Profil() {
         {/* Actions */}
         <div className="space-y-2">
 
+          {/* Change Password Card */}
+          <Card elevated>
+            <CardHeader className="pb-2">
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-sm font-semibold flex items-center gap-2">
+                  <Key className="w-4 h-4 text-primary" />
+                  Ganti Password
+                </CardTitle>
+                <Button 
+                  variant="ghost" 
+                  size="sm" 
+                  onClick={() => setShowPasswordForm(!showPasswordForm)}
+                  className="h-8"
+                >
+                  {showPasswordForm ? 'Batal' : 'Ubah'}
+                </Button>
+              </div>
+            </CardHeader>
+            <CardContent>
+              {showPasswordForm ? (
+                <div className="space-y-4 pt-2">
+                  <div className="space-y-1">
+                    <Label className="text-xs">Password Baru</Label>
+                    <div className="relative">
+                      <Input
+                        type={showPasswords ? "text" : "password"}
+                        placeholder="Min. 6 karakter"
+                        value={newPassword}
+                        onChange={(e) => setNewPassword(e.target.value)}
+                        className="h-9 pr-9"
+                      />
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent"
+                        onClick={() => setShowPasswords(!showPasswords)}
+                      >
+                        {showPasswords ? (
+                          <EyeOff className="h-4 w-4 text-muted-foreground" />
+                        ) : (
+                          <Eye className="h-4 w-4 text-muted-foreground" />
+                        )}
+                      </Button>
+                    </div>
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs">Konfirmasi Password Baru</Label>
+                    <div className="relative">
+                      <Input
+                        type={showPasswords ? "text" : "password"}
+                        placeholder="Ulangi password baru"
+                        value={confirmPassword}
+                        onChange={(e) => setConfirmPassword(e.target.value)}
+                        className="h-9 pr-9"
+                      />
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent"
+                        onClick={() => setShowPasswords(!showPasswords)}
+                      >
+                        {showPasswords ? (
+                          <EyeOff className="h-4 w-4 text-muted-foreground" />
+                        ) : (
+                          <Eye className="h-4 w-4 text-muted-foreground" />
+                        )}
+                      </Button>
+                    </div>
+                  </div>
+                  <Button 
+                    className="w-full h-9" 
+                    onClick={handleUpdatePassword}
+                    disabled={isUpdatingPassword}
+                  >
+                    {isUpdatingPassword ? 'Memperbarui...' : 'Simpan Password Baru'}
+                  </Button>
+                </div>
+              ) : (
+                <p className="text-xs text-muted-foreground pt-1">
+                  Klik tombol ubah jika Anda ingin memperbarui password akun Anda.
+                </p>
+              )}
+            </CardContent>
+          </Card>
 
           <Card
             className="cursor-pointer border-destructive/20 hover:bg-destructive/5 transition-all"

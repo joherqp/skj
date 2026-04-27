@@ -93,7 +93,7 @@ export default function Beranda() {
   }, [user]);
   const {
     barang, pelanggan, penjualan, setoran, absensi, persetujuan,
-    karyawan, cabang: cabangList, stokPengguna, users, saldoPengguna,
+    cabang: cabangList, stokPengguna, users, saldoPengguna,
     viewMode, setViewMode, kunjungan
   } = useDatabase();
   const router = useRouter();
@@ -101,9 +101,8 @@ export default function Beranda() {
   const today = new Date();
   const todayStr = today.toDateString();
 
-  // Find linked Karyawan for Name & Cabang info
-  const linkedKaryawan = karyawan.find(k => k.userAccountId === user?.id);
-  const cabangId = linkedKaryawan?.cabangId || user?.cabangId;
+  // Use user data directly (karyawan fields are merged)
+  const cabangId = user?.cabangId;
   const cabang = cabangId ? cabangList.find(c => c.id === cabangId) : null;
   // Fallback location name if no cabang
   const locationName = cabang?.nama || 'Lokasi Belum Diatur';
@@ -378,7 +377,7 @@ export default function Beranda() {
             <div className="flex justify-between items-start relative z-10">
               <div className="space-y-0.5">
                 <p className="text-primary-foreground/80 text-[10px] font-bold uppercase tracking-wider">{getGreeting()}</p>
-                <h2 className="text-xl font-bold">{linkedKaryawan?.nama || user?.nama}</h2>
+                <h2 className="text-xl font-bold">{user?.nama}</h2>
                 <div className="flex items-center gap-2 mt-1.5">
                   <span className="text-[10px] text-primary-foreground/90 flex items-center gap-1 font-bold bg-primary-foreground/20 px-2 py-0.5 rounded-md uppercase">
                     <MapPin className="w-3 h-3" />

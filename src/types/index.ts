@@ -10,13 +10,24 @@ export interface User {
   telepon: string;
   roles: UserRole[];
   cabangId: string | null;
-  karyawanId?: string;
   avatarUrl?: string;
   kodeUnik?: string;
   isActive: boolean;
   createdAt: Date;
   startDate?: Date;
   endDate?: Date;
+  namaPanggilan?: string;
+  
+  // From Karyawan
+  posisi?: string;
+  alamat?: string;
+  provinsi?: string;
+  kota?: string;
+  kecamatan?: string;
+  kelurahan?: string;
+  kodePos?: string;
+  koordinat?: Lokasi | string;
+  isDemo?: boolean;
 }
 
 export interface TimeStamps {
@@ -34,6 +45,7 @@ export interface Cabang {
   telepon: string;
   areaId?: string;
   koordinat?: string; // Format: "lat, lng"
+  isDemo?: boolean;
 }
 
 // Attendance Types
@@ -258,27 +270,8 @@ export interface Setoran {
 }
 
 // Others
-export interface Karyawan {
-  id: string;
-  nama: string;
-  nik?: string;
-  jabatan?: string;
-  tanggalMulai?: Date;
-  alamat?: string;
-  telepon?: string;
-  gajiPokok?: number;
-  tunjangan?: number;
-  cabangId?: string;
-  userAccountId?: string;
-  posisi?: string;
-  status: 'aktif' | 'nonaktif';
-  kecamatan?: string;
-  kelurahan?: string;
-  kodePos?: string;
-  koordinat?: Lokasi | string;
-  kota?: string;
-  provinsi?: string;
-}
+// Karyawan type was removed and merged into User
+
 
 export interface Notifikasi {
   id: string;
@@ -382,7 +375,7 @@ export interface PersetujuanPayload {
 
 export interface Persetujuan {
   id: string;
-  jenis: 'diskon_manual' | 'edit_harga' | 'hapus_transaksi' | 'permintaan' | 'mutasi_stok' | 'restock' | 'mutasi' | 'pembatalan_penjualan' | 'penjualan' | 'perubahan_data_pelanggan' | 'perubahan_harga' | 'promo' | 'rencana_setoran' | 'setoran' | 'reimburse' | 'mutasi_karyawan' | 'opname' | 'mutasi_pelanggan';
+  jenis: 'diskon_manual' | 'edit_harga' | 'hapus_transaksi' | 'permintaan' | 'mutasi_stok' | 'restock' | 'mutasi' | 'pembatalan_penjualan' | 'penjualan' | 'perubahan_data_pelanggan' | 'perubahan_harga' | 'promo' | 'rencana_setoran' | 'setoran' | 'reimburse' | 'mutasi_user' | 'opname' | 'mutasi_pelanggan';
   data: PersetujuanPayload; // JSON detail
   diajukanOleh: string;
   disetujuiOleh?: string;
@@ -566,6 +559,7 @@ export interface ProfilPerusahaan {
   logo?: string;
   logoUrl?: string; // Used in print templates
   config?: {
+    isDemo?: boolean;
     daysToFetch?: number;
     taxRate?: number;
     currency?: string;
@@ -627,7 +621,29 @@ export interface PermintaanBarang {
   persetujuanId?: string; // FK to persetujuan for bidirectional sync
 }
 
+export interface SalesTarget {
+  id: string;
+  userId: string;
+  salesId?: string;
+  cabangId?: string;
+  targetAmount: number;
+  currentAmount: number;
+  nilai?: number;
+  jenis?: string;
+  targetType?: string;
+  scope?: string;
+  startDate: Date;
+  endDate: Date;
+  isActive: boolean;
+  isLooping: boolean;
+  createdAt: Date;
+  createdBy: string;
+  updatedAt: Date;
+  updatedBy: string;
+}
+
 export interface DatabaseContextType {
+  targets: SalesTarget[];
   // Master Data
   kategori: Kategori[];
   satuan: Satuan[];
@@ -638,7 +654,6 @@ export interface DatabaseContextType {
   barang: Barang[];
   pelanggan: Pelanggan[];
   users: User[];
-  karyawan: Karyawan[];
   harga: Harga[];
   stokPengguna: StokPengguna[];
   saldoPengguna: SaldoPengguna[];
@@ -670,6 +685,7 @@ export interface DatabaseContextType {
   viewMode: 'all' | 'me';
   setViewMode: (mode: 'all' | 'me') => void;
   pendingSyncCount: number;
+  dbMode: 'public' | 'demo';
   isAdminOrOwner: boolean;
   refresh: () => Promise<void>;
   repairUser: () => Promise<void>;
@@ -727,9 +743,7 @@ export interface DatabaseContextType {
   updateRiwayatPelanggan: (id: string, item: Partial<RiwayatPelanggan>) => Promise<void>;
   deleteRiwayatPelanggan: (id: string) => Promise<void>;
 
-  addKaryawan: (item: Partial<Karyawan>) => Promise<Karyawan>;
-  updateKaryawan: (id: string, item: Partial<Karyawan>) => Promise<void>;
-  deleteKaryawan: (id: string) => Promise<void>;
+
 
   addUser: (item: Partial<User>) => Promise<User>;
   updateUser: (id: string, item: Partial<User>) => Promise<void>;
@@ -791,9 +805,10 @@ export interface DatabaseContextType {
   updateRestock: (id: string, item: Partial<Restock>) => Promise<void>;
   deleteRestock: (id: string) => Promise<void>;
 
-  // Database Mode
-  dbMode: 'public' | 'demo';
-  setDbMode: (mode: 'public' | 'demo') => void;
+  // Sales Target
+  addTarget: (item: Partial<SalesTarget>) => Promise<SalesTarget>;
+  updateTarget: (id: string, item: Partial<SalesTarget>) => Promise<void>;
+  deleteTarget: (id: string) => Promise<void>;
 
   // Merge Pelanggan
   mergePelanggan: (targetId: string, sourceId: string) => Promise<void>;

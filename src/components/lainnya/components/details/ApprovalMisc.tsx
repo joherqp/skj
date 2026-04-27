@@ -152,7 +152,7 @@ export function ApprovalEmployeeMutation({
     return (
         <div className="space-y-4">
             <div className="p-4 bg-gray-50 border border-gray-100 rounded-lg">
-                <h4 className="font-semibold text-gray-900 mb-3">Detail Mutasi Karyawan</h4>
+                <h4 className="font-semibold text-gray-900 mb-3">Detail Mutasi Pengguna</h4>
                 
                 {data.isCabangChanged && (
                     <div className="flex items-center justify-between p-3 bg-white rounded border border-gray-200 mb-2">

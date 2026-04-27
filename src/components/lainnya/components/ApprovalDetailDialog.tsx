@@ -138,7 +138,7 @@ export function ApprovalDetailDialog({
             case 'rencana_setoran':
                 return <ApprovalSetoran data={data} />;
             
-            case 'mutasi_karyawan':
+            case 'mutasi_user':
                 return <ApprovalEmployeeMutation data={data} cabang={cabang} />;
 
             default:
@@ -190,10 +190,10 @@ export function ApprovalDetailDialog({
                                     if (u?.username && u.username !== 'Unknown') return u.username;
                                     
                                     const payload = item.data as PersetujuanPayload;
-                                    const payloadName = payload?.userName || payload?.namaUser || payload?.nama || payload?.operator || payload?.karyawanNama || (payload as any)?.diajukanOlehName;
+                                    const payloadName = payload?.userName || payload?.namaUser || payload?.nama || payload?.operator || (payload as any)?.diajukanOlehName;
                                     if (payloadName && payloadName !== 'Unknown') return payloadName;
                                     
-                                    if (item.diajukanOleh === 'Unknown' || !item.diajukanOleh) return 'Sistem/Karyawan';
+                                    if (item.diajukanOleh === 'Unknown' || !item.diajukanOleh) return 'Sistem/Pengguna';
                                     return item.diajukanOleh.length > 15 ? `User ${item.diajukanOleh.substring(0, 8)}` : item.diajukanOleh;
                                 })()} 
                                 {users.find(u => u.id === item.diajukanOleh)?.roles?.[0] && (

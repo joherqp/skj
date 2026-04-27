@@ -25,11 +25,11 @@ const roleLabels: Record<string, string> = {
 
 export default function Profil() {
   const { user, logout, updatePassword } = useAuth();
-  const { karyawan, cabang: listCabang } = useDatabase(); // Get Karyawan data
+  const { users, cabang: listCabang } = useDatabase(); // Get User data
   const router = useRouter();
 
   const cabang = user?.cabangId ? listCabang.find(c => c.id === user.cabangId) : null;
-  const linkedKaryawan = karyawan.find(k => k.userAccountId === user?.id);
+  const displayUser = users.find(u => u.id === user?.id);
 
   const [isLoading, setIsLoading] = useState(false);
 
@@ -50,22 +50,22 @@ export default function Profil() {
 
 
 
-  // Get Cabang from Karyawan data (priority) or User data
-  const displayCabangId = linkedKaryawan?.cabangId || user?.cabangId;
+  // Get Cabang from User data
+  const displayCabangId = displayUser?.cabangId || user?.cabangId;
   const displayCabang = displayCabangId ? listCabang.find(c => c.id === displayCabangId) : null;
 
   const profileItems = [
-    { icon: User, label: 'Nama Lengkap', value: linkedKaryawan?.nama || user?.nama },
+    { icon: User, label: 'Nama Lengkap', value: displayUser?.nama || user?.nama },
     { icon: User, label: 'Username', value: user?.username },
-    { icon: Shield, label: 'Jabatan', value: linkedKaryawan?.posisi || '-' },
+    { icon: Shield, label: 'Jabatan', value: displayUser?.posisi || '-' },
     { icon: Shield, label: 'Peran', value: user?.roles ? user.roles.map(r => roleLabels[r]).join(', ') : '-' },
     { icon: MapPin, label: 'Cabang', value: displayCabang?.nama || '-' },
-    { icon: Phone, label: 'Telepon', value: linkedKaryawan?.telepon || user?.telepon || '-' },
+    { icon: Phone, label: 'Telepon', value: displayUser?.telepon || user?.telepon || '-' },
     { icon: Mail, label: 'Email', value: user?.email || '-' }, // Email usually in Account
 
-    // Detailed Location from Karyawan (New)
-    { icon: MapPin, label: 'Alamat', value: linkedKaryawan?.alamat || '-' },
-    { icon: MapPin, label: 'Kota/Kab', value: linkedKaryawan?.kota ? `${linkedKaryawan.kota}, ${linkedKaryawan.provinsi || ''}` : '-' },
+    // Detailed Location
+    { icon: MapPin, label: 'Alamat', value: displayUser?.alamat || '-' },
+    { icon: MapPin, label: 'Kota/Kab', value: displayUser?.kota ? `${displayUser.kota}, ${displayUser.provinsi || ''}` : '-' },
   ];
 
   return (
@@ -84,7 +84,7 @@ export default function Profil() {
               </Avatar>
             </div>
             <div className="pt-12 text-center">
-              <h2 className="text-xl font-bold">{linkedKaryawan?.nama || user?.nama}</h2>
+              <h2 className="text-xl font-bold">{displayUser?.nama || user?.nama}</h2>
               <Badge variant="default" className="mt-2">
                 {user?.roles ? user.roles.map(r => roleLabels[r]).join(', ') : '-'}
               </Badge>

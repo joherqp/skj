@@ -42,7 +42,7 @@ export default function Laporan() {
     },
     {
       title: 'Laporan Absensi',
-      description: 'Rekap kehadiran karyawan dan lokasi',
+      description: 'Rekap kehadiran pengguna dan lokasi',
       icon: Calendar,
       path: '/laporan/absensi',
       color: 'text-orange-600',

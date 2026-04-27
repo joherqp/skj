@@ -76,7 +76,7 @@ const FIELD_LABELS: Record<PivotField, string> = {
 };
 
 export default function AnalisaPivot() {
-    const { penjualan, barang, kategori: kategoriList, pelanggan, kategoriPelanggan: kategoriPelangganList, users, cabang, karyawan, viewMode } = useDatabase();
+    const { penjualan, barang, kategori: kategoriList, pelanggan, kategoriPelanggan: kategoriPelangganList, users, cabang, viewMode } = useDatabase();
     const { user: currentUser } = useAuth();
 
     // Configuration State
@@ -223,8 +223,7 @@ export default function AnalisaPivot() {
                 
                 const sId = p.salesId || p.createdBy;
                 const u = users.find(u => u.id === sId);
-                const k = karyawan.find(k => k.userAccountId === sId);
-                const salesName = k?.nama || u?.nama || 'Unknown';
+                const salesName = u?.nama || 'Unknown';
                 const cabangName = cabang.find(c => c.id === p.cabangId)?.nama || 'Unknown';
 
                 p.items.forEach(item => {
@@ -254,7 +253,7 @@ export default function AnalisaPivot() {
                 });
             });
         return data;
-    }, [penjualan, barang, kategoriList, pelanggan, kategoriPelangganList, users, cabang, karyawan, selectedCabangIds, selectedUserIds, selectedKategoriIds, selectedKategoriPelangganIds, selectedBarangIds, isSingleDate, singleDate, startDate, endDate, viewMode, currentUser]);
+    }, [penjualan, barang, kategoriList, pelanggan, kategoriPelangganList, users, cabang, selectedCabangIds, selectedUserIds, selectedKategoriIds, selectedKategoriPelangganIds, selectedBarangIds, isSingleDate, singleDate, startDate, endDate, viewMode, currentUser]);
 
     // 2. Pivot Engine
     const pivotTable = useMemo(() => {

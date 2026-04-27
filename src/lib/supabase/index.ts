@@ -71,7 +71,6 @@ export type Database = {
           telepon: string;
           roles: string[];
           cabang_id: string;
-          karyawan_id: string | null;
           avatar_url: string | null;
           is_active: boolean;
           created_at: string;

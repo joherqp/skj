@@ -43,7 +43,7 @@ export default function Pengaturan() {
 
   const userSettings = [
     { icon: Users, label: 'Pengguna', description: 'Kelola akun pengguna', path: '/pengaturan/pengguna' },
-    { icon: UserCog, label: 'Karyawan', description: 'Data karyawan', path: '/pengaturan/karyawan' },
+
   ];
 
   const locationSettings = [

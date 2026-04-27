@@ -44,7 +44,6 @@ export default function Pengaturan() {
 
   const userSettings = [
     { icon: Users, label: 'Pengguna', description: 'Kelola akun pengguna', path: '/pengaturan/pengguna' },
-    { icon: UserCog, label: 'Karyawan', description: 'Data karyawan', path: '/pengaturan/karyawan' },
   ];
 
   const locationSettings = [
@@ -69,6 +68,7 @@ export default function Pengaturan() {
   const systemSettings = [
     { icon: Database, label: 'Backup', description: 'Download & Restore database', path: '/pengaturan/backup' },
     { icon: Shield, label: 'Cek Integritas', description: 'Verifikasi stok & saldo', path: '/pengaturan/integritas' },
+    { icon: GitBranch, label: 'Mode Demo', description: 'Kelola status demo global, cabang, & user', path: '/pengaturan/mode-demo' },
   ];
 
   const importSettings = [

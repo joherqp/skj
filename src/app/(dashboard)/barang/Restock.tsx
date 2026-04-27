@@ -35,7 +35,7 @@ export function RestockForm({ embedded, onSuccess }: RestockFormProps) {
 
   const {
     barang, updateBarang, addPersetujuan, addNotifikasi,
-    users, cabang, satuan: satuanList, karyawan
+    users, cabang, satuan: satuanList
   } = useDatabase();
   const { user, hasRole } = useAuth();
 
@@ -61,13 +61,7 @@ export function RestockForm({ embedded, onSuccess }: RestockFormProps) {
     if (!u.isActive) return false;
 
     // Check linked employee branch if exists, otherwise user branch
-    let userCabangId = u.cabangId;
-    if (u.karyawanId) {
-      const linkedKaryawan = karyawan.find(k => k.id === u.karyawanId);
-      if (linkedKaryawan) {
-        userCabangId = linkedKaryawan.cabangId;
-      }
-    }
+    let userCabangId = u?.cabangId;
 
     const isCabangMatch = userCabangId === targetCabangId;
     const isRoleMatch = (u.roles.includes('gudang') || u.roles.includes('driver') || u.roles.includes('leader') || u.roles.includes('admin') || u.roles.includes('staff') || u.roles.includes('sales'));

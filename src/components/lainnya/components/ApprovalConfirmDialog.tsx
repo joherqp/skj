@@ -84,7 +84,7 @@ export function ApprovalConfirmDialog({
                                         ? requester.nama 
                                         : (requester?.username && requester.username !== 'Unknown' && requester.username.trim() !== '')
                                             ? requester.username
-                                            : (data.userName || data.namaUser || data.nama || data.operator || data.karyawanNama || (data as any).diajukanOlehName || 
+                                            : (data.userName || data.namaUser || data.nama || data.operator || (data as any).diajukanOlehName || 
                                                (requesterId && requesterId !== 'Unknown' && requesterId.length > 5 
                                                  ? `User ${requesterId.substring(0, 8)}` 
                                                  : (requester?.id ? `User ${requester.id.substring(0, 8)}` : 'Sistem')));

@@ -11,7 +11,7 @@ import { ImagePreviewModal } from '@/components/shared/ImagePreviewModal';
 export default function DetailSetoran() {
   const { id } = useParams();
   const router = useRouter();
-  const { setoran, persetujuan, users, karyawan, rekeningBank } = useDatabase();
+  const { setoran, persetujuan, users, rekeningBank } = useDatabase();
 
   let data: any = setoran.find(s => s.id === id);
   let isPusat = false;
@@ -54,11 +54,11 @@ export default function DetailSetoran() {
 
   // Robust Name Lookup
   const salesPerson = users.find(u => u.id === data.salesId);
-  const linkedEmployee = karyawan.find(k => k.userAccountId === data.salesId);
+  const linkedEmployee = users.find(u => u.id === data.salesId);
   const salesName = linkedEmployee?.nama || salesPerson?.nama || data.salesId;
 
   const approverPerson = data.disetujuiOleh ? users.find(u => u.id === data.disetujuiOleh) : null;
-  const approverEmployee = data.disetujuiOleh ? karyawan.find(k => k.userAccountId === data.disetujuiOleh) : null;
+  const approverEmployee = data.disetujuiOleh ? users.find(u => u.id === data.disetujuiOleh) : null;
   const approverName = approverEmployee?.nama || approverPerson?.nama || 'System';
 
   return (
