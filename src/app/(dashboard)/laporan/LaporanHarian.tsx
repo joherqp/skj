@@ -214,10 +214,10 @@ export default function LaporanHarian() {
         const filteredSales = penjualan.filter(p => {
             const pDate = new Date(p.tanggal);
             const inDate = pDate >= dayStart && pDate <= dayEnd;
-            
+
             // Branch Filter
             const inBranch = isGlobalView || (p.cabangId && effectiveCabangIds.includes(p.cabangId));
-            
+
             // User/Sales Filter
             const inUser = selectedUserIds.length === 0 || selectedUserIds.includes(p.salesId) || selectedUserIds.includes(p.createdBy);
 
@@ -360,8 +360,8 @@ export default function LaporanHarian() {
                 const isRelevant = isGlobalView || (p.targetCabangId && effectiveCabangIds.includes(p.targetCabangId)) || (p.targetUserId && effectiveCabangIds.includes(users.find(u => u.id === p.targetUserId)?.cabangId || ''));
                 if (!isRelevant) return;
 
-                const items = (pData.items as any[]) || (pData.barangId || pData.barang_id ? [{ 
-                    barangId: pData.barangId || pData.barang_id, 
+                const items = (pData.items as any[]) || (pData.barangId || pData.barang_id ? [{
+                    barangId: pData.barangId || pData.barang_id,
                     jumlah: pData.jumlah,
                     konversi: pData.konversi,
                     totalQty: pData.totalQty
@@ -596,7 +596,9 @@ export default function LaporanHarian() {
 
             p.items.forEach(pi => {
                 const qty = pi.jumlah * (pi.konversi || 1);
-                existingSales.qty += qty;
+                if (!pi.isBonus && pi.harga > 0 && pi.subtotal > 0) {
+                    existingSales.qty += qty;
+                }
 
                 // Per Product
                 const prodId = pi.barangId;
@@ -618,17 +620,17 @@ export default function LaporanHarian() {
         // Add cash & setoran to sales summary
         const salesSummaryList = Array.from(salesSummaryMap.values()).map(s => {
             const userId = users.find(u => u.nama === s.nama)?.id;
-            
+
             // Cash from this salesman's Tunai Sales (bayar - kembalian)
             const userCashFromSales = userId ? filteredSales
                 .filter(p => p.salesId === userId && p.metodePembayaran === 'tunai')
                 .reduce((acc, curr) => acc + (curr.bayar || 0) - (curr.kembalian || 0), 0) : 0;
-            
+
             // Cash from payments table for this user
             const userCashFromPayments = userId ? validPembayaranToday
                 .filter(p => p.createdBy === userId)
                 .reduce((acc, curr) => acc + Number(curr.jumlah), 0) : 0;
-            
+
             // Total cash for this user
             const userCash = userCashFromSales + userCashFromPayments;
 
@@ -1241,7 +1243,7 @@ export default function LaporanHarian() {
                                                 <TableCell className="text-right text-[10px] text-red-600 font-bold">{item.keluar > 0 ? `-${formatNumber(item.keluar)}` : '-'}</TableCell>
                                                 <TableCell className="text-right text-[10px] text-blue-600 font-bold">
                                                     {item.terjual > 0 ? `-${formatNumber(item.terjual)}` : '-'}
-                                                    {item.promo > 0 && <span className="text-[9px] ml-1 text-orange-400 font-normal">(P:${formatNumber(item.promo)})</span>}
+                                                    {item.promo > 0 && <span className="text-[9px] ml-1 text-orange-400 font-normal">{formatNumber(item.promo)}</span>}
                                                 </TableCell>
                                                 <TableCell className="text-right text-[11px] font-black text-slate-900 pr-4">{formatNumber(item.akhir)}</TableCell>
                                             </TableRow>
