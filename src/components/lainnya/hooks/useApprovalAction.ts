@@ -562,19 +562,22 @@ export const useApprovalAction = () => {
                             return isNaN(d.getTime()) ? undefined : d;
                         };
 
+                        // Robustly find the dates - could be camelCase from toCamelCase transform or original snake_case
+                        const rawMulai = promoData.berlaku_mulai || promoData.berlakuMulai || promoData.tanggalMulai;
+                        const rawSampai = promoData.berlaku_sampai || promoData.berlakuSampai || promoData.tanggalBerakhir || promoData.tanggalSelesai;
+
                         const finalPayload = {
                             ...promoData,
                             aktif: (promoData.isActive !== undefined ? promoData.isActive : (promoData.aktif ?? true)),
-                            berlaku_mulai: ensureDate(promoData.tanggalMulai || promoData.berlaku_mulai),
-                            berlaku_sampai: ensureDate(promoData.tanggalBerakhir || promoData.berlaku_sampai),
+                            berlaku_mulai: ensureDate(rawMulai) || new Date(), // Required field
+                            berlaku_sampai: ensureDate(rawSampai),
                             cabang_ids: promoData.cabangIds || promoData.cabang_ids || (promoData.cabangId ? [promoData.cabangId] : []),
                             cabang_id: null // Clear legacy
                         };
 
                         // Cleanup frontend-only keys to avoid duplication/conflicts
-                        delete (finalPayload as any).isActive;
-                        delete (finalPayload as any).tanggalMulai;
-                        delete (finalPayload as any).tanggalBerakhir;
+                        const keysToDelete = ['isActive', 'tanggalMulai', 'tanggalBerakhir', 'berlakuMulai', 'berlakuSampai', 'cabangIds'];
+                        keysToDelete.forEach(key => delete (finalPayload as any)[key]);
 
                         if (isNew || !refId || (typeof refId === 'string' && refId.startsWith('new-'))) {
                             await addPromo(finalPayload as unknown as import('@/types').Promo);

@@ -93,11 +93,33 @@ export default function RekapPenjualan() {
     const tunai = filtered.filter(p => p.metodePembayaran === 'tunai').reduce((sum, p) => sum + p.total, 0);
     const kredit = filtered.filter(p => p.metodePembayaran === 'tempo').reduce((sum, p) => sum + p.total, 0);
 
-    // Calculate Event Rewards
-    const totalEventRewards = filtered.reduce((sum, p) => {
-        const transactionRewards = p.items.reduce((acc, item) => acc + (item.earnedReward?.qty || 0), 0);
-        return sum + transactionRewards;
-    }, 0);
+    // Available IDs for filters based on current date selection
+    const { availableCabangIds, availableUserIds } = useMemo(() => {
+        const cabs = new Set<string>();
+        const usrs = new Set<string>();
+
+        penjualan.forEach(p => {
+            if (p.status === 'batal' || p.status === 'draft') return;
+            const d = new Date(p.tanggal).toISOString().split('T')[0];
+            let inPeriod = false;
+            if (isSingleDate) {
+                inPeriod = d === singleDate;
+            } else {
+                inPeriod = d >= startDate && d <= endDate;
+            }
+
+            if (inPeriod) {
+                if (p.cabangId) cabs.add(p.cabangId);
+                const sId = p.salesId || p.createdBy;
+                if (sId) usrs.add(sId);
+            }
+        });
+
+        return {
+            availableCabangIds: Array.from(cabs),
+            availableUserIds: Array.from(usrs)
+        };
+    }, [penjualan, isSingleDate, singleDate, startDate, endDate]);
 
     // Sales Performance Aggregation
     const salesPerformance = useMemo(() => {
@@ -195,11 +217,6 @@ export default function RekapPenjualan() {
             startY: 48,
             head: [['RINGKASAN LAPORAN', 'NILAI']],
             body: [
-                ['Total Omzet', formatRupiah(totalOmzet)],
-                ['Total Transaksi', `${totalTrx} Nota`],
-                ['Total Qty (Bks)', `${formatQty(totalQty)} Bks`],
-                ['Total Promo/Bonus (Pcs)', `${formatQty(totalPromoQty)} Pcs`],
-                ['Total Hadiah Event', `${formatQty(totalEventRewards)} Hadiah`],
                 ['Penjualan Tunai', formatRupiah(tunai)],
                 ['Piutang (Tempo)', formatRupiah(kredit)],
             ],
@@ -291,6 +308,8 @@ export default function RekapPenjualan() {
                                     setSelectedCabangIds={setSelectedCabangIds}
                                     selectedUserIds={selectedUserIds}
                                     setSelectedUserIds={setSelectedUserIds}
+                                    availableCabangIds={availableCabangIds}
+                                    availableUserIds={availableUserIds}
                                     className="!space-y-0 flex flex-row items-center gap-2"
                                 />
                             </div>
@@ -448,19 +467,6 @@ export default function RekapPenjualan() {
                         </CardContent>
                     </Card>
 
-                    {/* Event Rewards */}
-                    <Card className="bg-gradient-to-br from-pink-500/10 to-pink-500/5 border-pink-500/20 shadow-sm relative overflow-hidden">
-                        <div className="absolute top-0 right-0 p-3 opacity-10">
-                            <Gift className="w-12 h-12 sm:w-16 sm:h-16 text-pink-600" />
-                        </div>
-                        <CardContent className="p-4 sm:p-5 flex flex-col justify-between h-full relative z-10">
-                            <div>
-                                <p className="text-xs sm:text-sm font-medium text-muted-foreground">Hadiah Event</p>
-                                <p className="text-lg sm:text-2xl font-bold text-pink-700 mt-1 tracking-tight">{formatQty(totalEventRewards)} <span className="text-xs sm:text-sm font-normal text-muted-foreground">Hadiah</span></p>
-                            </div>
-                            <div className="mt-2 w-6 sm:w-8 h-1 bg-pink-500/20 rounded-full" />
-                        </CardContent>
-                    </Card>
                 </div>
 
                 {/* Breakdown Tabs */}

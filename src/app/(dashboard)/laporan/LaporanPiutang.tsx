@@ -1,17 +1,18 @@
 'use client';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useDatabase } from '@/contexts/DatabaseContext';
 import { useAuth } from '@/contexts/AuthContext';
-import { ArrowLeft, TrendingUp, FileSpreadsheet, Search, ArrowUpDown, AlertTriangle, MessageCircle, Phone, Share2 } from 'lucide-react';
+import { ArrowLeft, TrendingUp, FileSpreadsheet, Search, ArrowUpDown, AlertTriangle, MessageCircle, Phone, Share2, Building } from 'lucide-react';
 import { formatRupiah, formatWhatsAppNumber } from '@/lib/utils';
 import { useRouter } from 'next/navigation';
 import * as XLSX from 'xlsx';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
 import { Penjualan } from '@/types';
+import { ScopeFilters } from '@/components/shared/ScopeFilters';
 import {
   Select,
   SelectContent,
@@ -19,13 +20,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Checkbox } from "@/components/ui/checkbox";
-import { 
-  Popover, 
-  PopoverContent, 
-  PopoverTrigger 
-} from "@/components/ui/popover";
-import { Filter } from 'lucide-react';
 import {
   Table,
   TableBody,
@@ -33,7 +27,7 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-  TableFooter, // Import TableFooter
+  TableFooter,
 } from "@/components/ui/table";
 import {
   AlertDialog,
@@ -57,11 +51,11 @@ export default function LaporanPiutang() {
   } = useDatabase();
 
   const isAdminOrOwner = currentUser?.roles.some(r => ['admin', 'owner'].includes(r));
-  const [filterCabang, setFilterCabang] = useState<string>(() => {
-    if (isAdminOrOwner) return 'all';
-    return currentUser?.cabangId || 'all';
+  const [selectedCabangIds, setSelectedCabangIds] = useState<string[]>(() => {
+    if (!isAdminOrOwner && currentUser?.cabangId) return [currentUser.cabangId];
+    return [];
   });
-  const [filterUser, setFilterUser] = useState<string[]>([]); // Changed to Array
+  const [selectedUserIds, setSelectedUserIds] = useState<string[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [sortBy, setSortBy] = useState<SortOption>('highest');
 
@@ -71,13 +65,13 @@ export default function LaporanPiutang() {
 
   // Auto-select "Cati" if exists
   useEffect(() => {
-    if (users.length > 0 && filterUser.length === 0) {
+    if (users.length > 0 && selectedUserIds.length === 0) {
       const cati = users.find(u => u.nama.toLowerCase() === 'cati');
       if (cati) {
-        setFilterUser([cati.id]);
+        setSelectedUserIds([cati.id]);
       }
     }
-  }, [users, filterUser.length]);
+  }, [users, selectedUserIds.length]);
 
   const handlePayClick = (customerId: string, customerName: string) => {
       const debts = penjualan.filter(p => 
@@ -98,28 +92,32 @@ export default function LaporanPiutang() {
   const useGlobal = profilPerusahaan?.config?.useGlobalLimit;
   const globalMax = profilPerusahaan?.config?.globalLimitAmount || 0;
 
-  // 1. Get Relevant Users (Sales) - ONLY those with Debt
-  const relevantUsers = users.filter(u => {
-      // Branch Filter First
-      if (filterCabang !== 'all' && u.cabangId !== filterCabang) return false;
+  // 1. Calculate Available IDs based on Debt
+  const { availableCabangIds, availableUserIds } = useMemo(() => {
+      const cabs = new Set<string>();
+      const usrs = new Set<string>();
       
-      // MUST have customers with debt
-      const hasDebt = pelanggan.some(p => p.salesId === u.id && (p.sisaKredit || 0) > 0);
-      return hasDebt;
-  });
+      pelanggan.forEach(p => {
+          if ((p.sisaKredit || 0) > 0) {
+              if (p.cabangId) cabs.add(p.cabangId);
+              if (p.salesId) usrs.add(p.salesId);
+          }
+      });
+      
+      return {
+          availableCabangIds: Array.from(cabs),
+          availableUserIds: Array.from(usrs)
+      };
+  }, [pelanggan]);
 
   // 2. Filter Customers by Branch AND Multi-Sales User
   const filteredPelanggan = pelanggan.filter(p => {
       // Branch Filter
-      if (isAdminOrOwner && filterCabang !== 'all') {
-          if (p.cabangId !== filterCabang) return false;
-      } else if (!isAdminOrOwner && currentUser?.cabangId) {
-          if (p.cabangId !== currentUser.cabangId) return false;
-      }
+      if (selectedCabangIds.length > 0 && !selectedCabangIds.includes(p.cabangId || '')) return false;
 
       // User/Sales Filter (Multi-Select)
-      if (filterUser.length > 0) {
-          if (!filterUser.includes(p.salesId)) return false;
+      if (selectedUserIds.length > 0) {
+          if (!selectedUserIds.includes(p.salesId)) return false;
       }
 
       return true;
@@ -263,60 +261,22 @@ ${profilPerusahaan.nama}`;
                 <ArrowLeft className="w-4 h-4 mr-2" /> Kembali
             </Button>
             
-            <div className="flex flex-wrap gap-2 items-center w-full md:w-auto">
-                {isAdminOrOwner && (
-                    <Select value={filterCabang} onValueChange={(v) => {
-                        setFilterCabang(v);
-                        setFilterUser([]); // Reset user filter on branch change
-                    }}>
-                        <SelectTrigger className="w-[180px] h-9 text-xs">
-                            <SelectValue placeholder="Filter Cabang" />
-                        </SelectTrigger>
-                        <SelectContent>
-                            <SelectItem value="all">Semua Cabang</SelectItem>
-                            {[...cabang].sort((a, b) => a.nama.localeCompare(b.nama)).map(c => (
-                                <SelectItem key={c.id} value={c.id}>{c.nama}</SelectItem>
-                            ))}
-                        </SelectContent>
-                    </Select>
-                )}
-
-                <Popover>
-                    <PopoverTrigger asChild>
-                        <Button variant="outline" size="sm" className="h-9 text-xs flex gap-2">
-                             <Filter className="w-4 h-4" /> 
-                             {filterUser.length === 0 ? "Semua Sales" : `${filterUser.length} Sales Dipilih`}
-                        </Button>
-                    </PopoverTrigger>
-                    <PopoverContent className="w-56 p-0" align="start">
-                        <div className="p-3 border-b bg-muted/50 font-semibold text-xs">Pilih Sales</div>
-                        <div className="max-h-60 overflow-y-auto p-2 space-y-2">
-                            {[...relevantUsers].sort((a, b) => a.nama.localeCompare(b.nama)).map(u => (
-                                <div key={u.id} className="flex items-center space-x-2">
-                                    <Checkbox 
-                                        id={u.id} 
-                                        checked={filterUser.includes(u.id)}
-                                        onCheckedChange={(checked) => {
-                                            if (checked) {
-                                                setFilterUser(prev => [...prev, u.id]);
-                                            } else {
-                                                setFilterUser(prev => prev.filter(id => id !== u.id));
-                                            }
-                                        }}
-                                    />
-                                    <label htmlFor={u.id} className="text-xs cursor-pointer select-none">
-                                        {u.nama}
-                                    </label>
-                                </div>
-                            ))}
-                            {relevantUsers.length === 0 && <p className="text-[10px] text-center p-2 text-muted-foreground">Tidak ada sales dengan piutang</p>}
-                        </div>
-                        <div className="p-2 border-t flex justify-between bg-muted/20">
-                             <Button variant="ghost" size="sm" className="h-7 text-[10px]" onClick={() => setFilterUser([])}>Reset</Button>
-                             <Button variant="ghost" size="sm" className="h-7 text-[10px]" onClick={() => setFilterUser(relevantUsers.map(u => u.id))}>Pilih Semua</Button>
-                        </div>
-                    </PopoverContent>
-                </Popover>
+            <div className="flex flex-wrap gap-4 items-end w-full md:w-auto">
+                <div className="flex flex-col gap-1.5">
+                    <div className="flex items-center gap-2 text-primary font-medium ml-1">
+                        <Building className="w-3.5 h-3.5" />
+                        <span className="text-[10px] uppercase tracking-wider">Filter Cabang & Sales</span>
+                    </div>
+                    <ScopeFilters
+                        selectedCabangIds={selectedCabangIds}
+                        setSelectedCabangIds={setSelectedCabangIds}
+                        selectedUserIds={selectedUserIds}
+                        setSelectedUserIds={setSelectedUserIds}
+                        availableCabangIds={availableCabangIds}
+                        availableUserIds={availableUserIds}
+                        className="!space-y-0 flex flex-row items-center gap-2"
+                    />
+                </div>
                  
                 <div className="relative flex-1 md:w-[200px]">
                     <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
