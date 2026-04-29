@@ -152,7 +152,7 @@ export default function DetailBarang() {
 
             return {
                 id: p.id,
-                date: new Date(p.tanggal),
+                date: new Date(p.createdAt),
                 type: 'out' as const,
                 source: isAdminOrOwner ? `Penjualan (Oleh: ${salesperson})` : 'Penjualan',
                 detail: customer,

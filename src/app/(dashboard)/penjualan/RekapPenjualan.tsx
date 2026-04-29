@@ -247,7 +247,7 @@ export default function RekapPenjualan() {
             return [
                 index + 1,
                 item.nomorNota,
-                new Date(item.tanggal).toLocaleDateString('id-ID'),
+                new Date(item.createdAt || item.tanggal).toLocaleDateString('id-ID'),
                 customer?.nama || 'Umum',
                 salesPerson?.nama || 'Sales',
                 item.metodePembayaran.toUpperCase(),
@@ -514,7 +514,7 @@ export default function RekapPenjualan() {
                                                     <div>
                                                         <p className="font-semibold text-sm">{item.nomorNota}</p>
                                                         <p className="text-[10px] sm:text-xs text-muted-foreground">
-                                                            {new Date(item.tanggal).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })}
+                                                            {new Date(item.createdAt || item.tanggal).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })}
                                                         </p>
                                                     </div>
                                                     <div className="sm:hidden ml-auto text-right">

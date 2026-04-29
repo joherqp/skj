@@ -22,7 +22,8 @@ export const useApprovalAction = () => {
         reimburse, updateReimburse, addPettyCash,
         penjualan, updatePenjualan, cabang, rekeningBank,
         permintaanBarang, updatePermintaanBarang,
-        penyesuaianStok, updatePenyesuaianStok
+        penyesuaianStok, updatePenyesuaianStok,
+        updateRestock
     } = useDatabase();
 
     const getUnitName = (id?: string) => satuanList.find(s => s.id === id)?.nama || 'Unit';
@@ -360,7 +361,7 @@ export const useApprovalAction = () => {
                     const targetUserId = approvalItemRestock?.targetUserId || approvalItemRestock?.diajukanOleh;
                     
                     // Support both multi-item and legacy single-item payloads
-                    const items = (data?.items as any[]) || (data?.barangId ? [data] : []);
+                    const items = (approvalItemRestock?.data?.items as any[]) || (data?.items as any[]) || (data?.barangId ? [data] : []);
 
                     if (items.length > 0 && targetUserId) {
                         for (const item of items) {
@@ -392,6 +393,23 @@ export const useApprovalAction = () => {
                                 }
                             }
                         }
+
+                        const restockIds = items
+                            .filter((item: any) => item.restockId)
+                            .map((item: any) => item.restockId);
+
+                        await Promise.all(restockIds.map(async (restockId: string) => {
+                            try {
+                                await updateRestock(restockId, {
+                                    status: 'disetujui',
+                                    persetujuanId: id,
+                                    disetujuiOleh: user?.id
+                                });
+                            } catch (err) {
+                                console.warn('Failed to update restock row after approval', err);
+                            }
+                        }));
+
                         toast.success(`Restock disetujui. Stok bertambah untuk ${items.length} barang.`);
                     } else {
                         toast.error('Data restock tidak lengkap atau user target tidak ditemukan');

@@ -575,21 +575,6 @@ ${profilPerusahaan?.nama || ''}`;
                   <ArrowLeftRight className="w-4 h-4 mr-2" />
                   Mutasi Pelanggan
                 </DropdownMenuItem>
-                {(isAdminOrOwner || user?.roles.includes('sales')) && (
-                  <DropdownMenuItem 
-                    onClick={() => {
-                      setMergeTarget(null);
-                      setMergeSource(null);
-                      setSearchTarget('');
-                      setSearchMerge('');
-                      setShowMergeDialog(true);
-                    }} 
-                    className="cursor-pointer text-amber-600 focus:text-amber-700 focus:bg-amber-50"
-                  >
-                    <ArrowLeftRight className="w-4 h-4 mr-2" />
-                    Satukan Data (Merge)
-                  </DropdownMenuItem>
-                )}
               </DropdownMenuContent>
             </DropdownMenu>
           )}

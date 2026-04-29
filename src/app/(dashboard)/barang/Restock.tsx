@@ -34,7 +34,7 @@ export function RestockForm({ embedded, onSuccess }: RestockFormProps) {
   const returnTo = searchParams.get('returnTo');
 
   const {
-    barang, addPersetujuan, addNotifikasi,
+    barang, addRestock, addPersetujuan, addNotifikasi,
     users, cabang, satuan: satuanList
   } = useDatabase();
   const { user, hasRole } = useAuth();
@@ -111,9 +111,11 @@ export function RestockForm({ embedded, onSuccess }: RestockFormProps) {
     setIsConfirmOpen(true);
   };
 
-  const executeSubmit = () => {
+  const executeSubmit = async () => {
     const receiverUser = users.find(u => u.id === formData.receiverId);
-    
+    const timestamp = Date.now();
+    const nomorRestock = `RSK/${timestamp.toString().slice(-6)}`;
+
     const itemsData = cart.map(item => {
       const b = barang.find(x => x.id === item.barangId)!;
       const totalQty = item.jumlah * item.konversi;
@@ -131,9 +133,32 @@ export function RestockForm({ embedded, onSuccess }: RestockFormProps) {
 
     const totalNilai = itemsData.reduce((sum, it) => sum + it.nilai, 0);
 
+    const createdRestocks = await Promise.all(itemsData.map(item =>
+      addRestock({
+        id: crypto.randomUUID(),
+        nomorRestock,
+        tanggal: new Date(),
+        barangId: item.barangId,
+        jumlah: item.jumlah,
+        satuanId: item.satuanId,
+        konversi: item.konversi,
+        cabangId: targetCabangId,
+        penerimaId: formData.receiverId,
+        dibuatOleh: user?.id,
+        status: 'pending',
+        keterangan: formData.keterangan
+      })
+    ));
+
+    const restockItemIds = createdRestocks.map(item => item.id);
+    const restockDataItems = itemsData.map((item, index) => ({
+      ...item,
+      restockId: restockItemIds[index]
+    }));
+
     addPersetujuan({
       jenis: 'restock',
-      referensiId: itemsData[0].barangId,
+      referensiId: restockItemIds[0] || itemsData[0].barangId,
       status: 'pending',
       diajukanOleh: user!.id,
       targetRole: 'gudang',
@@ -142,7 +167,8 @@ export function RestockForm({ embedded, onSuccess }: RestockFormProps) {
       tanggalPengajuan: new Date(),
       catatan: formData.keterangan,
       data: {
-        items: itemsData,
+        nomorRestock,
+        items: restockDataItems,
         nilai: totalNilai,
         receiverName: receiverUser?.nama,
         receiverId: formData.receiverId,

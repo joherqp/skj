@@ -74,7 +74,7 @@ export default function Penjualan() {
     const text = `📄 *NOTA PENJUALAN*
 ━━━━━━━━━━━━━━━━━━
 📌 No: ${trx.nomorNota}
-📅 Tanggal: ${formatTanggal(trx.tanggal)}
+📅 Tanggal: ${formatTanggal(trx.createdAt)}
 👤 Pelanggan: ${customerInfo?.nama || 'Umum'}
 
 📦 *Rincian Barang:*
@@ -215,7 +215,7 @@ ${user?.nama || 'Sales'}`;
       if (!aUnpaid && bUnpaid) return 1;
 
       // Priority 2: Newest Date first
-      return new Date(b.tanggal).getTime() - new Date(a.tanggal).getTime();
+      return new Date(b.createdAt || b.tanggal).getTime() - new Date(a.createdAt || a.tanggal).getTime();
     });
 
   const today = new Date();
@@ -634,7 +634,7 @@ ${user?.nama || 'Sales'}`;
                             {formatRupiah(item.total)}
                           </p>
                           <p className="text-xs text-muted-foreground mt-1">
-                            {formatTanggal(item.tanggal)}
+                            {formatTanggal(item.createdAt)}
                           </p>
                           {customer?.telepon && customer.telepon !== '-' && (
                             <div className="flex gap-1 mt-2 justify-end">

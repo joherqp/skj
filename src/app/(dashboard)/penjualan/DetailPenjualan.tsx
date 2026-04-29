@@ -251,7 +251,7 @@ export default function DetailPenjualan() {
         const shareText = `📄 *NOTA PENJUALAN*
 ━━━━━━━━━━━━━━━━━━
 📌 No: ${trx.nomorNota}
-📅 Tanggal: ${formatTanggal(trx.tanggal)}
+📅 Tanggal: ${formatTanggal(trx.createdAt)}
 👤 Pelanggan: ${customerInfo?.nama || 'Umum'}
 
 📦 *Rincian Barang:*
@@ -322,8 +322,8 @@ ${profilPerusahaan.nama}`;
                             <span>NOTA: {trx.nomorNota}</span>
                         </div>
                         <div className="flex justify-between">
-                            <span>TGL : {new Date(trx.tanggal).toLocaleDateString('id-ID')}</span>
-                            <span>{new Date(trx.tanggal).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })}</span>
+                            <span>TGL : {new Date(trx.createdAt || trx.tanggal).toLocaleDateString('id-ID')}</span>
+                            <span>{new Date(trx.createdAt || trx.tanggal).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })}</span>
                         </div>
                         <div className="flex justify-between uppercase">
                             <span>PEL : {customer?.nama || 'UMUM'}</span>
@@ -433,7 +433,7 @@ ${profilPerusahaan.nama}`;
                             <h2 className="text-5xl font-black text-gray-100 uppercase mb-2">INVOICE</h2>
                             <div className="space-y-0.5">
                                 <p className="font-black text-xl text-primary">{trx.nomorNota}</p>
-                                <p className="text-gray-500 font-bold">{formatTanggal(trx.tanggal)}</p>
+                                <p className="text-gray-500 font-bold">{formatTanggal(trx.createdAt)}</p>
                             </div>
                         </div>
                     </div>
@@ -581,8 +581,8 @@ ${profilPerusahaan.nama}`;
                                 <div className="flex flex-wrap items-center gap-x-6 gap-y-2 text-muted-foreground text-sm">
                                     <div className="flex items-center gap-2 font-medium">
                                         <Calendar className="w-4 h-4 text-primary/60" />
-                                        <span>{formatTanggal(trx.tanggal)}</span>
-                                        <span className="opacity-60">{formatWaktu(trx.tanggal)}</span>
+                                        <span>{formatTanggal(trx.createdAt)}</span>
+                                        <span className="opacity-60">{formatWaktu(trx.createdAt)}</span>
                                     </div>
                                     <div className="flex items-center gap-2 font-medium">
                                         <User className="w-4 h-4 text-primary/60" />
