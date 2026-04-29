@@ -484,6 +484,8 @@ export interface MutasiBarang {
   dariCabangId?: string;
   persetujuanId?: string; // FK to persetujuan for bidirectional sync
   createdBy?: string;
+  disetujuiOleh?: string;
+  updatedAt?: Date;
 }
 
 export interface MutasiItem {
@@ -500,14 +502,25 @@ export interface SaldoPengguna {
   updatedAt: Date;
 }
 
+export interface RestockItem {
+  barangId: string;
+  namaBarang: string;
+  jumlah: number;
+  satuanId: string;
+  konversi: number;
+  totalQty: number;
+  nilai: number;
+}
+
 export interface Restock {
   id: string;
   nomorRestock: string;
   tanggal: Date;
-  barangId: string;
-  jumlah: number;
-  satuanId?: string;
-  konversi?: number;
+  barangId?: string | null;
+  jumlah?: number | null;
+  satuanId?: string | null;
+  konversi?: number | null;
+  produk?: RestockItem[] | null;
   cabangId?: string;
   penerimaId?: string;
   dibuatOleh?: string;
@@ -518,6 +531,7 @@ export interface Restock {
   createdAt?: Date;
   updatedAt?: Date;
 }
+
 
 export interface Reimburse {
   id: string;

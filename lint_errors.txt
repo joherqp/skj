@@ -1,0 +1,46 @@
+
+> cvskj_nextjs@0.0.0 lint
+> eslint . --quiet
+
+
+/Users/herujohaeri/Data Local/skj/src/app/(dashboard)/laporan/JadwalHargaPromo.tsx
+   56:39  error  React Hook "useState" is called conditionally. React Hooks must be called in the exact same order in every component render   react-hooks/rules-of-hooks
+   57:45  error  React Hook "useState" is called conditionally. React Hooks must be called in the exact same order in every component render   react-hooks/rules-of-hooks
+   60:41  error  React Hook "useState" is called conditionally. React Hooks must be called in the exact same order in every component render   react-hooks/rules-of-hooks
+   61:55  error  React Hook "useState" is called conditionally. React Hooks must be called in the exact same order in every component render   react-hooks/rules-of-hooks
+   62:43  error  React Hook "useState" is called conditionally. React Hooks must be called in the exact same order in every component render   react-hooks/rules-of-hooks
+   64:5   error  React Hook "useEffect" is called conditionally. React Hooks must be called in the exact same order in every component render  react-hooks/rules-of-hooks
+  267:32  error  React Hook "useMemo" is called conditionally. React Hooks must be called in the exact same order in every component render    react-hooks/rules-of-hooks
+
+/Users/herujohaeri/Data Local/skj/src/app/(dashboard)/laporan/LaporanAbsensi.tsx
+   40:43  error  React Hook "useState" is called conditionally. React Hooks must be called in the exact same order in every component render                                                                react-hooks/rules-of-hooks
+   43:3   error  React Hook "useEffect" is called conditionally. React Hooks must be called in the exact same order in every component render                                                               react-hooks/rules-of-hooks
+   53:43  error  React Hook "useState" is called conditionally. React Hooks must be called in the exact same order in every component render                                                                react-hooks/rules-of-hooks
+   59:25  error  React Hook "useMemo" is called conditionally. React Hooks must be called in the exact same order in every component render. Did you accidentally call a React Hook after an early return?  react-hooks/rules-of-hooks
+   84:28  error  React Hook "useMemo" is called conditionally. React Hooks must be called in the exact same order in every component render. Did you accidentally call a React Hook after an early return?  react-hooks/rules-of-hooks
+   96:23  error  React Hook "useMemo" is called conditionally. React Hooks must be called in the exact same order in every component render. Did you accidentally call a React Hook after an early return?  react-hooks/rules-of-hooks
+  151:32  error  React Hook "useMemo" is called conditionally. React Hooks must be called in the exact same order in every component render. Did you accidentally call a React Hook after an early return?  react-hooks/rules-of-hooks
+
+/Users/herujohaeri/Data Local/skj/src/app/(dashboard)/laporan/LaporanReimburse.tsx
+   30:39  error  React Hook "useState" is called conditionally. React Hooks must be called in the exact same order in every component render                                                                  react-hooks/rules-of-hooks
+   31:43  error  React Hook "useState" is called conditionally. React Hooks must be called in the exact same order in every component render                                                                  react-hooks/rules-of-hooks
+   32:39  error  React Hook "useState" is called conditionally. React Hooks must be called in the exact same order in every component render                                                                  react-hooks/rules-of-hooks
+   33:43  error  React Hook "useState" is called conditionally. React Hooks must be called in the exact same order in every component render                                                                  react-hooks/rules-of-hooks
+   35:53  error  React Hook "useState" is called conditionally. React Hooks must be called in the exact same order in every component render. Did you accidentally call a React Hook after an early return?   react-hooks/rules-of-hooks
+   38:3   error  React Hook "useEffect" is called conditionally. React Hooks must be called in the exact same order in every component render. Did you accidentally call a React Hook after an early return?  react-hooks/rules-of-hooks
+   45:49  error  React Hook "useState" is called conditionally. React Hooks must be called in the exact same order in every component render. Did you accidentally call a React Hook after an early return?   react-hooks/rules-of-hooks
+   46:43  error  React Hook "useState" is called conditionally. React Hooks must be called in the exact same order in every component render. Did you accidentally call a React Hook after an early return?   react-hooks/rules-of-hooks
+   52:22  error  React Hook "useMemo" is called conditionally. React Hooks must be called in the exact same order in every component render. Did you accidentally call a React Hook after an early return?    react-hooks/rules-of-hooks
+   56:32  error  React Hook "useMemo" is called conditionally. React Hooks must be called in the exact same order in every component render. Did you accidentally call a React Hook after an early return?    react-hooks/rules-of-hooks
+  127:31  error  React Hook "useMemo" is called conditionally. React Hooks must be called in the exact same order in every component render. Did you accidentally call a React Hook after an early return?    react-hooks/rules-of-hooks
+  145:52  error  React Hook "useMemo" is called conditionally. React Hooks must be called in the exact same order in every component render. Did you accidentally call a React Hook after an early return?    react-hooks/rules-of-hooks
+  204:22  error  React Hook "useMemo" is called conditionally. React Hooks must be called in the exact same order in every component render. Did you accidentally call a React Hook after an early return?    react-hooks/rules-of-hooks
+
+/Users/herujohaeri/Data Local/skj/src/app/(dashboard)/pengaturan/ImportPenjualan.tsx
+  474:15  error  'p0' is never reassigned. Use 'const' instead  prefer-const
+  475:15  error  'p1' is never reassigned. Use 'const' instead  prefer-const
+  476:15  error  'p2' is never reassigned. Use 'const' instead  prefer-const
+
+✖ 30 problems (30 errors, 0 warnings)
+  3 errors and 0 warnings potentially fixable with the `--fix` option.
+

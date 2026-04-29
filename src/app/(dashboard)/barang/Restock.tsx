@@ -46,8 +46,8 @@ export function RestockForm({ embedded, onSuccess }: RestockFormProps) {
   });
 
   const [cart, setCart] = useState<{ barangId: string; jumlah: number; satuanId: string; konversi: number }[]>([]);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [isConfirmOpen, setIsConfirmOpen] = useState(false);
-
   const isOwner = hasRole(['owner', 'admin']);
   const targetCabangId = isOwner && formData.cabangId ? formData.cabangId : (user?.cabangId || '');
 
@@ -112,93 +112,99 @@ export function RestockForm({ embedded, onSuccess }: RestockFormProps) {
   };
 
   const executeSubmit = async () => {
-    const receiverUser = users.find(u => u.id === formData.receiverId);
-    const timestamp = Date.now();
-    const nomorRestock = `RSK/${timestamp.toString().slice(-6)}`;
+    if (isSubmitting) return;
+    setIsSubmitting(true);
+    
+    try {
+      const receiverUser = users.find(u => u.id === formData.receiverId);
+      const now = new Date();
+      const datePart = now.getFullYear().toString() + 
+                       (now.getMonth() + 1).toString().padStart(2, '0') + 
+                       now.getDate().toString().padStart(2, '0');
+      const timePart = now.getHours().toString().padStart(2, '0') + 
+                       now.getMinutes().toString().padStart(2, '0') + 
+                       now.getSeconds().toString().padStart(2, '0');
+      const nomorRestock = `RSK/${datePart}-${timePart}`;
 
-    const itemsData = cart.map(item => {
-      const b = barang.find(x => x.id === item.barangId)!;
-      const totalQty = item.jumlah * item.konversi;
-      const nilai = totalQty * (b.hargaBeli || 0);
-      return {
-        barangId: b.id,
-        namaBarang: b.nama,
-        jumlah: item.jumlah,
-        satuanId: item.satuanId,
-        konversi: item.konversi,
-        totalQty,
-        nilai
-      };
-    });
+      const itemsData = cart.map(item => {
+        const b = barang.find(x => x.id === item.barangId)!;
+        const totalQty = item.jumlah * item.konversi;
+        const nilai = totalQty * (b.hargaBeli || 0);
+        return {
+          barangId: b.id,
+          namaBarang: b.nama,
+          jumlah: item.jumlah,
+          satuanId: item.satuanId,
+          konversi: item.konversi,
+          totalQty: totalQty,
+          nilai
+        };
+      });
 
-    const totalNilai = itemsData.reduce((sum, it) => sum + it.nilai, 0);
+      const totalNilai = itemsData.reduce((sum, it) => sum + it.nilai, 0);
 
-    const createdRestocks = await Promise.all(itemsData.map(item =>
-      addRestock({
+      const restockRecord = await addRestock({
         id: crypto.randomUUID(),
         nomorRestock,
         tanggal: new Date(),
-        barangId: item.barangId,
-        jumlah: item.jumlah,
-        satuanId: item.satuanId,
-        konversi: item.konversi,
+        produk: itemsData,
         cabangId: targetCabangId,
         penerimaId: formData.receiverId,
         dibuatOleh: user?.id,
         status: 'pending',
         keterangan: formData.keterangan
-      })
-    ));
+      });
 
-    const restockItemIds = createdRestocks.map(item => item.id);
-    const restockDataItems = itemsData.map((item, index) => ({
-      ...item,
-      restockId: restockItemIds[index]
-    }));
+      addPersetujuan({
+        jenis: 'restock',
+        referensiId: restockRecord.id,
+        status: 'pending',
+        diajukanOleh: user!.id,
+        targetRole: 'gudang',
+        targetCabangId: targetCabangId,
+        targetUserId: formData.receiverId,
+        tanggalPengajuan: new Date(),
+        catatan: formData.keterangan,
+        data: {
+          nomorRestock,
+          items: itemsData,
+          nilai: totalNilai,
+          receiverName: receiverUser?.nama,
+          receiverId: formData.receiverId,
+          targetCabangName: cabang.find(c => c.id === targetCabangId)?.nama
+        }
+      });
 
-    addPersetujuan({
-      jenis: 'restock',
-      referensiId: restockItemIds[0] || itemsData[0].barangId,
-      status: 'pending',
-      diajukanOleh: user!.id,
-      targetRole: 'gudang',
-      targetCabangId: targetCabangId,
-      targetUserId: formData.receiverId,
-      tanggalPengajuan: new Date(),
-      catatan: formData.keterangan,
-      data: {
-        nomorRestock,
-        items: restockDataItems,
-        nilai: totalNilai,
-        receiverName: receiverUser?.nama,
-        receiverId: formData.receiverId,
-        targetCabangName: cabang.find(c => c.id === targetCabangId)?.nama
-      }
-    });
 
-    const itemDetails = itemsData.map(it => `${it.jumlah} ${satuanList.find(s => s.id === it.satuanId)?.simbol || ''} ${it.namaBarang}`).join(', ');
+      const itemDetails = itemsData.map(it => `${it.jumlah} ${satuanList.find(s => s.id === it.satuanId)?.simbol || ''} ${it.namaBarang}`).join(', ');
 
-    addNotifikasi({
-      userId: formData.receiverId,
-      judul: 'Ada Barang Masuk Nih!',
-      pesan: `${user?.nama || 'Seseorang'} ngirim ${itemDetails} ke kamu. Yuk dicek dan diterima!`,
-      jenis: 'info',
-      dibaca: false,
-      tanggal: new Date(),
-      link: '/persetujuan'
-    });
+      addNotifikasi({
+        userId: formData.receiverId,
+        judul: 'Ada Barang Masuk Nih!',
+        pesan: `${user?.nama || 'Seseorang'} ngirim ${itemDetails} ke kamu. Yuk dicek dan diterima!`,
+        jenis: 'info',
+        dibaca: false,
+        tanggal: new Date(),
+        link: '/persetujuan'
+      });
 
-    toast.success('Permintaan Barang Masuk terkirim.');
-    setIsConfirmOpen(false);
+      toast.success('Permintaan Barang Masuk terkirim.');
+      setIsConfirmOpen(false);
 
-    if (onSuccess) {
-      onSuccess();
-    } else {
-      if (returnTo) {
-        router.push(returnTo);
+      if (onSuccess) {
+        onSuccess();
       } else {
-        router.push('/barang');
+        if (returnTo) {
+          router.push(returnTo);
+        } else {
+          router.push('/barang');
+        }
       }
+    } catch (error) {
+      console.error('Error submitting restock:', error);
+      toast.error('Gagal mengirim permintaan restock');
+    } finally {
+      setIsSubmitting(false);
     }
   };
 

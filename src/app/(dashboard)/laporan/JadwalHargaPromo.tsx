@@ -55,7 +55,7 @@ export default function JadwalHargaPromo() {
     if (!user) return null;
     const [activeTab, setActiveTab] = useState('aktif');
     const [selectedItem, setSelectedItem] = useState<ScheduleItem | null>(null);
-    
+
     // Filters
     const [searchTerm, setSearchTerm] = useState('');
     const [selectedCabangIds, setSelectedCabangIds] = useState<string[]>([]);
@@ -89,16 +89,16 @@ export default function JadwalHargaPromo() {
         persetujuan.filter(p => {
             if (p.status !== 'pending') return false;
             if (isGlobal) return true;
-            
+
             const pData = p.data as PersetujuanPayload;
             const targetBranches = pData?.cabangIds || [];
-            
+
             // Check singular target
             if (p.targetCabangId && p.targetCabangId === userBranch) return true;
-            
+
             // Check multi-branch target
             if (targetBranches.length > 0) return targetBranches.includes(userBranch!);
-            
+
             // If it's truly global (no specific target), visible to everyone
             return !p.targetCabangId && targetBranches.length === 0;
         }).forEach(p => {
@@ -152,13 +152,13 @@ export default function JadwalHargaPromo() {
         harga.filter(h => {
             if (h.status === 'ditolak') return false;
             if (isGlobal) return true;
-            
+
             // Match singular branch
             if (h.cabangId && h.cabangId === userBranch) return true;
-            
+
             // Match multi-branch array
             if (h.cabangIds && h.cabangIds.includes(userBranch!)) return true;
-            
+
             // Global price (no branch restriction)
             return !h.cabangId && (!h.cabangIds || h.cabangIds.length === 0);
         }).forEach(h => {
@@ -215,13 +215,13 @@ export default function JadwalHargaPromo() {
         // Promo
         promo.filter(p => {
             if (isGlobal) return true;
-            
+
             // Match singular branch
             if (p.cabangId && p.cabangId === userBranch) return true;
-            
+
             // Match multi-branch array
             if (p.cabangIds && p.cabangIds.includes(userBranch!)) return true;
-            
+
             // Global promo
             return !p.cabangId && (!p.cabangIds || p.cabangIds.length === 0);
         }).forEach(p => {
@@ -429,7 +429,7 @@ export default function JadwalHargaPromo() {
                                 selectedCabangIds={selectedCabangIds}
                                 setSelectedCabangIds={setSelectedCabangIds}
                                 selectedUserIds={[]}
-                                setSelectedUserIds={() => {}}
+                                setSelectedUserIds={() => { }}
                                 availableCabangIds={availableCabangIds}
                                 showUserFilter={false}
                             />
@@ -470,40 +470,40 @@ export default function JadwalHargaPromo() {
                                                 </div>
 
                                                 <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-1">
-                                                     <div>
-                                                         <p className="font-bold text-sm md:text-lg leading-tight truncate max-w-[200px] md:max-w-none">{item.title}</p>
-                                                         {item.subtitle && <p className="text-[10px] md:text-sm text-muted-foreground mt-0.5">{item.subtitle}</p>}
-                                                         {item.cabangIds && item.cabangIds.length > 0 ? (
-                                                             <div className="flex flex-wrap gap-1 mt-1">
-                                                                 {item.cabangIds
+                                                    <div>
+                                                        <p className="font-bold text-sm md:text-lg leading-tight truncate max-w-[200px] md:max-w-none">{item.title}</p>
+                                                        {item.subtitle && <p className="text-[10px] md:text-sm text-muted-foreground mt-0.5">{item.subtitle}</p>}
+                                                        {item.cabangIds && item.cabangIds.length > 0 ? (
+                                                            <div className="flex flex-wrap gap-1 mt-1">
+                                                                {item.cabangIds
                                                                     .map(id => ({ id, nama: cabang.find(c => c.id === id)?.nama || id }))
                                                                     .sort((a, b) => a.nama.localeCompare(b.nama))
                                                                     .slice(0, 3)
                                                                     .map(c => (
-                                                                     <Badge key={c.id} variant="outline" className="text-[9px] px-1 py-0 h-4 bg-blue-50 text-blue-600 border-blue-100">
-                                                                         {c.nama}
-                                                                     </Badge>
-                                                                 ))}
-                                                                 {item.cabangIds.length > 3 && (
-                                                                     <span className="text-[9px] text-muted-foreground">+{item.cabangIds.length - 3}</span>
-                                                                 )}
-                                                             </div>
-                                                         ) : (
-                                                             <p className="text-[10px] text-muted-foreground mt-0.5 flex items-center gap-1">
-                                                                 <Building2 className="w-3 h-3" /> Global (Semua Cabang)
-                                                             </p>
-                                                         )}
-                                                     </div>
-                                                      <div className="text-left sm:text-right bg-slate-50 sm:bg-transparent p-1.5 sm:p-0 rounded sm:rounded-none flex items-center justify-between sm:block">
-                                                         <p className="text-[10px] text-muted-foreground uppercase sm:hidden md:block">Nilai</p>
-                                                         <div className="flex flex-col items-end">
+                                                                        <Badge key={c.id} variant="outline" className="text-[9px] px-1 py-0 h-4 bg-blue-50 text-blue-600 border-blue-100">
+                                                                            {c.nama}
+                                                                        </Badge>
+                                                                    ))}
+                                                                {item.cabangIds.length > 3 && (
+                                                                    <span className="text-[9px] text-muted-foreground">+{item.cabangIds.length - 3}</span>
+                                                                )}
+                                                            </div>
+                                                        ) : (
+                                                            <p className="text-[10px] text-muted-foreground mt-0.5 flex items-center gap-1">
+                                                                <Building2 className="w-3 h-3" /> Global (Semua Cabang)
+                                                            </p>
+                                                        )}
+                                                    </div>
+                                                    <div className="text-left sm:text-right bg-slate-50 sm:bg-transparent p-1.5 sm:p-0 rounded sm:rounded-none flex items-center justify-between sm:block">
+                                                        <p className="text-[10px] text-muted-foreground uppercase sm:hidden md:block">Nilai</p>
+                                                        <div className="flex flex-col items-end">
                                                             <p className="font-bold text-base md:text-xl font-mono text-primary">{item.value}</p>
                                                             {item.oldValue && (
                                                                 <p className="text-[10px] text-muted-foreground line-through decoration-destructive/50">{item.oldValue}</p>
                                                             )}
-                                                         </div>
-                                                     </div>
-                                                 </div>
+                                                        </div>
+                                                    </div>
+                                                </div>
 
                                                 {item.type === 'harga' && item.details.grosir?.length > 0 && (
                                                     <div className="pt-1.5 border-t flex gap-3 text-[10px] md:text-xs text-muted-foreground">
@@ -607,24 +607,24 @@ export default function JadwalHargaPromo() {
                                                 <div>
                                                     <p className="font-medium">Cabang</p>
                                                     <p className="text-muted-foreground text-xs">
-                                                     <div className="flex flex-wrap gap-1">
-                                                        {selectedItem.details.cabangIds && selectedItem.details.cabangIds.length > 0 ? (
-                                                            selectedItem.details.cabangIds
-                                                                .map((id: string) => ({ id, nama: cabang.find(c => c.id === id)?.nama || id }))
-                                                                .sort((a: any, b: any) => a.nama.localeCompare(b.nama))
-                                                                .map((c: any) => (
-                                                                <Badge key={c.id} variant="secondary" className="text-[10px]">
-                                                                    {c.nama}
+                                                        <div className="flex flex-wrap gap-1">
+                                                            {selectedItem.details.cabangIds && selectedItem.details.cabangIds.length > 0 ? (
+                                                                selectedItem.details.cabangIds
+                                                                    .map((id: string) => ({ id, nama: cabang.find(c => c.id === id)?.nama || id }))
+                                                                    .sort((a: any, b: any) => a.nama.localeCompare(b.nama))
+                                                                    .map((c: any) => (
+                                                                        <Badge key={c.id} variant="secondary" className="text-[10px]">
+                                                                            {c.nama}
+                                                                        </Badge>
+                                                                    ))
+                                                            ) : selectedItem.details.cabangId ? (
+                                                                <Badge variant="secondary" className="text-[10px]">
+                                                                    {cabang.find(c => c.id === selectedItem.details.cabangId)?.nama || selectedItem.details.cabangId}
                                                                 </Badge>
-                                                            ))
-                                                        ) : selectedItem.details.cabangId ? (
-                                                            <Badge variant="secondary" className="text-[10px]">
-                                                                {cabang.find(c => c.id === selectedItem.details.cabangId)?.nama || selectedItem.details.cabangId}
-                                                            </Badge>
-                                                        ) : (
-                                                            <span className="text-muted-foreground text-xs italic">Semua Cabang (Global)</span>
-                                                        )}
-                                                     </div>
+                                                            ) : (
+                                                                <span className="text-muted-foreground text-xs italic">Semua Cabang (Global)</span>
+                                                            )}
+                                                        </div>
                                                     </p>
                                                 </div>
                                             </div>
@@ -692,11 +692,11 @@ export default function JadwalHargaPromo() {
                                                             .map((id: string) => ({ id, nama: barang.find(b => b.id === id)?.nama || 'Unknown Product' }))
                                                             .sort((a: any, b: any) => a.nama.localeCompare(b.nama))
                                                             .map((p: any) => (
-                                                            <li key={p.id} className="flex items-center gap-2">
-                                                                <CheckCircle className="w-3 h-3 text-green-600" />
-                                                                {p.nama}
-                                                            </li>
-                                                        ))}
+                                                                <li key={p.id} className="flex items-center gap-2">
+                                                                    <CheckCircle className="w-3 h-3 text-green-600" />
+                                                                    {p.nama}
+                                                                </li>
+                                                            ))}
                                                     </ul>
                                                 </div>
                                             </div>

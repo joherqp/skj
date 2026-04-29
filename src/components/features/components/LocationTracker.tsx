@@ -18,7 +18,7 @@ export function LocationTracker() {
         navigator.geolocation.getCurrentPosition(
           async (position) => {
             const { latitude, longitude } = position.coords;
-            
+
             try {
               const { error } = await supabase.schema(dbMode).from('user_locations').insert({
                 user_id: user.id,

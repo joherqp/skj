@@ -136,7 +136,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       // User doesn't exist in public.users, create default profile
       const defaultCabangId = '550e8400-e29b-41d4-a716-446655440002';
-      
+
       const emailForProfile = userEmail || '';
       const usernameForProfile = emailForProfile.split('@')[0] || 'user';
       const nameForProfile = typeof authUser !== 'string' ? (authUser.user_metadata?.full_name || usernameForProfile) : usernameForProfile;
@@ -193,28 +193,28 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     try {
       setSupabaseUser(sUser);
-    
-    // Defensive timeout for profile loading
-    const profile = await withTimeout(
-      loadUserProfile(sUser),
-      15000,
-      'User profile load'
-    ).catch(err => {
-      console.error('Profile load timed out or failed:', err);
-      return null;
-    });
-    if (profile) {
-      if (!profile.isActive) {
-        toast.error('Akun Anda belum aktif. Silakan hubungi admin untuk aktivasi.');
-        await supabase.auth.signOut();
-        setUser(null);
-        setSupabaseUser(null);
-        return;
-      }
-      setUser({
-        ...profile,
-        email: sUser.email || profile.email,
+
+      // Defensive timeout for profile loading
+      const profile = await withTimeout(
+        loadUserProfile(sUser),
+        15000,
+        'User profile load'
+      ).catch(err => {
+        console.error('Profile load timed out or failed:', err);
+        return null;
       });
+      if (profile) {
+        if (!profile.isActive) {
+          toast.error('Akun Anda belum aktif. Silakan hubungi admin untuk aktivasi.');
+          await supabase.auth.signOut();
+          setUser(null);
+          setSupabaseUser(null);
+          return;
+        }
+        setUser({
+          ...profile,
+          email: sUser.email || profile.email,
+        });
       } else {
         console.error('Failed to load user profile after session restoration');
       }
@@ -232,11 +232,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const initialize = useCallback(async () => {
     if (isInitializingRef.current) return;
     isInitializingRef.current = true;
-    
+
     try {
       console.log('Starting auth initialization...');
       const startTime = Date.now();
-      
+
       const { data: { session }, error } = await withTimeout(
         supabase.auth.getSession(),
         AUTH_TIMEOUT_MS,
@@ -278,14 +278,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       data: { subscription },
     } = supabase.auth.onAuthStateChange(async (event, session) => {
       console.log(`Auth State Change Event: ${event}, Session: ${!!session}`);
-      
+
       if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED' || event === 'INITIAL_SESSION') {
         await applySessionUser(session?.user ?? null);
       } else if (event === 'SIGNED_OUT') {
         setUser(null);
         setSupabaseUser(null);
       }
-      
+
       // Only set loading false if we're not already in the middle of initialization
       // to avoid race conditions with the initialize() function
       if (!isInitializingRef.current) {
@@ -346,12 +346,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const login = useCallback(async (usernameOrEmail: string, password: string): Promise<boolean> => {
     try {
       console.warn('Email/password login is deprecated. Use Google Auth.');
-      
+
       let email = usernameOrEmail;
 
       // Lookup email by username using RPC (bypasses RLS for unauthenticated users)
-      const { data: foundEmail, error: rpcError } = await supabase.rpc('get_user_email_by_username', { 
-        p_username: usernameOrEmail 
+      const { data: foundEmail, error: rpcError } = await supabase.rpc('get_user_email_by_username', {
+        p_username: usernameOrEmail
       });
 
       if (!rpcError && foundEmail) {

@@ -209,7 +209,8 @@ export const useApprovalAction = () => {
                         await updateSetoran(refId, {
                             status: 'disetujui',
                             disetujuiOleh: user?.id,
-                            persetujuanId: id
+                            persetujuanId: id,
+                            tanggal: new Date()
                         });
 
                         try {
@@ -303,119 +304,51 @@ export const useApprovalAction = () => {
                 case 'mutasi':
                 case 'mutasi_stok': {
                     const approvalItem = persetujuan.find(p => p.id === id);
-                    if (approvalItem && (approvalItem.data as PersetujuanPayload)?.items) {
-                        const senderId = approvalItem.diajukanOleh;
-                        const receiverId = approvalItem.targetUserId;
+                    const mutasiId = approvalItem?.referensiId;
 
-                        if (receiverId) {
-                            const payload = approvalItem.data as { items?: { barangId: string, jumlah: number, konversi?: number }[] };
-                            const itemsToProcess = payload?.items || [];
-                            const senderName = users.find(u => u.id === senderId)?.nama || 'Pengirim';
-                            const receiverName = users.find(u => u.id === receiverId)?.nama || 'Penerima';
-
-                            for (const mItem of itemsToProcess) {
-                                const qtyBase = mItem.jumlah * (mItem.konversi || 1);
-
-                                // 1. Decrement Sender
-                                const senderStock = stokPengguna.find(s => s.userId === senderId && s.barangId === mItem.barangId);
-                                if (senderStock) {
-                                    const newQty = Math.max(0, senderStock.jumlah - qtyBase);
-                                    await updateStokPengguna(senderStock.id, { jumlah: newQty });
-                                }
-
-                                // 2. Increment Receiver
-                                const receiverStock = stokPengguna.find(s => s.userId === receiverId && s.barangId === mItem.barangId);
-                                if (receiverStock) {
-                                    await updateStokPengguna(receiverStock.id, { jumlah: receiverStock.jumlah + qtyBase });
-                                } else {
-                                    await addStokPengguna({
-                                        userId: receiverId,
-                                        barangId: mItem.barangId,
-                                        jumlah: qtyBase
-                                    });
-                                }
-                            }
-
-                            // 3. Update Mutasi Barang Status with persetujuan_id
-                            // Database trigger will sync status back to persetujuan
-                            if (approvalItem.referensiId) {
-                                const mutasi = mutasiBarang.find(m => m.id === approvalItem.referensiId);
-                                if (mutasi) {
-                                    await updateMutasiBarang(approvalItem.referensiId, {
-                                        status: 'disetujui',
-                                        persetujuanId: id // Link for bidirectional sync
-                                    });
-                                }
-                            }
-
-                            toast.success(`Mutasi diterima. Stok berpindah dari ${senderName} ke ${receiverName}.`);
-                        } else {
-                            toast.warning('Penerima tidak spesifik, stok hanya dicatat secara administratif.');
+                    if (mutasiId) {
+                        try {
+                            await updateMutasiBarang(mutasiId, {
+                                status: 'disetujui',
+                                disetujuiOleh: user?.id,
+                                persetujuanId: id,
+                                tanggal: new Date(),
+                                updatedAt: new Date()
+                            });
+                            toast.success('Mutasi disetujui. Stok otomatis disinkronkan oleh sistem.');
+                        } catch (err) {
+                            console.error('Error updating mutasi status:', err);
+                            toast.error('Gagal menyetujui mutasi.');
                         }
+                    } else {
+                        toast.error('Data mutasi tidak ditemukan.');
                     }
                     break;
                 }
 
                 case 'restock': {
                     const approvalItemRestock = persetujuan.find(p => p.id === id);
-                    const targetUserId = approvalItemRestock?.targetUserId || approvalItemRestock?.diajukanOleh;
-                    
-                    // Support both multi-item and legacy single-item payloads
-                    const items = (approvalItemRestock?.data?.items as any[]) || (data?.items as any[]) || (data?.barangId ? [data] : []);
+                    const restockId = approvalItemRestock?.referensiId;
 
-                    if (items.length > 0 && targetUserId) {
-                        for (const item of items) {
-                            const currentItem = barang.find(b => b.id === item.barangId);
-                            if (currentItem) {
-                                let quantityToAdd = Number(item.jumlah);
-
-                                // Handle Unit Conversion
-                                if (item.satuanId && item.satuanId !== currentItem.satuanId) {
-                                    const multiSatuan = currentItem.multiSatuan?.find((ms: any) => ms.satuanId === item.satuanId);
-                                    if (multiSatuan) {
-                                        quantityToAdd = quantityToAdd * multiSatuan.konversi;
-                                    }
-                                }
-
-                                // Update User Stock (StokPengguna)
-                                const existingStok = stokPengguna.find(s => s.userId === targetUserId && s.barangId === item.barangId);
-
-                                if (existingStok) {
-                                    await updateStokPengguna(existingStok.id, {
-                                        jumlah: existingStok.jumlah + quantityToAdd
-                                    });
-                                } else {
-                                    await addStokPengguna({
-                                        userId: targetUserId,
-                                        barangId: item.barangId,
-                                        jumlah: quantityToAdd
-                                    });
-                                }
-                            }
+                    if (restockId) {
+                        try {
+                            await updateRestock(restockId, {
+                                status: 'disetujui',
+                                persetujuanId: id,
+                                disetujuiOleh: user?.id,
+                                tanggal: new Date(),
+                                updatedAt: new Date()
+                            });
+                            toast.success('Restock disetujui. Stok otomatis disinkronkan oleh sistem.');
+                        } catch (err) {
+                            console.error('Error updating restock status:', err);
+                            toast.error('Gagal menyetujui restock.');
                         }
-
-                        const restockIds = items
-                            .filter((item: any) => item.restockId)
-                            .map((item: any) => item.restockId);
-
-                        await Promise.all(restockIds.map(async (restockId: string) => {
-                            try {
-                                await updateRestock(restockId, {
-                                    status: 'disetujui',
-                                    persetujuanId: id,
-                                    disetujuiOleh: user?.id
-                                });
-                            } catch (err) {
-                                console.warn('Failed to update restock row after approval', err);
-                            }
-                        }));
-
-                        toast.success(`Restock disetujui. Stok bertambah untuk ${items.length} barang.`);
                     } else {
-                        toast.error('Data restock tidak lengkap atau user target tidak ditemukan');
+                        toast.error('Data restock tidak ditemukan.');
                     }
-                }
                     break;
+                }
                 case 'mutasi_user':
                     // Logic for User/Employee Update
                     if (data) {
