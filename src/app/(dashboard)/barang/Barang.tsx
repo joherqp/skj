@@ -70,13 +70,6 @@ export default function Barang() {
                             isAdminOrOwner={isAdminOrOwner}
                         />
 
-                        {isAdminOrOwner && (
-                            <Button onClick={() => router.push('/pengaturan/produk')} className="bg-primary hover:bg-primary/90">
-                                <PackagePlus className="w-4 h-4 mr-2" />
-                                Baru
-                            </Button>
-                        )}
-
                         <Button onClick={() => router.push('/barang/update-stok')} variant="secondary" className="border-primary/20 bg-primary/5 text-primary hover:bg-primary/10">
                             <PackagePlus className="w-4 h-4 mr-2" />
                             Update

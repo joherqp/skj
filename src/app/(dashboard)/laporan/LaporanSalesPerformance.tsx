@@ -12,7 +12,7 @@ import {
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
 import { useDatabase } from '@/contexts/DatabaseContext';
-import { formatRupiah, formatNumber } from '@/lib/utils';
+import { formatRupiah, formatNumber, toCamelCase } from '@/lib/utils';
 import { Download, History, ArrowRight, ArrowLeft } from 'lucide-react';
 import { format, startOfMonth, endOfMonth } from 'date-fns';
 import { id as localeId } from 'date-fns/locale';
@@ -59,6 +59,7 @@ export default function LaporanSalesPerformance() {
   const [loading, setLoading] = useState(false);
   const [performanceData, setPerformanceData] = useState<PerformanceItem[]>([]);
   const [availableCabangIds, setAvailableCabangIds] = useState<string[]>([]);
+  const [branchUserIds, setBranchUserIds] = useState<string[]>([]);
 
 
   const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth());
@@ -78,6 +79,17 @@ export default function LaporanSalesPerformance() {
       }
     }
   }, [user, isAdminOrOwner]);
+
+  // Fetch users in the same branch
+  useEffect(() => {
+    const fetchBranchUsers = async () => {
+      if (userCabangId) {
+        const { data } = await supabase.from('users').select('id').eq('cabang_id', userCabangId);
+        setBranchUserIds(data?.map(u => u.id) || []);
+      }
+    };
+    fetchBranchUsers();
+  }, [userCabangId]);
 
   // History State
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
@@ -103,8 +115,13 @@ export default function LaporanSalesPerformance() {
 
         // Security: Filter targets by branch if not admin
         if (!isAdminOrOwner && userCabangId) {
-          query = query.eq('cabang_id', userCabangId);
+          if (branchUserIds.length > 0) {
+            query = query.or(`cabang_id.eq.${userCabangId},sales_id.in.(${branchUserIds.join(',')})`);
+          } else {
+            query = query.eq('cabang_id', userCabangId);
+          }
         }
+        
 
         const { data: targetData, error: targetError } = await query;
         if (targetError) throw targetError;
@@ -129,7 +146,8 @@ export default function LaporanSalesPerformance() {
         let salesQuery = supabase
           .from('penjualan')
           .select('*, salesId:sales_id, cabangId:cabang_id')
-          .eq('status', 'lunas') // Changed from selesai
+          .neq('status', 'batal')
+          .neq('status', 'draft')
           .gte('tanggal', startDate.toISOString())
           .lte('tanggal', endDate.toISOString());
 
@@ -153,7 +171,7 @@ export default function LaporanSalesPerformance() {
 
         const { data, error: salesError } = await salesQuery;
         if (salesError) throw salesError;
-        const salesData = data as Penjualan[];
+        const salesData = toCamelCase(data) as Penjualan[];
 
         // 3. Calculate Performance & Apply final filtering
         const rawCalculatedData = (targetData as SalesTargetDB[])?.map((targetRow: SalesTargetDB) => {
@@ -183,9 +201,8 @@ export default function LaporanSalesPerformance() {
           const relevantSales = salesData?.filter(p => {
             const pDate = new Date(p.tanggal);
 
-            // Strict Payment Check (Consistent with Dashboard)
-            const isPaid = p.isLunas === true || (p.metodePembayaran !== 'tempo' && p.status === 'lunas');
-            if (!isPaid) return false;
+            // Include all non-batal/non-draft (Consistent with Rekap)
+            if (p.status === 'batal' || p.status === 'draft') return false;
 
             if (pDate < effectiveStart || pDate > effectiveEnd) return false;
             if (target.scope === 'sales') {
@@ -199,7 +216,7 @@ export default function LaporanSalesPerformance() {
           const actual = target.target_type === 'nominal'
             ? relevantSales.reduce((sum, p) => sum + p.total, 0)
             : relevantSales.reduce((sum, p) => sum + p.items
-              .filter((i: PenjualanItem) => i.harga > 0 && !i.promoId && !i.isBonus) // Exclude promo/bonus
+              .filter((i: PenjualanItem) => !i.isBonus && i.subtotal > 0) // Align with RekapPenjualan logic
               .reduce((s: number, i: PenjualanItem) => s + (i.totalQty !== undefined ? i.totalQty : (i.jumlah * (i.konversi || 1))), 0), 0);
 
           const percentage = target.nilai > 0 ? (actual / target.nilai) * 100 : 0;
@@ -218,7 +235,8 @@ export default function LaporanSalesPerformance() {
             return selectedCabangIds.includes(item.cabang_id || '') ||
               (item.scope === 'sales' && salesData?.some(p => p.salesId === item.sales_id));
           }
-          return item.cabang_id === userCabangId || (item.scope === 'sales' && salesData?.some(p => p.salesId === item.sales_id));
+          // Allow if target belongs to branch OR target is for a user in this branch
+          return item.cabang_id === userCabangId || (item.scope === 'sales' && branchUserIds.includes(item.sales_id || ''));
         });
 
         const sortedData = (filteredData || []).sort((a: PerformanceItem, b: PerformanceItem) => {
@@ -254,7 +272,7 @@ export default function LaporanSalesPerformance() {
     };
 
     fetchData();
-  }, [selectedMonth, selectedYear, selectedCabangIds, isAdminOrOwner, userCabangId]);
+  }, [selectedMonth, selectedYear, selectedCabangIds, isAdminOrOwner, userCabangId, branchUserIds]);
 
   const fetchHistory = async (target: PerformanceItem) => {
     setSelectedTarget(target);

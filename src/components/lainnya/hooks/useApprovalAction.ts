@@ -127,7 +127,7 @@ export const useApprovalAction = () => {
             const approvalItem = persetujuan.find(p => p.id === id);
             if (approvalItem && approvalItem.data) {
                 const payload = approvalItem.data as PersetujuanPayload;
-                
+
                 // If user is not Manager, treat as Owner approval
                 if (!user?.roles.includes('manager')) {
                     const newPayload = {
@@ -137,7 +137,7 @@ export const useApprovalAction = () => {
                             owner: { userId: user?.id || '', date: new Date().toISOString() }
                         }
                     };
-                    
+
                     await updatePersetujuan(id, {
                         data: newPayload,
                         targetRole: 'manager',
@@ -147,7 +147,7 @@ export const useApprovalAction = () => {
                     const pusatManagers = users.filter(u =>
                         u.roles.includes('manager')
                     );
-                    
+
                     await Promise.all(pusatManagers.map(mUser =>
                         addNotifikasi({
                             userId: mUser.id,
@@ -162,8 +162,8 @@ export const useApprovalAction = () => {
 
                     toast.success('Disetujui (Owner), diteruskan ke Manager.');
                     return { success: true };
-                } 
-                
+                }
+
                 // If Finance, add their approval to payload and proceed to final approval
                 if (!payload.approvals?.owner) {
                     toast.error('Gagal: Menunggu persetujuan Owner terlebih dahulu.');
@@ -177,7 +177,7 @@ export const useApprovalAction = () => {
                         finance: { userId: user?.id || '', date: new Date().toISOString() }
                     }
                 };
-                
+
                 // We update the data payload and then let it continue to final approval
                 await updatePersetujuan(id, {
                     data: newPayload
@@ -358,41 +358,41 @@ export const useApprovalAction = () => {
                 case 'restock': {
                     const approvalItemRestock = persetujuan.find(p => p.id === id);
                     const targetUserId = approvalItemRestock?.targetUserId || approvalItemRestock?.diajukanOleh;
+                    
+                    // Support both multi-item and legacy single-item payloads
+                    const items = (data?.items as any[]) || (data?.barangId ? [data] : []);
 
-                    if (data && data.barangId && data.jumlah && targetUserId) {
-                        const currentItem = barang.find(b => b.id === data.barangId);
-                        if (currentItem) {
-                            let quantityToAdd = Number(data.jumlah);
+                    if (items.length > 0 && targetUserId) {
+                        for (const item of items) {
+                            const currentItem = barang.find(b => b.id === item.barangId);
+                            if (currentItem) {
+                                let quantityToAdd = Number(item.jumlah);
 
-                            // Handle Unit Conversion
-                            if (data.satuanId && data.satuanId !== currentItem.satuanId) {
-                                const multiSatuan = currentItem.multiSatuan?.find(ms => ms.satuanId === data.satuanId);
-                                if (multiSatuan) {
-                                    quantityToAdd = quantityToAdd * multiSatuan.konversi;
+                                // Handle Unit Conversion
+                                if (item.satuanId && item.satuanId !== currentItem.satuanId) {
+                                    const multiSatuan = currentItem.multiSatuan?.find((ms: any) => ms.satuanId === item.satuanId);
+                                    if (multiSatuan) {
+                                        quantityToAdd = quantityToAdd * multiSatuan.konversi;
+                                    }
+                                }
+
+                                // Update User Stock (StokPengguna)
+                                const existingStok = stokPengguna.find(s => s.userId === targetUserId && s.barangId === item.barangId);
+
+                                if (existingStok) {
+                                    await updateStokPengguna(existingStok.id, {
+                                        jumlah: existingStok.jumlah + quantityToAdd
+                                    });
+                                } else {
+                                    await addStokPengguna({
+                                        userId: targetUserId,
+                                        barangId: item.barangId,
+                                        jumlah: quantityToAdd
+                                    });
                                 }
                             }
-
-                            // Removed Master Stock logic
-
-                            // Update User Stock (StokPengguna)
-                            const existingStok = stokPengguna.find(s => s.userId === targetUserId && s.barangId === data.barangId);
-
-                            if (existingStok) {
-                                await updateStokPengguna(existingStok.id, {
-                                    jumlah: existingStok.jumlah + quantityToAdd
-                                });
-                            } else {
-                                await addStokPengguna({
-                                    userId: targetUserId,
-                                    barangId: data.barangId,
-                                    jumlah: quantityToAdd
-                                });
-                            }
-
-                            toast.success(`Restock disetujui. Stok ${currentItem.nama} bertambah ${quantityToAdd} unit`);
-                        } else {
-                            toast.error('Barang tidak ditemukan');
                         }
+                        toast.success(`Restock disetujui. Stok bertambah untuk ${items.length} barang.`);
                     } else {
                         toast.error('Data restock tidak lengkap atau user target tidak ditemukan');
                     }
@@ -405,9 +405,9 @@ export const useApprovalAction = () => {
                         // Since Karyawan is merged into User, we just update the User record directly
                         // refId should be the userId
                         const { isCabangChanged, isStatusChanged, oldCabangId, oldStatus, ...userData } = d as Record<string, any>;
-                        
+
                         await updateUser(refId, userData);
-                        
+
                         toast.success('Mutasi pengguna disetujui');
                     }
                     break;
@@ -549,7 +549,7 @@ export const useApprovalAction = () => {
                         // Note: DatabaseContext.tsx's createItem/updateItem will call toSnakeCase
                         // so camelCase keys like minQty, isKelipatan, etc. will be handled automatically.
                         // We only need to map the "special" ones that don't follow standard naming or need conversion.
-                        
+
                         const ensureDate = (val: any) => {
                             if (!val) return undefined;
                             const d = new Date(val);
@@ -824,7 +824,7 @@ export const useApprovalAction = () => {
             console.error("Error executing approval logic:", err.message || err);
             if (err.details) console.error("Error details:", err.details);
             if (err.hint) console.error("Error hint:", err.hint);
-            
+
             toast.error(`Gagal memproses logika bisnis: ${err.message || "Terjadi kesalahan pada sistem"}`);
             return { success: false, reason: 'error_processing' }; // Don't proceed to notification
         }

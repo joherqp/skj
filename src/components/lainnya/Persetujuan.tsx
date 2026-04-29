@@ -110,7 +110,7 @@ export default function Persetujuan() {
     };
 
     // Trigger handlers
-    const handleApprove = (id: string, type: string, refId: string, data?: PersetujuanPayload, diajukanOleh?: string) => {
+    const handleApprove = (id: string, type: string, refId: string, data?: PersetujuanPayload, diajukanOleh?: string, targetUserId?: string) => {
         // Merge mutation data if applicable to ensure details are available in confirmation dialog
         let mergedData = { ...(data || {}) } as any;
         if (['mutasi', 'mutasi_stok', 'permintaan', 'restock'].includes(type) && refId) {
@@ -125,11 +125,12 @@ export default function Persetujuan() {
             action: 'approve',
             id, type, refId, 
             data: mergedData as Record<string, unknown>,
-            diajukanOleh
-        });
+            diajukanOleh,
+            targetUserId
+        } as any);
     };
 
-    const handleReject = (id: string, type: string, refId: string, data?: PersetujuanPayload, diajukanOleh?: string) => {
+    const handleReject = (id: string, type: string, refId: string, data?: PersetujuanPayload, diajukanOleh?: string, targetUserId?: string) => {
         // Merge mutation data if applicable
         let mergedData = { ...(data || {}) } as any;
         if (['mutasi', 'mutasi_stok', 'permintaan', 'restock'].includes(type) && refId) {
@@ -144,8 +145,9 @@ export default function Persetujuan() {
             action: 'reject',
             id, type, refId, 
             data: mergedData as Record<string, unknown>,
-            diajukanOleh
-        });
+            diajukanOleh,
+            targetUserId
+        } as any);
     };
 
     const [payNow, setPayNow] = useState(true); // Legacy Switch mode (unused now)
@@ -388,6 +390,7 @@ export default function Persetujuan() {
                 reimburse={reimburse}
                 barang={barang}
                 cabang={cabang}
+                satuan={satuanList}
             />
 
             <ApprovalDetailDialog
@@ -403,11 +406,11 @@ export default function Persetujuan() {
                         setReimburseMode(isWaitingPayment ? 'pay_now' : 'pay_later');
                     }
                     setDetailDialog(prev => ({ ...prev, isOpen: false }));
-                    handleApprove(item.id, item.jenis, item.referensiId as string, item.data as PersetujuanPayload, item.diajukanOleh);
+                    handleApprove(item.id, item.jenis, item.referensiId as string, item.data as PersetujuanPayload, item.diajukanOleh, item.targetUserId);
                 }}
                 onReject={(item) => {
                     setDetailDialog(prev => ({ ...prev, isOpen: false }));
-                    handleReject(item.id, item.jenis, item.referensiId as string, item.data as PersetujuanPayload, item.diajukanOleh);
+                    handleReject(item.id, item.jenis, item.referensiId as string, item.data as PersetujuanPayload, item.diajukanOleh, item.targetUserId);
                 }}
                 onPrintReport={handleDownloadReport}
                 user={user}

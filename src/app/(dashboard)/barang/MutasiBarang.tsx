@@ -31,7 +31,7 @@ interface MutasiBarangFormProps {
 
 export function MutasiBarangForm({ embedded, onSuccess, onCancel }: MutasiBarangFormProps) {
   const { user } = useAuth();
-  const { barang, addMutasiBarang, addPersetujuan, addNotifikasi, users, cabang, satuan, stokPengguna, persetujuan } = useDatabase();
+  const { barang, addMutasiBarang, addPersetujuan, addNotifikasi, users, satuan, stokPengguna, persetujuan } = useDatabase();
   
   const [isConfirmOpen, setIsConfirmOpen] = useState(false);
   const [formData, setFormData] = useState({
@@ -60,18 +60,15 @@ export function MutasiBarangForm({ embedded, onSuccess, onCancel }: MutasiBarang
 
   const [cart, setCart] = useState<{ barangId: string; jumlah: number; satuanId: string; konversi: number }[]>([]);
 
-  const addItem = () => {
-    setCart([...cart, { barangId: '', jumlah: 1, satuanId: '', konversi: 1 }]);
-  };
+
 
   const removeItem = (index: number) => {
     setCart(cart.filter((_, i) => i !== index));
   };
 
-  const updateItem = (index: number, field: 'barangId' | 'jumlah' | 'satuanId', value: string | number) => {
+  const updateItem = (index: number, field: keyof typeof cart[0], value: string | number) => {
     const newCart = [...cart];
-    // @ts-expect-error dynamic access
-    newCart[index][field] = value;
+    (newCart[index] as any)[field] = value;
 
     // Handle Unit Logic on Product Change
     if (field === 'barangId') {
@@ -267,131 +264,147 @@ export function MutasiBarangForm({ embedded, onSuccess, onCancel }: MutasiBarang
                         />
                     </div>
 
-                    <div className="space-y-3 pt-4 border-t">
-                        <div className="flex justify-between items-center mb-4">
-                            <Label className="text-base font-semibold">Daftar Barang</Label>
-                            <Button type="button" variant="outline" size="sm" onClick={addItem}>
-                                <Plus className="w-4 h-4 mr-2" />
-                                Tambah Item
-                            </Button>
+                    <div className="space-y-4 pt-4 border-t">
+                        <div className="flex justify-between items-center">
+                            <Label className="text-base font-semibold">Daftar Barang Mutasi</Label>
+                            {cart.length > 0 && (
+                                <Button 
+                                    type="button" 
+                                    variant="ghost" 
+                                    size="sm" 
+                                    className="text-destructive hover:bg-destructive/5" 
+                                    onClick={() => setCart([])}
+                                >
+                                    <Trash2 className="w-3 h-3 mr-1" />
+                                    Hapus Semua
+                                </Button>
+                            )}
                         </div>
 
-                        {/* Header Row (Desktop) */}
-                        <div className="hidden md:grid grid-cols-12 gap-4 px-2 mb-2 font-medium text-sm text-muted-foreground">
-                            <div className="col-span-5">Nama Barang</div>
-                            <div className="col-span-3">Satuan</div>
-                            <div className="col-span-3">Jumlah</div>
-                            <div className="col-span-1"></div>
+                        {/* Quick Add Product Bar */}
+                        <div className="p-3 border rounded-lg bg-orange-50/50 space-y-2 border-dashed border-orange-200">
+                            <Label className="text-xs font-semibold text-orange-700 uppercase tracking-wider block mb-1">Cari & Tambah Produk</Label>
+                            <SearchableSelect
+                                value=""
+                                onChange={(val) => {
+                                    if (!val) return;
+                                    const b = barang.find(x => x.id === val);
+                                    if (b) {
+                                        const existingIdx = cart.findIndex(c => c.barangId === val);
+                                        if (existingIdx >= 0) {
+                                            const newCart = [...cart];
+                                            newCart[existingIdx].jumlah += 1;
+                                            setCart(newCart);
+                                            toast.success(`Jumlah ${b.nama} ditambahkan`);
+                                        } else {
+                                            setCart([...cart, { 
+                                                barangId: val, 
+                                                jumlah: 1, 
+                                                satuanId: b.satuanId, 
+                                                konversi: 1 
+                                            }]);
+                                            toast.success(`${b.nama} masuk daftar`);
+                                        }
+                                    }
+                                }}
+                                placeholder="Ketik nama produk untuk menambah..."
+                                searchPlaceholder="Cari produk..."
+                                options={barang
+                                    .filter(x => x.isActive)
+                                    .sort((a, b) => a.nama.localeCompare(b.nama))
+                                    .map(b => {
+                                        const userStock = stokPengguna.find(s => s.userId === user?.id && s.barangId === b.id)?.jumlah || 0;
+                                        const unitName = satuan.find(s => s.id === b.satuanId)?.simbol || 'Unit';
+                                        return {
+                                            value: b.id,
+                                            label: b.nama,
+                                            description: `Stok Kamu: ${userStock} ${unitName}`
+                                        };
+                                    })}
+                            />
                         </div>
-                        
-                        <div className="space-y-4">
-                        {cart.map((item, index) => {
-                            const selectedBarang = barang.find(b => b.id === item.barangId);
-                            const availableUnits = selectedBarang ? [
-                                { id: selectedBarang.satuanId, nama: satuan.find(s => s.id === selectedBarang.satuanId)?.simbol || 'Unit' },
-                                ...(selectedBarang.multiSatuan || []).map(m => ({
-                                    id: m.satuanId,
-                                    nama: satuan.find(s => s.id === m.satuanId)?.simbol || 'Unit'
-                                }))
-                            ] : [];
-                            
-                            // Calculate stok availability in SELECTED unit
-                            const userStockBase = stokPengguna.find(s => s.userId === user?.id && s.barangId === item.barangId)?.jumlah || 0;
-                            const maxQtyInUnit = Math.floor(userStockBase / (item.konversi || 1));
-                            const selectedUnitName = availableUnits.find(u => u.id === item.satuanId)?.nama || 'Unit';
 
-                            return (
-                                <div key={index} className="p-4 border rounded-lg bg-gray-50/50 md:bg-transparent md:border-0 md:p-0">
-                                    <div className="grid grid-cols-1 md:grid-cols-12 gap-3 md:gap-4 items-end md:items-start">
-                                        <div className="md:col-span-5 space-y-1.5">
-                                            <Label className="md:hidden text-xs text-muted-foreground">Nama Barang</Label>
-                                            <SearchableSelect 
-                                                value={item.barangId}
-                                                onChange={(val) => updateItem(index, 'barangId', val)}
-                                                placeholder="Pilih Barang"
-                                                options={barang
-                                                    .filter(b => b.isActive) // Filter inactive products
-                                                    .filter(b => {
-                                                        // Hide if already in cart (unless it's the current row's value)
-                                                        const isSelected = cart.some(c => c.barangId === b.id);
-                                                        return !isSelected || b.id === item.barangId;
-                                                    })
-                                                    .sort((a, b) => a.nama.localeCompare(b.nama))
-                                                    .map(b => {
-                                                        const userStock = stokPengguna.find(s => s.userId === user?.id && s.barangId === b.id)?.jumlah || 0;
-                                                        const unitName = satuan.find(s => s.id === b.satuanId)?.simbol || 'Unit';
-                                                        return {
-                                                            value: b.id,
-                                                            label: b.nama,
-                                                            description: `Stok: ${userStock} ${unitName}`
-                                                        };
-                                                    })
-                                                }
-                                            />
-                                        </div>
-                                        
-                                        <div className="md:col-span-3 space-y-1.5">
-                                             <Label className="md:hidden text-xs text-muted-foreground">Satuan</Label>
-                                             <Select 
-                                                value={item.satuanId}
-                                                onValueChange={(val) => updateItem(index, 'satuanId', val)}
-                                                disabled={!item.barangId}
-                                            >
-                                                <SelectTrigger className="w-full bg-white">
-                                                    <SelectValue placeholder="Pilih Unit" />
-                                                </SelectTrigger>
-                                                <SelectContent>
-                                                    {availableUnits.map(u => (
-                                                        <SelectItem key={u.id} value={u.id}>
-                                                            {u.nama}
-                                                        </SelectItem>
-                                                    ))}
-                                                </SelectContent>
-                                            </Select>
-                                            {item.barangId && item.satuanId && (
-                                                <p className="text-[10px] text-muted-foreground">
-                                                    Stok: {maxQtyInUnit} {selectedUnitName}
-                                                </p>
-                                            )}
-                                        </div>
+                        {cart.length === 0 ? (
+                            <div className="text-center py-8 border-2 border-dashed rounded-lg text-muted-foreground text-sm bg-slate-50/30">
+                                Belum ada barang yang ditambahkan. Gunakan kolom pencarian di atas.
+                            </div>
+                        ) : (
+                            <div className="space-y-3">
+                            {cart.map((item, index) => {
+                                const selectedBarang = barang.find(b => b.id === item.barangId);
+                                const availableUnits = selectedBarang ? [
+                                    { id: selectedBarang.satuanId, nama: satuan.find(s => s.id === selectedBarang.satuanId)?.simbol || 'Unit' },
+                                    ...(selectedBarang.multiSatuan || []).map(m => ({
+                                        id: m.satuanId,
+                                        nama: satuan.find(s => s.id === m.satuanId)?.simbol || 'Unit'
+                                    }))
+                                ] : [];
+                                
+                                const userStockBase = stokPengguna.find(s => s.userId === user?.id && s.barangId === item.barangId)?.jumlah || 0;
+                                const maxQtyInUnit = Math.floor(userStockBase / (item.konversi || 1));
+                                const selectedUnitName = availableUnits.find(u => u.id === item.satuanId)?.nama || 'Unit';
 
-                                        <div className="md:col-span-3 space-y-1.5">
-                                            <Label className="md:hidden text-xs text-muted-foreground">Jumlah</Label>
-                                            <Input 
-                                                type="number" 
-                                                min="1"
-                                                className="bg-white"
-                                                placeholder="0"
-                                                value={item.jumlah || ''}
-                                                onChange={(e) => {
-                                                    const val = parseInt(e.target.value);
-                                                    updateItem(index, 'jumlah', isNaN(val) ? 0 : val);
-                                                }}
-                                                onFocus={(e) => e.target.select()}
-                                            />
-                                            {selectedBarang && (
-                                                <p className="text-[10px] text-muted-foreground">
-                                                    Konversi: {item.konversi} (Total: {item.jumlah * (item.konversi || 1)} {satuan.find(s => s.id === selectedBarang.satuanId)?.simbol})
-                                                </p>
-                                            )}
-                                        </div>
+                                return (
+                                    <div key={index} className="p-3 border rounded-lg bg-white shadow-sm">
+                                        <div className="grid grid-cols-1 md:grid-cols-12 gap-3 items-center">
+                                            <div className="md:col-span-6">
+                                                <p className="font-semibold text-sm truncate">{selectedBarang?.nama || 'Produk'}</p>
+                                                <div className="flex gap-2 items-center">
+                                                    <p className="text-[10px] text-muted-foreground">Tersedia: {maxQtyInUnit} {selectedUnitName}</p>
+                                                    {item.konversi > 1 && (
+                                                        <p className="text-[10px] text-orange-600 font-medium">(1 {selectedUnitName} = {item.konversi} unit)</p>
+                                                    )}
+                                                </div>
+                                            </div>
+                                            
+                                            <div className="md:col-span-3">
+                                                <Input 
+                                                    type="number" 
+                                                    min="1"
+                                                    max={maxQtyInUnit}
+                                                    className="h-8 text-right font-medium"
+                                                    value={item.jumlah || ''}
+                                                    onChange={(e) => updateItem(index, 'jumlah', parseInt(e.target.value) || 0)}
+                                                    onFocus={(e) => e.target.select()}
+                                                />
+                                            </div>
 
-                                        <div className="md:col-span-1 flex justify-end md:justify-center pt-2 md:pt-0">
-                                            <Button 
-                                                type="button" 
-                                                variant="ghost" 
-                                                size="icon" 
-                                                className="text-muted-foreground hover:text-red-500 hover:bg-red-50"
-                                                onClick={() => removeItem(index)}
-                                            >
-                                                <Trash2 className="w-4 h-4" />
-                                            </Button>
+                                            <div className="md:col-span-2">
+                                                 <Select 
+                                                    value={item.satuanId}
+                                                    onValueChange={(val) => updateItem(index, 'satuanId', val)}
+                                                    disabled={!item.barangId}
+                                                >
+                                                    <SelectTrigger className="h-8 text-xs">
+                                                        <SelectValue placeholder="Unit" />
+                                                    </SelectTrigger>
+                                                    <SelectContent>
+                                                        {availableUnits.map(u => (
+                                                            <SelectItem key={u.id} value={u.id} className="text-xs">
+                                                                {u.nama}
+                                                            </SelectItem>
+                                                        ))}
+                                                    </SelectContent>
+                                                </Select>
+                                            </div>
+
+                                            <div className="md:col-span-1 flex justify-end">
+                                                <Button 
+                                                    type="button" 
+                                                    variant="ghost" 
+                                                    size="icon" 
+                                                    className="h-8 w-8 text-muted-foreground hover:text-destructive"
+                                                    onClick={() => removeItem(index)}
+                                                >
+                                                    <Trash2 className="w-4 h-4" />
+                                                </Button>
+                                            </div>
                                         </div>
                                     </div>
-                                </div>
-                            );
-                        })}
-                        </div>
+                                );
+                            })}
+                            </div>
+                        )}
                     </div>
 
                     <Button type="submit" className="w-full bg-blue-600 hover:bg-blue-700 mt-6">

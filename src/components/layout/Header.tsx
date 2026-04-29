@@ -15,6 +15,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { HydrationBoundary } from '@/components/shared/HydrationBoundary';
 import { playNotificationSound } from '@/lib/notificationSound';
 
 interface HeaderProps {
@@ -166,141 +167,145 @@ export function Header({
       <div className="flex items-center gap-0 xs:gap-1 sm:gap-2">
 
         {/* Notification Dropdown */}
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button variant="ghost" size="icon" className="relative text-gray-500 hover:bg-gray-100 rounded-full">
-              <Bell className="w-5 h-5" />
-              {unreadCount > 0 && (
-                <span className="absolute top-1.5 right-1.5 flex h-4 w-4 items-center justify-center rounded-full bg-red-500 text-[10px] font-bold text-white ring-2 ring-white">
-                  {unreadCount > 99 ? '99+' : unreadCount}
-                </span>
-              )}
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-screen sm:w-[350px] p-0 mt-1">
-            <DropdownMenuLabel className="px-4 py-3 border-b flex justify-between items-center bg-gray-50/50">
-              <span>Notifikasi ({unreadCount})</span>
-              {unreadCount > 0 && (
-                <span
-                  className="text-xs text-primary cursor-pointer hover:underline font-normal"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    markAllNotifikasiRead();
-                  }}
-                >
-                  Tandai semua dibaca
-                </span>
-              )}
-            </DropdownMenuLabel>
-            <div className="max-h-[60vh] overflow-y-auto">
-              {recentNotifikasi.length === 0 ? (
-                <div className="p-8 text-center flex flex-col items-center text-muted-foreground gap-2">
-                  <Bell className="w-8 h-8 opacity-20" />
-                  <span className="text-sm">Tidak ada notifikasi</span>
-                </div>
-              ) : (
-                recentNotifikasi.map(n => (
-                  <DropdownMenuItem
-                    key={n.id}
-                    className="px-4 py-3 border-b last:border-0 cursor-pointer items-start gap-3 transition-colors hover:bg-muted/50 focus:bg-muted/50"
-                    onClick={() => handleNotifClick(n.id, n.link)}
-                  >
-                    <div className={`w-2.5 h-2.5 mt-1.5 rounded-full flex-shrink-0 ring-2 ring-white ${n.jenis === 'success' ? 'bg-green-500' :
-                      n.jenis === 'error' ? 'bg-red-500' :
-                        n.jenis === 'warning' ? 'bg-amber-500' : 'bg-blue-500'
-                      }`} />
-                    <div className="flex-1 space-y-1.5 min-w-0">
-                      <div className="flex justify-between items-start gap-2">
-                        <p className="text-sm font-semibold leading-tight text-foreground">{n.judul}</p>
-                        <span className="text-[10px] text-muted-foreground shrink-0 tabular-nums">
-                          {new Date(n.tanggal).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })}
-                        </span>
-                      </div>
-                      <p className="text-xs text-muted-foreground leading-relaxed line-clamp-3">
-                        {n.pesan}
-                      </p>
-                    </div>
-                  </DropdownMenuItem>
-                ))
-              )}
-            </div>
-            <div className="p-2 border-t bg-gray-50/50 text-center flex gap-2">
-              <Button
-                variant="ghost"
-                size="sm"
-                className="text-xs flex-1 h-8 hover:bg-transparent text-primary"
-                onClick={() => router.push('/notifikasi')}
-              >
-                Lihat Semua Notifikasi
+        <HydrationBoundary>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="ghost" size="icon" className="relative text-gray-500 hover:bg-gray-100 rounded-full">
+                <Bell className="w-5 h-5" />
+                {unreadCount > 0 && (
+                  <span className="absolute top-1.5 right-1.5 flex h-4 w-4 items-center justify-center rounded-full bg-red-500 text-[10px] font-bold text-white ring-2 ring-white">
+                    {unreadCount > 99 ? '99+' : unreadCount}
+                  </span>
+                )}
               </Button>
-            </div>
-          </DropdownMenuContent>
-        </DropdownMenu>
-
-        {/* User Profile */}
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <div className="flex items-center gap-2 cursor-pointer hover:bg-gray-50 p-1.5 rounded-full transition-colors border border-transparent hover:border-gray-200 ml-1">
-              <div className="relative">
-                <Avatar className="w-8 h-8 bg-teal-600 border border-teal-700/20">
-                  <AvatarFallback className="bg-teal-600 text-white text-xs font-semibold">
-                    {user?.nama?.charAt(0).toUpperCase() || 'U'}
-                  </AvatarFallback>
-                </Avatar>
-                {/* Unified Status Indicator */}
-                <span className={cn(
-                  "absolute -bottom-0.5 -right-0.5 w-3 h-3 border-2 border-white rounded-full shadow-sm transition-colors duration-300",
-                  !isOnline ? "bg-red-500" :
-                  !isAppReady ? "bg-amber-500" :
-                  isRefreshing ? "bg-blue-500 animate-pulse" : "bg-green-500"
-                )} />
-              </div>
-              <div className="text-left hidden md:block">
-                <p className="text-sm font-medium leading-none text-gray-700">
-                  {isAuthLoading ? 'Memuat...' : (user?.nama || 'User')}
-                </p>
-                <p className="text-[10px] text-muted-foreground font-medium uppercase mt-0.5">
-                  {isAuthLoading ? 'Staff' : (user?.roles?.[0] || 'Staff')}
-                </p>
-              </div>
-            </div>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-56">
-            <DropdownMenuLabel>
-              <div className="flex flex-col">
-                <span>Akun Saya</span>
-                {!isAppReady && (
-                  <div className="flex items-center justify-between mt-1">
-                    <span className="text-[10px] font-normal text-red-500 flex items-center gap-1">
-                      <span className="w-1.5 h-1.5 bg-red-500 rounded-full animate-pulse" />
-                      Sesi belum siap
-                    </span>
-                    <Button 
-                      variant="ghost" 
-                      size="sm" 
-                      className="h-6 px-2 text-[10px] text-blue-600 hover:text-blue-700"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        refresh();
-                      }}
-                    >
-                      Coba Lagi
-                    </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-screen sm:w-[350px] p-0 mt-1">
+              <DropdownMenuLabel className="px-4 py-3 border-b flex justify-between items-center bg-gray-50/50">
+                <span>Notifikasi ({unreadCount})</span>
+                {unreadCount > 0 && (
+                  <span
+                    className="text-xs text-primary cursor-pointer hover:underline font-normal"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      markAllNotifikasiRead();
+                    }}
+                  >
+                    Tandai semua dibaca
+                  </span>
+                )}
+              </DropdownMenuLabel>
+              <div className="max-h-[60vh] overflow-y-auto">
+                {recentNotifikasi.length === 0 ? (
+                  <div className="p-8 text-center flex flex-col items-center text-muted-foreground gap-2">
+                    <Bell className="w-8 h-8 opacity-20" />
+                    <span className="text-sm">Tidak ada notifikasi</span>
                   </div>
+                ) : (
+                  recentNotifikasi.map(n => (
+                    <DropdownMenuItem
+                      key={n.id}
+                      className="px-4 py-3 border-b last:border-0 cursor-pointer items-start gap-3 transition-colors hover:bg-muted/50 focus:bg-muted/50"
+                      onClick={() => handleNotifClick(n.id, n.link)}
+                    >
+                      <div className={`w-2.5 h-2.5 mt-1.5 rounded-full flex-shrink-0 ring-2 ring-white ${n.jenis === 'success' ? 'bg-green-500' :
+                        n.jenis === 'error' ? 'bg-red-500' :
+                          n.jenis === 'warning' ? 'bg-amber-500' : 'bg-blue-500'
+                        }`} />
+                      <div className="flex-1 space-y-1.5 min-w-0">
+                        <div className="flex justify-between items-start gap-2">
+                          <p className="text-sm font-semibold leading-tight text-foreground">{n.judul}</p>
+                          <span className="text-[10px] text-muted-foreground shrink-0 tabular-nums">
+                            {new Date(n.tanggal).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })}
+                          </span>
+                        </div>
+                        <p className="text-xs text-muted-foreground leading-relaxed line-clamp-3">
+                          {n.pesan}
+                        </p>
+                      </div>
+                    </DropdownMenuItem>
+                  ))
                 )}
               </div>
-            </DropdownMenuLabel>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem onClick={() => router.push('/profil')} className="cursor-pointer">
-              <User className="mr-2 h-4 w-4" />
-              <span>Profil</span>
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={handleLogout} className="text-red-600 focus:text-red-600 cursor-pointer">
-              <LogOut className="mr-2 h-4 w-4" />
-              <span>Keluar</span>
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
+              <div className="p-2 border-t bg-gray-50/50 text-center flex gap-2">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="text-xs flex-1 h-8 hover:bg-transparent text-primary"
+                  onClick={() => router.push('/notifikasi')}
+                >
+                  Lihat Semua Notifikasi
+                </Button>
+              </div>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </HydrationBoundary>
+
+        {/* User Profile */}
+        <HydrationBoundary>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <div className="flex items-center gap-2 cursor-pointer hover:bg-gray-50 p-1.5 rounded-full transition-colors border border-transparent hover:border-gray-200 ml-1">
+                <div className="relative">
+                  <Avatar className="w-8 h-8 bg-teal-600 border border-teal-700/20">
+                    <AvatarFallback className="bg-teal-600 text-white text-xs font-semibold">
+                      {user?.nama?.charAt(0).toUpperCase() || 'U'}
+                    </AvatarFallback>
+                  </Avatar>
+                  {/* Unified Status Indicator */}
+                  <span className={cn(
+                    "absolute -bottom-0.5 -right-0.5 w-3 h-3 border-2 border-white rounded-full shadow-sm transition-colors duration-300",
+                    !isOnline ? "bg-red-500" :
+                    !isAppReady ? "bg-amber-500" :
+                    isRefreshing ? "bg-blue-500 animate-pulse" : "bg-green-500"
+                  )} />
+                </div>
+                <div className="text-left hidden md:block">
+                  <p className="text-sm font-medium leading-none text-gray-700">
+                    {isAuthLoading ? 'Memuat...' : (user?.nama || 'User')}
+                  </p>
+                  <p className="text-[10px] text-muted-foreground font-medium uppercase mt-0.5">
+                    {isAuthLoading ? 'Staff' : (user?.roles?.[0] || 'Staff')}
+                  </p>
+                </div>
+              </div>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-56">
+              <DropdownMenuLabel>
+                <div className="flex flex-col">
+                  <span>Akun Saya</span>
+                  {!isAppReady && (
+                    <div className="flex items-center justify-between mt-1">
+                      <span className="text-[10px] font-normal text-red-500 flex items-center gap-1">
+                        <span className="w-1.5 h-1.5 bg-red-500 rounded-full animate-pulse" />
+                        Sesi belum siap
+                      </span>
+                      <Button 
+                        variant="ghost" 
+                        size="sm" 
+                        className="h-6 px-2 text-[10px] text-blue-600 hover:text-blue-700"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          refresh();
+                        }}
+                      >
+                        Coba Lagi
+                      </Button>
+                    </div>
+                  )}
+                </div>
+              </DropdownMenuLabel>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onClick={() => router.push('/profil')} className="cursor-pointer">
+                <User className="mr-2 h-4 w-4" />
+                <span>Profil</span>
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={handleLogout} className="text-red-600 focus:text-red-600 cursor-pointer">
+                <LogOut className="mr-2 h-4 w-4" />
+                <span>Keluar</span>
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </HydrationBoundary>
 
       </div>
     </div>

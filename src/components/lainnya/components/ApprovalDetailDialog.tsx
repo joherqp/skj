@@ -63,22 +63,26 @@ export function ApprovalDetailDialog({
                                <div className='flex justify-between items-center mb-2'>
                                    {(() => {
                                        const isPermintaan = item.jenis === 'permintaan';
+                                       
+                                       // Determine Source (Pengirim) and Destination (Penerima)
+                                       // For 'permintaan': source is the target branch (the one providing stock), dest is the requesting branch
+                                       // For 'restock'/'mutasi': source is origin branch, dest is target branch
                                        const sourceBranchId = isPermintaan ? finalData.keCabangId : (finalData.dariCabangId || requesterUser?.cabangId);
-                                       const destBranchId = isPermintaan ? (finalData.dariCabangId || requesterUser?.cabangId) : finalData.keCabangId;
+                                       const destBranchId = isPermintaan ? (finalData.dariCabangId || requesterUser?.cabangId) : (finalData.keCabangId || item.targetCabangId);
                                        
                                        return (
                                            <>
                                                <div className="flex flex-col">
-                                                   <span className="text-xs text-muted-foreground">{isPermintaan ? 'Dari (Pemohon)' : 'Dari Cabang'}</span>
+                                                   <span className="text-xs text-muted-foreground">Cabang Pengirim</span>
                                                    <span className="font-semibold text-indigo-700">
-                                                       {cabang.find(c => c.id === destBranchId)?.nama || '-'}
+                                                       {cabang.find(c => c.id === sourceBranchId)?.nama || (item.jenis === 'restock' ? 'Pusat/Gudang' : 'Pusat/Gudang')}
                                                    </span>
                                                </div>
                                                <ArrowLeftRight className="text-indigo-300 w-5 h-5 mx-2" />
                                                <div className="flex flex-col text-right">
-                                                   <span className="text-xs text-muted-foreground">{isPermintaan ? 'Ke (Sumber Stok)' : 'Ke Cabang'}</span>
+                                                   <span className="text-xs text-muted-foreground">Cabang Penerima</span>
                                                    <span className="font-semibold text-slate-700">
-                                                       {cabang.find(c => c.id === sourceBranchId)?.nama || (isPermintaan ? 'Pusat/Gudang' : 'Pusat/Gudang')}
+                                                       {cabang.find(c => c.id === destBranchId)?.nama || '-'}
                                                    </span>
                                                </div>
                                            </>
@@ -91,14 +95,33 @@ export function ApprovalDetailDialog({
                                        {requesterUser?.nama || 'Unknown'}
                                    </span>
                               </div>
-                              {item.jenis === 'mutasi_stok' && (
-                                  <div className='pt-2 border-t border-indigo-200 flex justify-between items-center'>
-                                       <span className="text-xs text-muted-foreground font-semibold">Penerima Barang:</span>
-                                       <span className="text-sm font-bold text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded border border-indigo-100">
-                                           {users.find(u => u.id === item.targetUserId)?.nama || 'Unknown'}
-                                       </span>
-                                  </div>
-                              )}
+                              {(item.jenis === 'mutasi_stok' || item.jenis === 'restock' || item.jenis === 'permintaan' || item.jenis === 'mutasi') && (
+                                   <div className='pt-2 border-t border-indigo-200'>
+                                        <div className="flex justify-between items-center">
+                                            <span className="text-xs text-muted-foreground font-semibold">Penerima Barang:</span>
+                                            <span className="text-sm font-bold text-indigo-700">
+                                                {(() => {
+                                                    if (item.jenis === 'permintaan') return requesterUser?.nama || 'Unknown';
+                                                    return finalData.receiverName || users.find(u => u.id === item.targetUserId)?.nama || 'Unknown';
+                                                })()}
+                                            </span>
+                                        </div>
+                                        {(() => {
+                                             const receiverId = item.jenis === 'permintaan' ? item.diajukanOleh : (item.targetUserId || finalData.receiverId);
+                                             const receiver = users.find(u => u.id === receiverId);
+                                             if (receiver) {
+                                                const branch = cabang.find(c => c.id === receiver.cabangId);
+                                                return (
+                                                    <div className="flex justify-between items-center mt-1 text-[10px] text-indigo-600">
+                                                        <span>Unit/Cabang Penerima:</span>
+                                                        <span className="font-medium">{branch?.nama || '-'}</span>
+                                                    </div>
+                                                );
+                                            }
+                                            return null;
+                                        })()}
+                                   </div>
+                               )}
                         </div>
                         <ApprovalMutasi data={finalData} barang={barang} satuan={satuan} />
                     </div>
@@ -190,7 +213,7 @@ export function ApprovalDetailDialog({
                                     if (u?.username && u.username !== 'Unknown') return u.username;
                                     
                                     const payload = item.data as PersetujuanPayload;
-                                    const payloadName = payload?.userName || payload?.namaUser || payload?.nama || payload?.operator || (payload as any)?.diajukanOlehName;
+                                    const payloadName = payload?.userName || payload?.namaUser || payload?.nama || payload?.operator || payload?.diajukanOlehName;
                                     if (payloadName && payloadName !== 'Unknown') return payloadName;
                                     
                                     if (item.diajukanOleh === 'Unknown' || !item.diajukanOleh) return 'Sistem/Pengguna';

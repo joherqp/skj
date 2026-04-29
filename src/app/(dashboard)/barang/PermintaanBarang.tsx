@@ -43,18 +43,15 @@ export function PermintaanBarangForm({ embedded, onSuccess, onCancel }: Perminta
 
   const [cart, setCart] = useState<{ barangId: string; jumlah: number; satuanId: string }[]>([]);
 
-  const addItem = () => {
-    setCart([...cart, { barangId: '', jumlah: 1, satuanId: '' }]);
-  };
+
 
   const removeItem = (index: number) => {
     setCart(cart.filter((_, i) => i !== index));
   };
 
-  const updateItem = (index: number, field: 'barangId' | 'jumlah' | 'satuanId', value: string | number) => {
+  const updateItem = (index: number, field: keyof typeof cart[0], value: string | number) => {
     const newCart = [...cart];
-    // @ts-expect-error dynamic access
-    newCart[index][field] = value;
+    (newCart[index] as any)[field] = value;
 
     // Auto-select default unit if product changed
     if (field === 'barangId') {
@@ -190,89 +187,135 @@ export function PermintaanBarangForm({ embedded, onSuccess, onCancel }: Perminta
               </div>
             )}
 
-            <div className="bg-muted/20 p-4 rounded-lg space-y-4">
+            <div className="space-y-4 pt-4 border-t">
               <div className="flex justify-between items-center">
-                <Label>Daftar Barang</Label>
-                <Button type="button" size="sm" variant="outline" onClick={addItem}>
-                  <Plus className="w-4 h-4 mr-1" /> Tambah
-                </Button>
+                <Label className="text-base font-semibold">Daftar Permintaan</Label>
+                {cart.length > 0 && (
+                  <Button 
+                    type="button" 
+                    variant="ghost" 
+                    size="sm" 
+                    className="text-destructive hover:bg-destructive/5" 
+                    onClick={() => setCart([])}
+                  >
+                    <Trash2 className="w-3 h-3 mr-1" />
+                    Hapus Semua
+                  </Button>
+                )}
               </div>
 
-              {cart.map((item, idx) => (
-                <div key={idx} className="flex flex-col sm:flex-row gap-2 sm:items-end border-b sm:border-0 pb-3 sm:pb-0 border-dashed">
-                  <div className="flex-1 space-y-1 w-full">
-                    <Label className="text-xs">Barang</Label>
-                    <SearchableSelect
-                      value={item.barangId}
-                      onChange={(val) => updateItem(idx, 'barangId', val)}
-                      placeholder="Pilih Barang"
-                      options={barang
-                        .filter(b => b.isActive)
-                        .map(b => ({
-                          value: b.id,
-                          label: b.nama,
-                          description: b.kode
-                        }))
+              {/* Quick Add Product Bar */}
+              <div className="p-3 border rounded-lg bg-slate-50/50 space-y-2 border-dashed border-primary/20">
+                <Label className="text-xs font-semibold text-primary/70 uppercase tracking-wider block mb-1">Cari & Tambah Produk</Label>
+                <SearchableSelect
+                  value=""
+                  onChange={(val) => {
+                    if (!val) return;
+                    const b = barang.find(x => x.id === val);
+                    if (b) {
+                      const existingIdx = cart.findIndex(c => c.barangId === val);
+                      if (existingIdx >= 0) {
+                        const newCart = [...cart];
+                        newCart[existingIdx].jumlah += 1;
+                        setCart(newCart);
+                        toast.success(`Jumlah ${b.nama} ditambahkan`);
+                      } else {
+                        setCart([...cart, { 
+                          barangId: val, 
+                          jumlah: 1, 
+                          satuanId: b.satuanId 
+                        }]);
+                        toast.success(`${b.nama} masuk daftar`);
                       }
-                    />
-                  </div>
+                    }
+                  }}
+                  placeholder="Ketik nama produk untuk menambah..."
+                  searchPlaceholder="Cari produk..."
+                  options={barang
+                    .filter(x => x.isActive)
+                    .sort((a, b) => a.nama.localeCompare(b.nama))
+                    .map(x => ({
+                      value: x.id,
+                      label: x.nama,
+                      description: x.kode
+                    }))}
+                />
+              </div>
 
-                  <div className="flex gap-2 items-end w-full sm:w-auto">
-                    <div className="flex-1 sm:w-24 space-y-1">
-                      <Label className="text-xs">Satuan</Label>
-                      <Select
-                        value={item.satuanId}
-                        disabled={!item.barangId}
-                        onValueChange={(val) => updateItem(idx, 'satuanId', val)}
-                      >
-                        <SelectTrigger className="h-8">
-                          <SelectValue placeholder="Unit" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {(() => {
-                            const product = barang.find(b => b.id === item.barangId);
-                            if (!product) return null;
-
-                            const units = [
-                              { id: product.satuanId, nama: satuanList.find(s => s.id === product.satuanId)?.nama || 'Unit' },
-                              ...(product.multiSatuan?.map(m => ({
-                                id: m.satuanId,
-                                nama: satuanList.find(s => s.id === m.satuanId)?.nama || 'Unit'
-                              })) || [])
-                            ];
-
-                            return units.map(u => (
-                              <SelectItem key={u.id} value={u.id}>{u.nama}</SelectItem>
-                            ));
-                          })()}
-                        </SelectContent>
-                      </Select>
-                    </div>
-
-                    <div className="w-20 space-y-1">
-                      <Label className="text-xs">Qty</Label>
-                      <Input
-                        type="number"
-                        className="h-8"
-                        value={item.jumlah || ''}
-                        onChange={(e) => {
-                          const val = parseInt(e.target.value);
-                          updateItem(idx, 'jumlah', isNaN(val) ? 0 : val);
-                        }}
-                      />
-                    </div>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="icon"
-                      className="h-8 w-8 text-destructive flex-shrink-0"
-                      onClick={() => removeItem(idx)}
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </Button>
-                  </div>
+              {cart.length === 0 ? (
+                <div className="text-center py-8 border-2 border-dashed rounded-lg text-muted-foreground text-sm bg-slate-50/30">
+                  Belum ada barang yang ditambahkan. Gunakan kolom pencarian di atas untuk menambahkan barang.
                 </div>
-              ))}
+              ) : (
+                <div className="space-y-3">
+                  {cart.map((item, index) => {
+                    const b = barang.find(x => x.id === item.barangId);
+                    const availableUnits = b ? [
+                      { id: b.satuanId, nama: satuanList.find(s => s.id === b.satuanId)?.simbol || 'Unit' },
+                      ...(b.multiSatuan || []).map(m => ({
+                        id: m.satuanId,
+                        nama: satuanList.find(s => s.id === m.satuanId)?.simbol || 'Unit'
+                      }))
+                    ] : [];
+
+                    return (
+                      <div key={index} className="p-3 border rounded-lg bg-white shadow-sm hover:shadow-md transition-shadow">
+                        <div className="grid grid-cols-1 md:grid-cols-12 gap-3 items-center">
+                          <div className="md:col-span-6">
+                            <p className="font-semibold text-sm truncate">{b?.nama || 'Produk tidak ditemukan'}</p>
+                            <p className="text-[10px] text-muted-foreground">ID: {b?.id.slice(-6)}</p>
+                          </div>
+                          
+                          <div className="md:col-span-3">
+                            <div className="flex items-center gap-1">
+                              <Input
+                                type="number"
+                                min="1"
+                                className="h-8 text-right font-medium"
+                                value={item.jumlah || ''}
+                                onChange={(e) => {
+                                  const val = parseInt(e.target.value);
+                                  updateItem(index, 'jumlah', isNaN(val) ? 0 : val);
+                                }}
+                                onFocus={(e) => e.target.select()}
+                              />
+                            </div>
+                          </div>
+
+                          <div className="md:col-span-2">
+                            <Select
+                              value={item.satuanId}
+                              onValueChange={(val) => updateItem(index, 'satuanId', val)}
+                              disabled={!item.barangId}
+                            >
+                              <SelectTrigger className="h-8 text-xs">
+                                <SelectValue placeholder="Unit" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {availableUnits.map(u => (
+                                  <SelectItem key={u.id} value={u.id} className="text-xs">{u.nama}</SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
+
+                          <div className="md:col-span-1 flex justify-end">
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8 text-muted-foreground hover:text-destructive"
+                              onClick={() => removeItem(index)}
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </Button>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </div>
 
             <div className="space-y-2">
@@ -344,7 +387,7 @@ export function PermintaanBarangForm({ embedded, onSuccess, onCancel }: Perminta
 }
 
 export function PermintaanBarangHistory() {
-  const { permintaanBarang, cabang, satuan: satuanList, barang } = useDatabase();
+  const { permintaanBarang, cabang, satuan: satuanList } = useDatabase();
   const [displayLimit, setDisplayLimit] = useState(10);
 
   // Sort by Date Descending
@@ -352,11 +395,7 @@ export function PermintaanBarangHistory() {
   const displayRequests = sortedRequests.slice(0, displayLimit);
 
   // Helper to get unit name
-  const getUnitName = (barangId: string, satuanId?: string) => {
-    if (!satuanId) return '';
-    const s = satuanList.find(x => x.id === satuanId);
-    return s?.nama || 'Unit';
-  };
+
 
   return (
     <div className="space-y-3">

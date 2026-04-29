@@ -1,5 +1,5 @@
 'use client';
-import { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -92,7 +92,7 @@ export default function LaporanHarian() {
     const {
         penjualan, barang, profilPerusahaan, users,
         cabang, stokPengguna, persetujuan, setoran, saldoPengguna, satuan,
-        mutasiBarang, penyesuaianStok, pelanggan, kategoriPelanggan
+        mutasiBarang, penyesuaianStok, pelanggan, kategoriPelanggan, stokHarian
     } = useDatabase();
 
     const [pembayaran, setPembayaran] = useState<Record<string, unknown>[]>([]);
@@ -203,8 +203,9 @@ export default function LaporanHarian() {
             ? [currentUser.cabangId]
             : selectedCabangIds;
 
-        const isGlobalView = isAdminOrOwner && effectiveCabangIds.length === 0;
-        const scopeUserIds = selectedUserIds.length > 0
+        const isUserScope = selectedUserIds.length > 0;
+        const isGlobalView = isAdminOrOwner && effectiveCabangIds.length === 0 && !isUserScope;
+        const scopeUserIds = isUserScope
             ? selectedUserIds
             : (isGlobalView
                 ? users.map(u => u.id)
@@ -216,12 +217,12 @@ export default function LaporanHarian() {
             const inDate = pDate >= dayStart && pDate <= dayEnd;
 
             // Branch Filter
-            const inBranch = isGlobalView || (p.cabangId && effectiveCabangIds.includes(p.cabangId));
+            const inBranch = isGlobalView || isUserScope || (p.cabangId && effectiveCabangIds.includes(p.cabangId));
 
             // User/Sales Filter
             const inUser = selectedUserIds.length === 0 || selectedUserIds.includes(p.salesId) || selectedUserIds.includes(p.createdBy);
 
-            return inDate && inBranch && inUser && p.status === 'lunas';
+            return inDate && inBranch && inUser && p.status !== 'batal' && p.status !== 'draft';
         });
 
         // 1. Sales Summary
@@ -233,7 +234,7 @@ export default function LaporanHarian() {
         const totalTempo = tempoSales.reduce((acc, curr) => acc + curr.total, 0);
 
         const totalQty = filteredSales.reduce((acc, p) =>
-            acc + p.items.reduce((s, i) => s + (i.isBonus ? 0 : (i.jumlah * (i.konversi || 1))), 0)
+            acc + p.items.reduce((s, i) => s + (!i.isBonus && i.subtotal > 0 ? (i.jumlah * (i.konversi || 1)) : 0), 0)
             , 0);
 
         const totalPromoQty = filteredSales.reduce((acc, p) =>
@@ -252,7 +253,7 @@ export default function LaporanHarian() {
             const categoryId = customer?.kategoriId || 'unknown';
             const categoryName = kategoriPelanggan.find(k => k.id === categoryId)?.nama || 'Umum';
 
-            const pQty = p.items.reduce((s, i) => s + (i.isBonus ? 0 : (i.jumlah * (i.konversi || 1))), 0);
+            const pQty = p.items.reduce((s, i) => s + (!i.isBonus && i.subtotal > 0 ? (i.jumlah * (i.konversi || 1)) : 0), 0);
 
             if (!categorySummaryMap.has(categoryName)) {
                 categorySummaryMap.set(categoryName, {
@@ -269,7 +270,7 @@ export default function LaporanHarian() {
             }
         });
 
-        // 2. Stock Movement Summary
+        // 2. Stock Movement Summary (Using stokHarian from DB)
         const stockMovementMap = new Map<string, {
             nama: string,
             awal: number,
@@ -281,137 +282,52 @@ export default function LaporanHarian() {
             satuan: string
         }>();
 
-        // Get relevant userIds for stock check (based on branch)
-        const branchUserIds = isGlobalView
-            ? users.map(u => u.id)
-            : users.filter(u => u.cabangId && effectiveCabangIds.includes(u.cabangId)).map(u => u.id);
+        // Filter stokHarian by date and scope
+        const filteredStokHarian = stokHarian.filter(sh => {
+            // Ensure comparison is safe (handle date strings or objects)
+            const shDateStr = sh.tanggal instanceof Date 
+                ? format(sh.tanggal, 'yyyy-MM-dd') 
+                : sh.tanggal.toString().split('T')[0];
+            
+            if (shDateStr !== selectedDate) return false;
 
-        barang.forEach(item => {
-            // Current Stock for selected users
-            const currentStock = stokPengguna
-                .filter(s => s.barangId === item.id && branchUserIds.includes(s.userId))
-                .reduce((sum, s) => sum + s.jumlah, 0);
+            const inBranch = isGlobalView || isUserScope || (sh.cabangId && effectiveCabangIds.includes(sh.cabangId));
+            const inUser = selectedUserIds.length === 0 || (sh.userId && selectedUserIds.includes(sh.userId));
+            
+            return inBranch && inUser;
+        });
 
-            let masuk = 0;
-            let keluar = 0;
-            let terjual = 0;
-            let promo = 0;
+        filteredStokHarian.forEach(sh => {
+            const item = barang.find(b => b.id === sh.barangId);
+            if (!item) return;
 
-            let afterIn = 0;
-            let afterOut = 0;
-            let afterSold = 0;
-            let afterPromo = 0;
+            const existing = stockMovementMap.get(sh.barangId);
+            const awal = Number(sh.stokAwal);
+            const masuk = Number(sh.masuk);
+            const keluar = Number(sh.keluar);
+            const terjual = Number(sh.terjual);
+            const promo = Number(sh.promo);
+            const akhir = Number(sh.stokAkhir);
 
-            // Transactions AFTER selected day (for backward calculation)
-            // Sales
-            penjualan.forEach(p => {
-                if (p.status !== 'lunas') return;
-                const pDate = new Date(p.tanggal);
-                const isRelevantUser = branchUserIds.includes(p.salesId);
-                if (!isRelevantUser) return;
-
-                p.items.filter(pi => pi.barangId === item.id).forEach(pi => {
-                    const qty = (pi.totalQty !== undefined) ? pi.totalQty : (pi.jumlah * (pi.konversi || 1));
-                    if (isAfter(pDate, dayEnd)) {
-                        if (pi.isBonus || pi.subtotal === 0) afterPromo += qty;
-                        else afterSold += qty;
-                    } else if (pDate >= dayStart && pDate <= dayEnd) {
-                        if (pi.isBonus || pi.subtotal === 0) promo += qty;
-                        else terjual += qty;
-                    }
-                });
-            });
-
-            // Mutasi Barang
-            mutasiBarang.forEach(m => {
-                if (m.status !== 'disetujui') return;
-                const mDate = new Date(m.tanggal);
-
-                // Scope Checks - Resolve branch from user if cabangId is missing
-                const resolvedDariCabangId = m.dariCabangId || (m.dari_stok_id ? users.find(u => u.id === m.dari_stok_id)?.cabangId : null);
-                const resolvedKeCabangId = m.keCabangId || (m.ke_stok_id ? users.find(u => u.id === m.ke_stok_id)?.cabangId : null);
-
-                const isOriginScope = isGlobalView ? true : (resolvedDariCabangId ? effectiveCabangIds.includes(resolvedDariCabangId) : false);
-                const isDestScope = isGlobalView ? true : (resolvedKeCabangId ? effectiveCabangIds.includes(resolvedKeCabangId) : false);
-
-                // Skip if movement is internal to the current scope
-                if (isOriginScope && isDestScope) return;
-
-                const items = Array.isArray(m.items) ? m.items : [];
-                items.forEach((mi: any) => {
-                    const bId = mi.barangId || mi.barang_id;
-                    if (bId === item.id) {
-                        const qty = (mi.totalQty !== undefined) ? mi.totalQty : (mi.jumlah * (mi.konversi || 1));
-                        if (isAfter(mDate, dayEnd)) {
-                            if (isOriginScope) afterOut += qty;
-                            if (isDestScope) afterIn += qty;
-                        } else if (mDate >= dayStart && mDate <= dayEnd) {
-                            if (isOriginScope) keluar += qty;
-                            if (isDestScope) masuk += qty;
-                        }
-                    }
-                });
-            });
-
-            // Process Persetujuan (Restock)
-            persetujuan.forEach(p => {
-                if (p.jenis !== 'restock' || p.status !== 'disetujui' || !p.data) return;
-                const pData = p.data as Record<string, unknown>;
-                const isRelevant = isGlobalView || (p.targetCabangId && effectiveCabangIds.includes(p.targetCabangId)) || (p.targetUserId && effectiveCabangIds.includes(users.find(u => u.id === p.targetUserId)?.cabangId || ''));
-                if (!isRelevant) return;
-
-                const items = (pData.items as any[]) || (pData.barangId || pData.barang_id ? [{
-                    barangId: pData.barangId || pData.barang_id,
-                    jumlah: pData.jumlah,
-                    konversi: pData.konversi,
-                    totalQty: pData.totalQty
-                }] : []);
-                const pDate = new Date(p.tanggalPersetujuan || p.tanggalPengajuan);
-                items.forEach((pi: any) => {
-                    if (pi.barangId === item.id) {
-                        const qty = (pi.totalQty !== undefined) ? pi.totalQty : (pi.jumlah * (pi.konversi || 1));
-                        if (isAfter(pDate, dayEnd)) afterIn += qty;
-                        else if (pDate >= dayStart && pDate <= dayEnd) masuk += qty;
-                    }
-                });
-            });
-
-            // Penyesuaian Stok
-            penyesuaianStok?.forEach(adj => {
-                if (adj.status !== 'disetujui' || adj.barangId !== item.id) return;
-                const isRelevant = isGlobalView || (adj.cabangId && effectiveCabangIds.includes(adj.cabangId));
-                if (!isRelevant) return;
-
-                const aDate = new Date(adj.tanggal);
-                const diff = adj.selisih;
-
-                if (isAfter(aDate, dayEnd)) {
-                    if (diff > 0) afterIn += diff;
-                    else afterOut += Math.abs(diff);
-                } else if (aDate >= dayStart && aDate <= dayEnd) {
-                    if (diff > 0) masuk += diff;
-                    else keluar += Math.abs(diff);
-                }
-            });
-
-            // Calculate historical stock
-            // Final = Current - AfterIn + AfterOut + AfterSold + AfterPromo
-            const stockAkhir = currentStock - afterIn + afterOut + afterSold + afterPromo;
-            // Initial = Final - In + Out + Sold + Promo
-            const stockAwal = stockAkhir - masuk + keluar + terjual + promo;
-
-            if (stockAwal !== 0 || stockAkhir !== 0 || masuk !== 0 || keluar !== 0 || terjual !== 0 || promo !== 0) {
+            if (!existing) {
                 const sItem = satuan.find(s => s.id === item.satuanId);
-                stockMovementMap.set(item.id, {
+                stockMovementMap.set(sh.barangId, {
                     nama: item.nama,
-                    awal: stockAwal,
+                    awal,
                     masuk,
                     keluar,
                     terjual,
                     promo,
-                    akhir: stockAkhir,
+                    akhir,
                     satuan: sItem?.simbol || ''
                 });
+            } else {
+                existing.awal += awal;
+                existing.masuk += masuk;
+                existing.keluar += keluar;
+                existing.terjual += terjual;
+                existing.promo += promo;
+                existing.akhir += akhir;
             }
         });
 
@@ -419,7 +335,7 @@ export default function LaporanHarian() {
         const dailySetoranRegular: DailyDepositEntry[] = setoran.filter(s => {
             const sDate = new Date(s.tanggal);
             const inDate = sDate >= dayStart && sDate <= dayEnd;
-            const inBranch = isGlobalView || effectiveCabangIds.includes(s.cabangId || users.find(u => u.id === (s.salesId || s.userId))?.cabangId || '');
+            const inBranch = isGlobalView || isUserScope || effectiveCabangIds.includes(s.cabangId || users.find(u => u.id === (s.salesId || s.userId))?.cabangId || '');
             const depositUserId = s.salesId || s.userId;
             const inUser = selectedUserIds.length === 0 || (depositUserId ? selectedUserIds.includes(depositUserId) : false);
             return inDate && inBranch && inUser;
@@ -443,7 +359,7 @@ export default function LaporanHarian() {
 
             const payload = p.data || {};
             const senderCabangId = typeof payload.senderCabangId === 'string' ? payload.senderCabangId : undefined;
-            const inBranch = isGlobalView || (senderCabangId ? effectiveCabangIds.includes(senderCabangId) : false);
+            const inBranch = isGlobalView || isUserScope || (senderCabangId ? effectiveCabangIds.includes(senderCabangId) : false);
             const inUser = selectedUserIds.length === 0 || selectedUserIds.includes(p.diajukanOleh);
 
             return inBranch && inUser;
@@ -496,7 +412,7 @@ export default function LaporanHarian() {
             const sale = penjualan.find(s => s.id === p.penjualanId);
             if (!sale || sale.status === 'batal') return false;
 
-            const inBranch = isGlobalView || (sale.cabangId && effectiveCabangIds.includes(sale.cabangId));
+            const inBranch = isGlobalView || isUserScope || (sale.cabangId && effectiveCabangIds.includes(sale.cabangId));
             const inUser = selectedUserIds.length === 0 || selectedUserIds.includes(sale.salesId) || selectedUserIds.includes(sale.createdBy);
 
             return inBranch && inUser;
@@ -520,7 +436,7 @@ export default function LaporanHarian() {
             .filter(p => {
                 const pDate = new Date(p.tanggal);
                 const inDate = pDate >= dayStart;
-                const inBranch = isGlobalView || (p.cabangId && effectiveCabangIds.includes(p.cabangId));
+                const inBranch = isGlobalView || isUserScope || (p.cabangId && effectiveCabangIds.includes(p.cabangId));
                 const inUser = selectedUserIds.length === 0 || selectedUserIds.includes(p.salesId) || selectedUserIds.includes(p.createdBy);
                 return inDate && inBranch && inUser && p.status === 'lunas' && p.metodePembayaran === 'tunai';
             })
@@ -534,7 +450,7 @@ export default function LaporanHarian() {
             .filter(s => {
                 const sDate = new Date(s.tanggal);
                 const inDate = sDate >= dayStart;
-                const inBranch = isGlobalView || effectiveCabangIds.includes(s.cabangId || users.find(u => u.id === (s.salesId || s.userId))?.cabangId || '');
+                const inBranch = isGlobalView || isUserScope || effectiveCabangIds.includes(s.cabangId || users.find(u => u.id === (s.salesId || s.userId))?.cabangId || '');
                 const depositUserId = s.salesId || s.userId;
                 const inUser = selectedUserIds.length === 0 || (depositUserId ? selectedUserIds.includes(depositUserId) : false);
                 const isApproved = s.status === 'disetujui' || s.status === 'diterima';
@@ -550,7 +466,7 @@ export default function LaporanHarian() {
 
                 const payload = p.data || {};
                 const senderCabangId = typeof payload.senderCabangId === 'string' ? payload.senderCabangId : undefined;
-                const inBranch = isGlobalView || (senderCabangId ? effectiveCabangIds.includes(senderCabangId) : false);
+                const inBranch = isGlobalView || isUserScope || (senderCabangId ? effectiveCabangIds.includes(senderCabangId) : false);
                 const inUser = selectedUserIds.length === 0 || selectedUserIds.includes(p.diajukanOleh);
 
                 return inBranch && inUser;
@@ -596,7 +512,7 @@ export default function LaporanHarian() {
 
             p.items.forEach(pi => {
                 const qty = pi.jumlah * (pi.konversi || 1);
-                if (!pi.isBonus && pi.harga > 0 && pi.subtotal > 0) {
+                if (!pi.isBonus && pi.subtotal > 0) {
                     existingSales.qty += qty;
                 }
 
@@ -641,7 +557,6 @@ export default function LaporanHarian() {
             // Target Calculation
             const userTargets = activeTargets.filter(t => {
                 if (t.scope === 'sales') return t.sales_id === userId;
-                if (t.scope === 'cabang') return t.cabang_id === (users.find(u => u.id === userId)?.cabangId);
                 return false;
             }).map(t => {
                 let startDate: Date;
@@ -666,8 +581,8 @@ export default function LaporanHarian() {
                 // Relevant Sales for this specific target period
                 const targetSales = penjualan.filter(p => {
                     const pDate = new Date(p.tanggal);
-                    const isPaid = p.isLunas === true || (p.metodePembayaran !== 'tempo' && p.status === 'lunas');
-                    const inDate = pDate >= startDate && pDate <= endDate && isPaid;
+                    const isActive = p.status !== 'batal' && p.status !== 'draft';
+                    const inDate = pDate >= startDate && pDate <= endDate && isActive;
                     if (!inDate) return false;
 
                     if (t.scope === 'sales') return p.salesId === userId;
@@ -678,8 +593,8 @@ export default function LaporanHarian() {
                 const actual = t.target_type === 'nominal'
                     ? targetSales.reduce((sum, p) => sum + p.total, 0)
                     : targetSales.reduce((sum, p) => sum + p.items
-                        .filter(i => i.harga > 0 && !i.promoId && !i.isBonus)
-                        .reduce((s, i) => s + (i.jumlah * (i.konversi || 1)), 0), 0);
+                        .filter(i => !i.isBonus && i.subtotal > 0)
+                        .reduce((s, i) => s + (i.totalQty !== undefined ? i.totalQty : (i.jumlah * (i.konversi || 1))), 0), 0);
 
                 return {
                     id: t.id,
@@ -693,6 +608,8 @@ export default function LaporanHarian() {
 
             return {
                 ...s,
+                userId,
+                cabangId: users.find(u => u.id === userId)?.cabangId,
                 cash: userCash,
                 setoran: userSetoran,
                 selisih: userCash - userSetoran,
@@ -700,24 +617,97 @@ export default function LaporanHarian() {
             };
         }).filter(item => item.qty > 0 || item.total > 0 || item.cash > 0 || item.setoran > 0);
 
+        // Separate Branch Targets Achievement
+        const branchTargets = activeTargets.filter(t => {
+            if (t.scope !== 'cabang') return false;
+            if (isGlobalView) return true;
+            return effectiveCabangIds.includes(t.cabang_id!);
+        }).map(t => {
+            let startDate: Date;
+            let endDate: Date;
+
+            if (t.is_looping) {
+                if (t.jenis === 'harian') {
+                    startDate = startOfDay(date);
+                    endDate = endOfDay(date);
+                } else if (t.jenis === 'mingguan') {
+                    startDate = startOfWeek(date, { weekStartsOn: 1 });
+                    endDate = endOfWeek(date, { weekStartsOn: 1 });
+                } else { // bulanan
+                    startDate = startOfMonth(date);
+                    endDate = endOfMonth(date);
+                }
+            } else {
+                startDate = new Date(t.start_date!);
+                endDate = new Date(t.end_date!);
+            }
+
+            // Relevant Sales for this branch in this period
+            const targetSales = penjualan.filter(p => {
+                const pDate = new Date(p.tanggal);
+                const isActive = p.status !== 'batal' && p.status !== 'draft';
+                const inDate = pDate >= startDate && pDate <= endDate && isActive;
+                if (!inDate) return false;
+
+                return p.cabangId === t.cabang_id;
+            });
+
+            const actual = t.target_type === 'nominal'
+                ? targetSales.reduce((sum, p) => sum + p.total, 0)
+                : targetSales.reduce((sum, p) => sum + p.items
+                    .filter(i => !i.isBonus && i.subtotal > 0)
+                    .reduce((s, i) => s + (i.totalQty !== undefined ? i.totalQty : (i.jumlah * (i.konversi || 1))), 0), 0);
+
+            return {
+                id: t.id,
+                name: `${t.jenis.charAt(0).toUpperCase() + t.jenis.slice(1)} (${t.target_type === 'nominal' ? 'Rp' : 'Qty'})`,
+                cabangId: t.cabang_id,
+                cabangName: cabang.find(c => c.id === t.cabang_id)?.nama || 'Cabang',
+                type: t.target_type,
+                target: t.nilai,
+                actual,
+                percentage: Math.min(100, Math.round((actual / t.nilai) * 100))
+            };
+        });
+
+        // Grouping logic for UI "Sekat"
+        const groupedSalesSummary = Array.from(new Set(salesSummaryList.map(s => s.cabangId))).map(cId => {
+            const branchName = cabang.find(c => c.id === cId)?.nama || 'Tanpa Cabang';
+            const branchSales = salesSummaryList.filter(s => s.cabangId === cId).sort((a, b) => b.total - a.total);
+            const branchTgt = branchTargets.filter(bt => bt.cabangId === cId);
+
+            return {
+                cabangId: cId,
+                cabangName: branchName,
+                sales: branchSales,
+                targets: branchTgt,
+                totals: {
+                    qty: branchSales.reduce((sum, s) => sum + s.qty, 0),
+                    total: branchSales.reduce((sum, s) => sum + s.total, 0),
+                    cash: branchSales.reduce((sum, s) => sum + s.cash, 0),
+                    setoran: branchSales.reduce((sum, s) => sum + s.setoran, 0),
+                    selisih: branchSales.reduce((sum, s) => sum + s.selisih, 0),
+                }
+            };
+        }).sort((a, b) => a.cabangName.localeCompare(b.cabangName));
+
         return {
             date: selectedDate,
             branchName: selectedCabangIds.length === 0
-                ? 'Semua Cabang'
-                : selectedCabangIds.length === 1
-                    ? cabang.find(c => c.id === selectedCabangIds[0])?.nama || '-'
-                    : `${selectedCabangIds.length} Cabang`,
+                ? (isAdminOrOwner ? 'Semua Cabang' : (currentUser?.cabangId ? cabang.find(c => c.id === currentUser.cabangId)?.nama : ''))
+                : (selectedCabangIds.length === 1 ? cabang.find(c => c.id === selectedCabangIds[0])?.nama : `${selectedCabangIds.length} Cabang`),
+            stock: Array.from(stockMovementMap.values()).sort((a, b) => a.nama.localeCompare(b.nama)),
             sales: {
+                count: filteredSales.length,
                 totalOmzet,
                 totalTunai,
                 totalTempo,
                 totalQty,
-                totalPromoQty,
-                count: filteredSales.length
+                totalPromoQty
             },
-            stock: Array.from(stockMovementMap.values()),
-            productSummary: Array.from(productSummaryMap.values()).sort((a, b) => b.qty - a.qty),
+            productSummary: Array.from(productSummaryMap.values()).sort((a, b) => b.total - a.total),
             salesSummary: salesSummaryList.sort((a, b) => b.total - a.total),
+            groupedSalesSummary,
             categorySummary: Array.from(categorySummaryMap.values()).sort((a, b) => b.total - a.total),
             finance: {
                 previous: saldoBelumSetorSebelumnya,
@@ -726,7 +716,8 @@ export default function LaporanHarian() {
                 pending: totalSetoranPending,
                 net: saldoBelumSetorSebelumnya + cashCollectionToday - totalSetoranValid
             },
-            depositNotes
+            depositNotes,
+            branchTargets
         };
     }, [selectedDate, selectedCabangIds, selectedUserIds, penjualan, barang, users, stokPengguna, persetujuan, setoran, saldoPengguna, cabang, satuan, mutasiBarang, penyesuaianStok, pembayaran, pelanggan, kategoriPelanggan, currentUser, isAdminOrOwner]);
 
@@ -869,8 +860,8 @@ export default function LaporanHarian() {
                 styles: { fontSize: 8 }
             });
 
-            // 4. Daftar Sales Ringkasan (Optional)
-            if (reportData.salesSummary.length > 0) {
+            // 4. Daftar Sales Ringkasan (Grouped by Branch)
+            if (reportData.groupedSalesSummary.length > 0) {
                 const finalY_stock = (doc as unknown as { lastAutoTable: { finalY: number } }).lastAutoTable.finalY + 10;
                 if (finalY_stock > 250) doc.addPage();
                 const startY_sales = finalY_stock > 250 ? 20 : finalY_stock;
@@ -878,16 +869,34 @@ export default function LaporanHarian() {
                 doc.setFontSize(12);
                 doc.text('4. RINGKASAN PERFORMANCE SALES', 14, startY_sales);
 
+                const tableBody: any[] = [];
+                reportData.groupedSalesSummary.forEach((group: any) => {
+                    const targetText = group.targets.map((t: any) => `${t.name}: ${t.percentage}%`).join(' | ');
+                    // Branch Header Row (Condensed)
+                    tableBody.push([
+                        {
+                            content: `${group.cabangName.toUpperCase()} ${targetText ? `(${targetText})` : `- ${group.sales.length} Sales`}`,
+                            colSpan: 5,
+                            styles: { fillColor: [248, 250, 252], fontStyle: 'bold', textColor: [71, 85, 105], fontSize: 6.5, cellPadding: 1 }
+                        }
+                    ]);
+
+                    // Sales Rows
+                    group.sales.forEach((s: any) => {
+                        tableBody.push([
+                            s.nama,
+                            `${formatNumber(s.qty)} Pcs\n${formatRupiah(s.total)}`,
+                            s.targets.map((t: any) => `${t.name}: ${t.percentage}%`).join('\n') || '-',
+                            `${formatRupiah(s.cash)}\n${formatRupiah(s.setoran)}`,
+                            s.selisih > 0 ? formatRupiah(s.selisih) : '-'
+                        ]);
+                    });
+                });
+
                 autoTable(doc, {
                     startY: startY_sales + 4,
-                    head: [['Salesman', 'Qty / Omzet', 'Achievement', 'Kas / Setor', 'Selisih']],
-                    body: reportData.salesSummary.map(s => [
-                        s.nama,
-                        `${formatNumber(s.qty)} Pcs\n${formatRupiah(s.total)}`,
-                        s.targets.map(t => `${t.name}: ${t.percentage}%`).join('\n') || '-',
-                        `${formatRupiah(s.cash)}\n${formatRupiah(s.setoran)}`,
-                        s.selisih > 0 ? formatRupiah(s.selisih) : '-'
-                    ]),
+                    head: [['Salesman', 'Qty / Omzet', 'Achievement', 'Penjualan', 'Selisih']],
+                    body: tableBody,
                     theme: 'grid',
                     headStyles: { fillColor: [230, 126, 34] },
                     styles: { fontSize: 7 },
@@ -1042,7 +1051,7 @@ export default function LaporanHarian() {
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
                 {/* Ringkasan Per Produk */}
                 <Card className="shadow-sm border-slate-200">
-                    <CardHeader className="bg-slate-50/50 border-b p-3 px-4">
+                    <CardHeader className="bg-slate-50/50 border-b p-2.5 px-4">
                         <CardTitle className="text-xs font-bold uppercase tracking-wider flex items-center gap-2">
                             <Package className="w-3.5 h-3.5 text-blue-500" />
                             Ringkasan Penjualan Per Produk
@@ -1065,9 +1074,9 @@ export default function LaporanHarian() {
                                 ) : (
                                     reportData.productSummary.map((p, idx) => (
                                         <TableRow key={idx} className="hover:bg-slate-50/50">
-                                            <TableCell className="text-[11px] py-1.5 font-medium">{p.nama}</TableCell>
-                                            <TableCell className="text-[11px] py-1.5 text-right font-bold text-slate-900">{formatNumber(p.qty)} <span className="text-[9px] font-normal text-slate-400">{p.satuan}</span></TableCell>
-                                            <TableCell className="text-[11px] py-1.5 text-right font-bold text-blue-600">{formatRupiah(p.total)}</TableCell>
+                                            <TableCell className="text-[11px] py-1 font-medium">{p.nama}</TableCell>
+                                            <TableCell className="text-[11px] py-1 text-right font-bold text-slate-900">{formatNumber(p.qty)} <span className="text-[9px] font-normal text-slate-400">{p.satuan}</span></TableCell>
+                                            <TableCell className="text-[11px] py-1 text-right font-bold text-blue-600">{formatRupiah(p.total)}</TableCell>
                                         </TableRow>
                                     ))
                                 )}
@@ -1078,7 +1087,7 @@ export default function LaporanHarian() {
 
                 {/* Ringkasan Per Sales */}
                 <Card className="shadow-sm border-slate-200">
-                    <CardHeader className="bg-slate-50/50 border-b p-3 px-4">
+                    <CardHeader className="bg-slate-50/50 border-b p-2.5 px-4">
                         <CardTitle className="text-xs font-bold uppercase tracking-wider flex items-center gap-2">
                             <Users className="w-3.5 h-3.5 text-orange-500" />
                             Ringkasan Performance Sales
@@ -1091,48 +1100,92 @@ export default function LaporanHarian() {
                                     <TableHead className="text-[10px] h-8 font-bold text-slate-500">Salesman</TableHead>
                                     <TableHead className="text-[10px] h-8 font-bold text-slate-500 text-right">Qty / Omzet</TableHead>
                                     <TableHead className="text-[10px] h-8 font-bold text-slate-500 text-right">Target Achievement</TableHead>
-                                    <TableHead className="text-[10px] h-8 font-bold text-slate-500 text-right">Kas / Setor</TableHead>
-                                    <TableHead className="text-[10px] h-8 font-bold text-slate-500 text-right px-4">Selisih</TableHead>
+                                    <TableHead className="text-[10px] h-8 font-bold text-slate-500 text-right">Penjualan</TableHead>
+                                    <TableHead className="text-[10px] h-8 font-bold text-slate-500 text-right px-4">Belum Setor</TableHead>
                                 </TableRow>
                             </TableHeader>
                             <TableBody>
-                                {reportData.salesSummary.length === 0 ? (
+                                {reportData.groupedSalesSummary.length === 0 ? (
                                     <TableRow>
-                                        <TableCell colSpan={4} className="text-[10px] text-center text-slate-400 italic py-4">Tidak ada data</TableCell>
+                                        <TableCell colSpan={5} className="text-[10px] text-center text-slate-400 italic py-4">Tidak ada data</TableCell>
                                     </TableRow>
                                 ) : (
-                                    reportData.salesSummary.map((s, idx) => (
-                                        <TableRow key={idx} className="hover:bg-slate-50/50">
-                                            <TableCell className="text-[11px] py-1.5 font-bold text-slate-700">{s.nama}</TableCell>
-                                            <TableCell className="text-[11px] py-1.5 text-right">
-                                                <div className="font-bold">{formatNumber(s.qty)}</div>
-                                                <div className="text-[9px] text-blue-500">{formatRupiah(s.total)}</div>
-                                            </TableCell>
-                                            <TableCell className="text-[11px] py-1.5 text-right">
-                                                <div className="space-y-1 w-32 ml-auto">
-                                                    {s.targets.length === 0 ? (
-                                                        <div className="text-[9px] text-slate-400 italic">No target</div>
-                                                    ) : (
-                                                        s.targets.map(t => (
-                                                            <div key={t.id} className="space-y-0.5">
-                                                                <div className="flex justify-between text-[8px] font-bold uppercase tracking-tighter">
-                                                                    <span>{t.name}</span>
-                                                                    <span className={t.percentage >= 100 ? 'text-green-600' : 'text-orange-600'}>{t.percentage}%</span>
+                                    reportData.groupedSalesSummary.map((group, gIdx) => (
+                                        <React.Fragment key={group.cabangId || gIdx}>
+                                            {/* Branch Header Row - Slim Divider (Sekat) */}
+                                            <TableRow className="bg-slate-50 border-t-2 border-slate-200 border-b border-slate-100 h-7 select-none">
+                                                <TableCell className="py-0 px-4 font-bold text-slate-500 uppercase tracking-widest text-[8px]">
+                                                    <div className="flex items-center gap-2">
+                                                        <div className="w-1.5 h-3 bg-slate-300 rounded-sm" />
+                                                        {group.cabangName}
+                                                        <span className="ml-1 text-[7px] text-slate-400 font-normal normal-case">
+                                                            ({group.sales.length} Sales)
+                                                        </span>
+                                                    </div>
+                                                </TableCell>
+                                                <TableCell className="py-0 text-right">
+                                                    <div className="text-[8px] font-bold text-slate-400">{formatNumber(group.totals.qty)} | {formatRupiah(group.totals.total)}</div>
+                                                </TableCell>
+                                                <TableCell className="py-0 text-right">
+                                                    <div className="space-y-0.5 ml-auto max-w-[90px]">
+                                                        {group.targets.map(bt => (
+                                                            <div key={bt.id} className="flex items-center gap-1.5">
+                                                                <span className="text-[7px] font-medium uppercase text-slate-400 min-w-[20px]">{bt.name}</span>
+                                                                <div className="flex-1 h-1 bg-white border border-slate-100 rounded-full overflow-hidden">
+                                                                    <div
+                                                                        className={`h-full ${bt.percentage >= 100 ? 'bg-green-500' : 'bg-slate-300'}`}
+                                                                        style={{ width: `${Math.min(100, bt.percentage)}%` }}
+                                                                    />
                                                                 </div>
-                                                                <Progress value={t.percentage} className="h-1" />
+                                                                <span className={`text-[7px] font-bold ${bt.percentage >= 100 ? 'text-green-600' : 'text-slate-400'}`}>{bt.percentage}%</span>
                                                             </div>
-                                                        ))
-                                                    )}
-                                                </div>
-                                            </TableCell>
-                                            <TableCell className="text-[11px] py-1.5 text-right">
-                                                <div className="text-green-600 font-medium">{formatRupiah(s.cash)}</div>
-                                                <div className="text-[9px] text-slate-400">{formatRupiah(s.setoran)}</div>
-                                            </TableCell>
-                                            <TableCell className="text-[11px] py-1.5 text-right font-black text-red-600 px-4">
-                                                {s.selisih > 0 ? formatRupiah(s.selisih) : '-'}
-                                            </TableCell>
-                                        </TableRow>
+                                                        ))}
+                                                    </div>
+                                                </TableCell>
+                                                <TableCell className="py-0 text-right">
+                                                    <div className="text-[8px] font-bold text-slate-400">{formatRupiah(group.totals.cash)}</div>
+                                                    <div className="text-[7px] font-medium text-slate-300">{formatRupiah(group.totals.setoran)}</div>
+                                                </TableCell>
+                                                <TableCell className="py-0 text-right font-bold text-slate-400 px-4 text-[8px]">
+                                                    {group.totals.selisih > 0 ? formatRupiah(group.totals.selisih) : '-'}
+                                                </TableCell>
+                                            </TableRow>
+
+                                            {/* Sales Records for this Branch */}
+                                            {group.sales.map((s, sIdx) => (
+                                                <TableRow key={sIdx} className="hover:bg-slate-50/50 border-b border-slate-100 last:border-b-0">
+                                                    <TableCell className="text-[11px] py-1 font-bold text-slate-600 pl-8">{s.nama}</TableCell>
+                                                    <TableCell className="text-[11px] py-1 text-right">
+                                                        <div className="font-bold text-slate-700">{formatNumber(s.qty)}</div>
+                                                        <div className="text-[9px] text-blue-500">{formatRupiah(s.total)}</div>
+                                                    </TableCell>
+                                                    <TableCell className="text-[11px] py-1 text-right">
+                                                        <div className="space-y-1 ml-auto max-w-[120px]">
+                                                            {s.targets.length === 0 ? (
+                                                                <div className="text-[9px] text-slate-300 italic">No target</div>
+                                                            ) : (
+                                                                s.targets.map(t => (
+                                                                    <div key={t.id} className="space-y-0.5">
+                                                                        <div className="flex justify-between text-[8px] font-bold uppercase tracking-tighter text-slate-500">
+                                                                            <span>{t.name}</span>
+                                                                            <span className={t.percentage >= 100 ? 'text-green-600' : 'text-orange-600'}>{t.percentage}%</span>
+                                                                        </div>
+                                                                        <Progress value={t.percentage} className="h-1" />
+                                                                    </div>
+                                                                ))
+                                                            )}
+                                                        </div>
+                                                    </TableCell>
+                                                    <TableCell className="text-[11px] py-1 text-right">
+                                                        <div className="text-green-600 font-medium">{formatRupiah(s.cash)}</div>
+                                                        <div className="text-[9px] text-slate-400">{formatRupiah(s.setoran)}</div>
+                                                    </TableCell>
+                                                    <TableCell className="text-[11px] py-1 text-right font-black text-red-600 px-4">
+                                                        {s.selisih > 0 ? formatRupiah(s.selisih) : '-'}
+                                                    </TableCell>
+                                                </TableRow>
+                                            ))}
+                                        </React.Fragment>
                                     ))
                                 )}
                             </TableBody>

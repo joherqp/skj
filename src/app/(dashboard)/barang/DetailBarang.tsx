@@ -164,29 +164,39 @@ export default function DetailBarang() {
         // 2. Restock (IN)
         ...persetujuan.filter(p => {
             const pData = p.data as PersetujuanData;
-            const isRestock = p.jenis === 'restock' && p.status === 'disetujui' && pData?.barangId === id;
+            const isRestockType = p.jenis === 'restock' && p.status === 'disetujui';
+            if (!isRestockType) return false;
+            
             const userMatch = isAdminOrOwner ? true : p.targetUserId === user?.id;
             const branchMatch = isHistoryValidForBranch(p.targetUserId);
-            return isRestock && userMatch && branchMatch;
-        }).map(p => {
-            const pData = p.data as PersetujuanData;
-            let unitName = productUnitName;
-            if (pData?.satuanId) {
-                const s = satuanList.find(x => x.id === pData.satuanId);
-                if (s) unitName = s.simbol || s.nama;
-            }
-            const requesterName = users.find(u => u.id === p.diajukanOleh)?.nama || 'Unknown';
-            const targetName = users.find(u => u.id === p.targetUserId)?.nama || 'Gudang';
+            if (!userMatch || !branchMatch) return false;
 
-            return {
-                id: p.id,
-                date: new Date(p.tanggalPersetujuan || p.tanggalPengajuan),
-                type: 'in' as const,
-                source: 'Restock',
-                detail: isAdminOrOwner ? `Oleh: ${requesterName} -> ${targetName}` : 'Restock Stok',
-                qty: Number(pData?.jumlah || 0),
-                unit: unitName
-            };
+            const items = pData?.items || (pData?.barangId ? [pData] : []);
+            return items.some((it: any) => it.barangId === id);
+        }).flatMap(p => {
+            const pData = p.data as PersetujuanData;
+            const items = pData?.items || (pData?.barangId ? [pData] : []);
+            const matchingItems = items.filter((it: any) => it.barangId === id);
+            
+            return matchingItems.map((item: any, idx: number) => {
+                let unitName = productUnitName;
+                if (item.satuanId) {
+                    const s = satuanList.find(x => x.id === item.satuanId);
+                    if (s) unitName = s.simbol || s.nama;
+                }
+                const requesterName = users.find(u => u.id === p.diajukanOleh)?.nama || 'Unknown';
+                const targetName = users.find(u => u.id === p.targetUserId)?.nama || 'Penerima';
+
+                return {
+                    id: p.id + `_restock_${idx}`,
+                    date: new Date(p.tanggalPersetujuan || p.tanggalPengajuan),
+                    type: 'in' as const,
+                    source: 'Restock',
+                    detail: isAdminOrOwner ? `Oleh: ${requesterName} -> ${targetName}` : 'Restock Stok',
+                    qty: Number(item.jumlah || 0),
+                    unit: unitName
+                };
+            });
         }),
 
         // 3. Mutasi (Unified Logic)

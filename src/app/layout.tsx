@@ -1,5 +1,6 @@
 import './globals.css';
 import { Providers } from '@/components/shared/providers';
+import { HydrationBoundary } from '@/components/shared/HydrationBoundary';
 import type { Metadata, Viewport } from 'next';
 
 export const metadata: Metadata = {
@@ -25,9 +26,11 @@ export default function RootLayout({
     return (
         <html lang="en">
             <body className="antialiased">
-                <Providers>
-                    {children}
-                </Providers>
+                <HydrationBoundary>
+                    <Providers>
+                        {children}
+                    </Providers>
+                </HydrationBoundary>
             </body>
         </html>
     );

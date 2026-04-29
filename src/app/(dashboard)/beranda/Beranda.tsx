@@ -21,7 +21,7 @@ import { toast } from 'sonner';
 import { useRouter } from 'next/navigation';
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { supabase } from '@/lib/supabase';
-import { formatRupiah, formatTanggal, formatNumber, formatCompactRupiah, formatCompactNumber, formatKarton } from '@/lib/utils';
+import { formatRupiah, formatTanggal, formatNumber, formatCompactRupiah, formatCompactNumber, formatKarton, toCamelCase } from '@/lib/utils';
 import { Progress } from '@/components/ui/progress';
 import { Target, User, Users as UsersIcon, UserCheck } from 'lucide-react';
 import { Switch } from "@/components/ui/switch";
@@ -48,12 +48,19 @@ export default function Beranda() {
   const { user } = useAuth();
   const [activeTargets, setActiveTargets] = useState<SalesTargetDB[]>([]);
   const [expandedTargets, setExpandedTargets] = useState<Record<string, boolean>>({});
+  const [salesWithItems, setSalesWithItems] = useState<any[]>([]);
+  const [loadingSales, setLoadingSales] = useState(false);
   const [isScannerOpen, setIsScannerOpen] = useState(false);
+
+  const {
+    barang, pelanggan, penjualan, setoran, absensi, persetujuan,
+    cabang: cabangList, stokPengguna, users, saldoPengguna,
+    viewMode, setViewMode, kunjungan
+  } = useDatabase();
 
   useEffect(() => {
     const fetchTargets = async () => {
       try {
-
         const { data, error } = await supabase
           .from('sales_targets')
           .select('*')
@@ -63,7 +70,7 @@ export default function Beranda() {
 
         const now = new Date();
         const validTargets = (data as SalesTargetDB[])?.filter(t => {
-          // Scope Check
+          // Scope Check - Only Personal and Branch
           if (t.scope === 'sales' && t.sales_id !== user?.id) return false;
           if (t.scope === 'cabang' && t.cabang_id !== (user?.cabangId || '')) return false;
 
@@ -87,15 +94,46 @@ export default function Beranda() {
       }
     };
 
-    if (user?.roles.includes('sales')) {
+    if (user?.roles.includes('sales') || user?.roles.includes('leader')) {
       fetchTargets();
     }
   }, [user]);
-  const {
-    barang, pelanggan, penjualan, setoran, absensi, persetujuan,
-    cabang: cabangList, stokPengguna, users, saldoPengguna,
-    viewMode, setViewMode, kunjungan
-  } = useDatabase();
+
+  // Fetch sales with items for targets (current month)
+  useEffect(() => {
+    const fetchSalesForTargets = async () => {
+      if (!user || activeTargets.length === 0) return;
+      setLoadingSales(true);
+      try {
+        const start = startOfMonth(new Date());
+        const end = endOfMonth(new Date());
+
+        let query = supabase
+          .from('penjualan')
+          .select('*')
+          .neq('status', 'batal')
+          .neq('status', 'draft')
+          .gte('tanggal', start.toISOString())
+          .lte('tanggal', end.toISOString())
+          .order('tanggal', { ascending: false });
+
+        if (user.cabangId) {
+          query = query.eq('cabang_id', user.cabangId);
+        }
+
+        const { data, error } = await query;
+        if (error) throw error;
+        setSalesWithItems(toCamelCase(data) || []);
+      } catch (err) {
+        console.error('Error fetching sales for targets', err);
+      } finally {
+        setLoadingSales(false);
+      }
+    };
+
+    fetchSalesForTargets();
+  }, [user, activeTargets.length]);
+
   const router = useRouter();
 
   const today = new Date();
@@ -440,31 +478,20 @@ export default function Beranda() {
 
                 if (target.is_looping) {
                   const now = new Date();
-                  if (target.jenis === 'harian') {
-                    startDate = startOfDay(now);
-                    endDate = endOfDay(now);
-                  } else if (target.jenis === 'mingguan') {
-                    startDate = startOfWeek(now, { weekStartsOn: 1 });
-                    endDate = endOfWeek(now, { weekStartsOn: 1 });
-                  } else { // bulanan
-                    startDate = startOfMonth(now);
-                    endDate = endOfMonth(now);
-                  }
+                  // Align with Laporan Performance (always monthly for looping)
+                  startDate = startOfMonth(now);
+                  endDate = endOfMonth(now);
                 } else {
                   startDate = new Date(target.start_date!);
                   endDate = new Date(target.end_date!);
                 }
 
                 // Filter Sales
-                const actualSales = penjualan.filter(p => {
+                const actualSales = (salesWithItems.length > 0 ? salesWithItems : penjualan).filter(p => {
                   const pDate = new Date(p.tanggal);
-                  // Ensure only 'lunas' transactions are counted AND fully paid (isLunas)
-                  // For tempo, isLunas must be true. For others (tunai), it's implicitly true.
-                  // CRITICAL: Exclude 'batal' and 'draft'
+                  // Align with report: exclude batal/draft
                   if (p.status === 'batal' || p.status === 'draft') return false;
-
-                  const isPaid = p.isLunas === true || (p.metodePembayaran !== 'tempo' && p.status === 'lunas');
-                  const inDate = pDate >= startDate && pDate <= endDate && isPaid;
+                  const inDate = pDate >= startDate && pDate <= endDate;
 
                   if (!inDate) return false;
 
@@ -478,19 +505,27 @@ export default function Beranda() {
                 });
 
                 const currentAmount = target.target_type === 'nominal'
-                  ? actualSales.reduce((sum, p) => sum + p.total, 0)
-                  : actualSales.reduce((sum, p) => sum + p.items
-                    .filter(i => i.harga > 0 && !i.promoId && !i.isBonus) // Exclude free items (bonuses/promos)
-                    .reduce((s, i) => s + (i.jumlah * (i.konversi || 1)), 0), 0);
+                  ? actualSales.reduce((sum, p) => sum + (p.total || 0), 0)
+                  : actualSales.reduce((sum, p) => {
+                    const items = p.penjualanItems || p.items || [];
+                    return sum + items
+                      .filter((i: any) => !i.isBonus && i.subtotal > 0) // Align with RekapPenjualan logic
+                      .reduce((s: number, i: any) => s + (i.totalQty !== undefined ? i.totalQty : (i.jumlah * (i.konversi || 1))), 0);
+                  }, 0);
 
-                const percentage = Math.min(100, Math.round((currentAmount / target.nilai) * 100));
+                const percentage = target.nilai > 0 ? (currentAmount / target.nilai) * 100 : 0;
                 const isWarning = percentage < 50 && new Date() > new Date(startDate.getTime() + (endDate.getTime() - startDate.getTime()) / 2);
 
+                const targetHolder = target.scope === 'sales'
+                  ? users.find(u => u.id === target.sales_id)?.nama
+                  : undefined;
+
                 return (
-                  <Card key={target.id} elevated className={`cursor-pointer hover:bg-muted/10 active:scale-[0.98] transition-all ${isWarning ? 'border-warning/50' : ''}`} onClick={() => router.push('/laporan/sales-performance')}>
+                  <Card key={target.id} elevated className={`hover:bg-muted/10 active:scale-[0.99] transition-all ${isWarning ? 'border-warning/50' : ''}`}>
                     <CardContent className="p-4 space-y-3">
                       <div className="flex justify-between items-start">
-                        <div className="flex items-center gap-2">
+                        {/* Middle/Left Zone for Navigation */}
+                        <div className="flex items-center gap-2 cursor-pointer flex-1" onClick={() => router.push('/laporan/sales-performance')}>
                           <div className="p-2 rounded-lg bg-primary/10">
                             <Target className="w-4 h-4 text-primary" />
                           </div>
@@ -508,7 +543,9 @@ export default function Beranda() {
                             </p>
                           </div>
                         </div>
-                        <div className="text-right cursor-pointer select-none" onClick={() => setExpandedTargets(prev => ({ ...prev, [target.id]: !prev[target.id] }))}>
+
+                        {/* Right Zone for Toggle Only */}
+                        <div className="text-right cursor-pointer select-none pl-4 border-l border-border/50" onClick={(e) => { e.stopPropagation(); setExpandedTargets(prev => ({ ...prev, [target.id]: !prev[target.id] })); }}>
                           <p className="font-bold text-sm">
                             {expandedTargets[target.id]
                               ? (target.target_type === 'nominal' ? formatRupiah(currentAmount) : formatNumber(currentAmount))
@@ -518,11 +555,15 @@ export default function Beranda() {
                               : (target.target_type === 'nominal' ? formatCompactRupiah(target.nilai) : formatKarton(target.nilai))}</span>
                           </p>
                           <p className={`text-xs font-semibold ${percentage >= 100 ? 'text-success' : 'text-primary'}`}>
-                            {percentage}% Tercapai
+                            {percentage.toFixed(1)}% Tercapai
                           </p>
                         </div>
                       </div>
-                      <Progress value={percentage} className={`h-2 ${percentage >= 100 ? 'bg-success/20' : ''}`} />
+
+                      <div className="cursor-pointer" onClick={() => router.push('/laporan/sales-performance')}>
+                        <Progress value={Math.min(100, percentage)} className={`h-2 ${percentage >= 100 ? 'bg-success/20' : ''}`} />
+                      </div>
+
                       {isWarning && (
                         <div className="flex items-center gap-2 text-xs text-warning">
                           <AlertCircle className="w-3 h-3" />

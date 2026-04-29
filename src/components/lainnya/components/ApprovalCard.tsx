@@ -79,9 +79,9 @@ export function ApprovalCard({
             if (userId === 'Unknown') return 'Sistem/Pengguna';
             return '-';
         }
-        
+
         if (userId === 'pusat' || userId === 'system' || userId === 'admin') return 'Sistem/Pusat';
-        
+
         let u = users.find(u => u.id === userId);
         if (!u && typeof userId === 'string') {
             u = users.find(u => u.id === userId.trim());
@@ -90,21 +90,21 @@ export function ApprovalCard({
         if (!u) {
             // Last ditch effort: check if userId itself is a name (non-UUID-like)
             if (typeof userId === 'string' && userId.length < 20 && !userId.includes('-') && isNaN(Number(userId))) return userId;
-            
+
             // Check payload fallbacks
             const payloadName = payload?.userName || payload?.namaUser || payload?.nama || payload?.operator;
             if (payloadName && payloadName !== 'Unknown') return payloadName;
 
             return typeof userId === 'string' && userId.length > 15 ? `User ${userId.substring(0, 8)}` : `User ${userId}`;
         }
-        
+
         // Robust name check
-        const name = (u.nama && u.nama !== 'Unknown' && u.nama.trim() !== '') 
-            ? u.nama 
-            : (u.username && u.username !== 'Unknown' && u.username.trim() !== '') 
-                ? u.username 
+        const name = (u.nama && u.nama !== 'Unknown' && u.nama.trim() !== '')
+            ? u.nama
+            : (u.username && u.username !== 'Unknown' && u.username.trim() !== '')
+                ? u.username
                 : (typeof userId === 'string' && userId.length > 15 ? `User ${userId.substring(0, 8)}` : userId);
-                
+
         const c = cabang.find(c => c.id === u.cabangId);
         const role = u.roles?.[0] ? ` (${u.roles[0]})` : '';
         return `${name}${role}${c ? ` @ ${c.nama}` : ''}`;
@@ -112,14 +112,14 @@ export function ApprovalCard({
 
     const getCabangName = (id?: string) => {
         if (!id || id === 'pusat' || id === 'Pusat' || id === 'system') return 'Pusat/Gudang';
-        
+
         const safeId = typeof id === 'string' ? id.trim() : id;
         const c = cabang.find(item => item.id === id || item.id === safeId || item.id === (id as any).id);
         if (c) return c.nama;
-        
+
         // Handle names that might be passed as IDs
         if (typeof id === 'string' && id.length < 15 && isNaN(Number(id)) && !id.includes('-')) return id;
-        
+
         return typeof id === 'string' && id.length > 15 ? `Cabang ${id.substring(0, 5)}` : String(id);
     };
 
@@ -209,11 +209,11 @@ export function ApprovalCard({
                                 )}
                                 <div className="mt-1 space-y-0.5">
                                     <p className="text-sm text-muted-foreground truncate">
-                                        Oleh: <span className="font-medium text-foreground">{formatUserDetail(item.diajukanOleh, item.data as PersetujuanPayload)}</span>
+                                        Dari: <span className="font-medium text-foreground">{formatUserDetail(item.diajukanOleh, item.data as PersetujuanPayload)}</span>
                                     </p>
                                     {item.targetUserId && (
                                         <p className="text-xs text-muted-foreground truncate">
-                                            Kepada: <span className="font-medium text-foreground">{formatUserDetail(item.targetUserId, item.data as PersetujuanPayload)}</span>
+                                            Ke: <span className="font-medium text-foreground">{formatUserDetail(item.targetUserId, item.data as PersetujuanPayload)}</span>
                                         </p>
                                     )}
                                     <p className="text-xs text-muted-foreground">{formatDateTime(item.tanggalPengajuan)}</p>
@@ -228,11 +228,6 @@ export function ApprovalCard({
                                         <p className="text-[10px] text-muted-foreground">
                                             {formatDateTime(item.tanggalPersetujuan)}
                                         </p>
-                                        {item.disetujuiOleh && (
-                                            <p className="text-[10px] text-muted-foreground">
-                                                Disetujui: {formatUserDetail(item.disetujuiOleh, item.data as PersetujuanPayload)}
-                                            </p>
-                                        )}
                                         {reimburseData?.status === 'dibayar' && (
                                             <div className="mt-1 pt-1 border-t border-border/50">
                                                 <p className="text-[10px] text-green-600 font-medium">
@@ -263,7 +258,7 @@ export function ApprovalCard({
                                             </div>
                                         )}
                                     </div>
-                                    
+
                                     {/* Proofs */}
                                     <div className="flex flex-col gap-2 items-end">
                                         {(setoranData.buktiUrl || setoranData.buktiGambar || setoranData.bukti || setoranData.proofUrl) && (
@@ -280,7 +275,7 @@ export function ApprovalCard({
                                             <div className="flex -space-x-4">
                                                 {(setoranData.transfers as any[]).slice(0, 3).map((t, idx) => t.proofUrl && (
                                                     <div key={idx} className="w-8 h-8 rounded-full border-2 border-white overflow-hidden bg-slate-100 shadow-sm hover:scale-110 transition-transform cursor-pointer relative z-[5]">
-                                                        <ImagePreviewModal src={t.proofUrl} alt={`Bukti ${idx+1}`} title={`Bukti Transfer ${idx+1}`} />
+                                                        <ImagePreviewModal src={t.proofUrl} alt={`Bukti ${idx + 1}`} title={`Bukti Transfer ${idx + 1}`} />
                                                     </div>
                                                 ))}
                                                 {(setoranData.transfers as any[]).length > 3 && (
@@ -367,19 +362,53 @@ export function ApprovalCard({
                     </div>
                 );
 
-            case 'restock':
+            case 'restock': {
+                const items = (d.items || []) as any[];
+                const firstItem = items[0] || d;
+                const totalJumlah = items.length > 0
+                    ? items.reduce((sum, it) => sum + (Number(it.jumlah) || 0), 0)
+                    : (Number(d.jumlah || d.nilai_qty) || 0);
+
+                const branchName = d.targetCabangName || getCabangName(item.targetCabangId);
+
                 return (
-                    <div className="mt-2 p-3 bg-emerald-50/30 rounded text-sm border border-emerald-100">
-                        <p className="font-medium text-emerald-900">{d.namaBarang}</p>
-                        <div className="flex justify-between items-center mt-1">
-                            <p>
-                                Jumlah: <span className="font-bold">{(d.jumlah || 0).toLocaleString('id-ID')}</span>
-                                {' '}<span className="text-xs font-medium bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded">{getUnitName(d.satuanId)}</span>
+                    <div className="mt-2 p-3 bg-emerald-50/30 rounded text-sm border border-emerald-100 space-y-1">
+                        <div className="flex justify-between items-start gap-2">
+                            <p className="font-medium text-emerald-900 leading-tight">
+                                {firstItem.namaBarang || d.namaBarang || 'Restok Barang'}
+                                {items.length > 1 && <span className="text-[10px] text-emerald-600 ml-2 font-normal block mt-0.5">+{items.length - 1} item lainnya</span>}
+                            </p>
+                            {branchName && (
+                                <span className="text-[9px] bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded font-bold uppercase shrink-0">
+                                    {branchName}
+                                </span>
+                            )}
+                        </div>
+                        <div className="flex justify-between items-center pt-1">
+                            <p className="text-[11px] text-muted-foreground">Total Qty:</p>
+                            <p className="text-[11px]">
+                                <span className="font-bold">{totalJumlah.toLocaleString('id-ID')}</span>
+                                {' '}<span className="text-[10px] font-medium text-emerald-600 bg-emerald-100/50 px-1 rounded">
+                                    {items.length === 1 || (!items.length && firstItem.satuanId) ? getUnitName(firstItem.satuanId) : 'Unit'}
+                                </span>
                             </p>
                         </div>
-                        {item.catatan && <p className="text-xs text-muted-foreground mt-1 italic">"{item.catatan}"</p>}
+                        {d.nilai > 0 && (
+                            <div className="flex justify-between items-center">
+                                <p className="text-[11px] text-muted-foreground">Total Nilai:</p>
+                                <p className="text-[11px] font-bold text-emerald-700">{formatRupiah(d.nilai)}</p>
+                            </div>
+                        )}
+                        <div className="flex justify-between items-center border-t border-emerald-100/50 pt-1.5 mt-1">
+                            <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Penerima</p>
+                            <p className="font-bold text-[10px] text-emerald-800">
+                                {d.receiverName || formatUserDetail(item.targetUserId, d)}
+                            </p>
+                        </div>
+                        {item.catatan && <p className="text-[10px] text-muted-foreground mt-1 italic border-t border-emerald-100/30 pt-1">"{item.catatan}"</p>}
                     </div>
                 );
+            }
 
             case 'perubahan_data_pelanggan':
                 return (
@@ -422,7 +451,7 @@ export function ApprovalCard({
             case 'mutasi':
             case 'mutasi_stok': {
                 let items = (d.items || mutasiData?.items || []) as { barangId: string; jumlah: number; satuanId?: string }[];
-                
+
                 // Fallback for single item mutasi
                 if (!items.length && d.barangId) {
                     items = [{ barangId: d.barangId, jumlah: (d.jumlah || 1) as number, satuanId: d.satuanId }];
@@ -490,7 +519,7 @@ export function ApprovalCard({
                             </div>
                         </div>
                         <div className="p-3">
-                             <div className="flex justify-between items-center mb-2">
+                            <div className="flex justify-between items-center mb-2">
                                 <div className="flex flex-col">
                                     <span className="text-[10px] text-muted-foreground uppercase">Dari (Pemohon)</span>
                                     <span className="font-bold text-blue-700 text-xs">
@@ -512,7 +541,7 @@ export function ApprovalCard({
                                         <span className="font-medium">{it.jumlah} {satuan.find(s => s.id === it.satuanId)?.simbol || 'Unit'}</span>
                                     </div>
                                 ))}
-                                {(d.items || []).length > 2 && <p className="text-[10px] text-center text-muted-foreground italic">+{ (d.items || []).length - 2 } item lainnya</p>}
+                                {(d.items || []).length > 2 && <p className="text-[10px] text-center text-muted-foreground italic">+{(d.items || []).length - 2} item lainnya</p>}
                             </div>
                         </div>
                     </div>
@@ -522,7 +551,7 @@ export function ApprovalCard({
                 return (
                     <div className="mt-2 text-sm border border-orange-200 rounded-lg w-full bg-orange-50/50 p-3">
                         <p className="font-semibold text-orange-800 text-xs uppercase tracking-wide mb-2">Rincian Perubahan Harga</p>
-                        
+
                         {/* Branch List */}
                         <div className="mb-2 flex flex-wrap gap-1">
                             {d.cabangIds && d.cabangIds.length > 0 ? (
@@ -579,7 +608,7 @@ export function ApprovalCard({
                                 {d.isActive ? 'Aktif' : 'Non-Aktif'}
                             </Badge>
                         </div>
-                        
+
                         {/* Branch List */}
                         <div className="mb-2 flex flex-wrap gap-1">
                             {d.cabangIds && d.cabangIds.length > 0 ? (

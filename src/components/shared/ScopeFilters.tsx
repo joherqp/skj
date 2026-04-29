@@ -14,6 +14,7 @@ import {
     DropdownMenuSeparator,
     DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { HydrationBoundary } from './HydrationBoundary';
 
 interface ScopeFiltersProps {
     selectedCabangIds: string[];
@@ -85,135 +86,139 @@ export function ScopeFilters({
         <div className={`space-y-4 ${className}`}>
             {/* Branch Filter (Admin/Owner only) */}
             {isAdminOrOwner && (
-                <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                        <Button variant="outline" className="h-9 text-xs justify-between bg-background font-medium px-3 border-muted-foreground/20 hover:border-primary/50 transition-all rounded-xl shadow-sm w-full sm:min-w-[140px] sm:w-auto">
-                            <div className="flex items-center gap-2 truncate">
-                                <div className="p-1.5 rounded-lg bg-primary/10 text-primary">
-                                    <Building className="w-3.5 h-3.5 shrink-0" />
+                <HydrationBoundary>
+                    <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                            <Button variant="outline" className="h-9 text-xs justify-between bg-background font-medium px-3 border-muted-foreground/20 hover:border-primary/50 transition-all rounded-xl shadow-sm w-full sm:min-w-[140px] sm:w-auto">
+                                <div className="flex items-center gap-2 truncate">
+                                    <div className="p-1.5 rounded-lg bg-primary/10 text-primary">
+                                        <Building className="w-3.5 h-3.5 shrink-0" />
+                                    </div>
+                                    <span className="truncate">
+                                        {selectedCabangIds.length === 0
+                                            ? "Semua Cabang"
+                                            : `${selectedCabangIds.length} Cabang`}
+                                    </span>
                                 </div>
-                                <span className="truncate">
-                                    {selectedCabangIds.length === 0
-                                        ? "Semua Cabang"
-                                        : `${selectedCabangIds.length} Cabang`}
-                                </span>
-                            </div>
-                            <ChevronDown className="w-4 h-4 opacity-50 shrink-0" />
-                        </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent className="w-[240px] max-h-[350px] flex flex-col p-0 rounded-xl shadow-xl border-muted-foreground/10">
-                        <div className="p-2 border-b bg-muted/30">
-                            <DropdownMenuLabel className="text-[10px] uppercase tracking-wider text-muted-foreground p-1">Pencarian Cabang</DropdownMenuLabel>
-                            <div className="relative">
-                                <Search className="absolute left-2 top-2 h-3 w-3 text-muted-foreground" />
-                                <input
-                                    className="w-full bg-background border rounded-md px-7 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-primary"
-                                    placeholder="Cari..."
-                                    value={cabangSearch}
-                                    onChange={(e) => setCabangSearch(e.target.value)}
-                                    autoFocus
-                                />
-                            </div>
-                        </div>
-                        <div className="flex-1 overflow-y-auto p-1">
-                            <DropdownMenuCheckboxItem
-                                checked={selectedCabangIds.length === 0}
-                                onCheckedChange={() => setSelectedCabangIds([])}
-                                className="text-xs"
-                            >
-                                Semua Cabang
-                            </DropdownMenuCheckboxItem>
-                            <DropdownMenuSeparator />
-                            {branchOptions.length === 0 && (
-                                <div className="p-4 text-center text-muted-foreground text-[10px]">
-                                    Tidak ada data
+                                <ChevronDown className="w-4 h-4 opacity-50 shrink-0" />
+                            </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent className="w-[240px] max-h-[350px] flex flex-col p-0 rounded-xl shadow-xl border-muted-foreground/10">
+                            <div className="p-2 border-b bg-muted/30">
+                                <DropdownMenuLabel className="text-[10px] uppercase tracking-wider text-muted-foreground p-1">Pencarian Cabang</DropdownMenuLabel>
+                                <div className="relative">
+                                    <Search className="absolute left-2 top-2 h-3 w-3 text-muted-foreground" />
+                                    <input
+                                        className="w-full bg-background border rounded-md px-7 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-primary"
+                                        placeholder="Cari..."
+                                        value={cabangSearch}
+                                        onChange={(e) => setCabangSearch(e.target.value)}
+                                        autoFocus
+                                    />
                                 </div>
-                            )}
-                            {branchOptions.map(c => (
-                            <DropdownMenuCheckboxItem
-                                key={c.id}
-                                checked={selectedCabangIds.includes(c.id)}
-                                onCheckedChange={(checked) => {
-                                    if (checked) {
-                                        setSelectedCabangIds([...selectedCabangIds, c.id]);
-                                    } else {
-                                        setSelectedCabangIds(selectedCabangIds.filter(id => id !== c.id));
-                                    }
-                                }}
-                                className="text-xs"
-                            >
-                                {c.nama}
-                            </DropdownMenuCheckboxItem>
-                            ))}
-                        </div>
-                    </DropdownMenuContent>
-                </DropdownMenu>
+                            </div>
+                            <div className="flex-1 overflow-y-auto p-1">
+                                <DropdownMenuCheckboxItem
+                                    checked={selectedCabangIds.length === 0}
+                                    onCheckedChange={() => setSelectedCabangIds([])}
+                                    className="text-xs"
+                                >
+                                    Semua Cabang
+                                </DropdownMenuCheckboxItem>
+                                <DropdownMenuSeparator />
+                                {branchOptions.length === 0 && (
+                                    <div className="p-4 text-center text-muted-foreground text-[10px]">
+                                        Tidak ada data
+                                    </div>
+                                )}
+                                {branchOptions.map(c => (
+                                    <DropdownMenuCheckboxItem
+                                        key={c.id}
+                                        checked={selectedCabangIds.includes(c.id)}
+                                        onCheckedChange={(checked) => {
+                                            if (checked) {
+                                                setSelectedCabangIds([...selectedCabangIds, c.id]);
+                                            } else {
+                                                setSelectedCabangIds(selectedCabangIds.filter(id => id !== c.id));
+                                            }
+                                        }}
+                                        className="text-xs"
+                                    >
+                                        {c.nama}
+                                    </DropdownMenuCheckboxItem>
+                                ))}
+                            </div>
+                        </DropdownMenuContent>
+                    </DropdownMenu>
+                </HydrationBoundary>
             )}
 
             {showUserFilter && (isAdminOrOwner || isLeader || isFinance) && (
-                <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                        <Button variant="outline" className="h-9 text-xs justify-between bg-background font-medium px-3 border-muted-foreground/20 hover:border-primary/50 transition-all rounded-xl shadow-sm w-full sm:min-w-[140px] sm:w-auto">
-                            <div className="flex items-center gap-2 truncate">
-                                <div className="p-1.5 rounded-lg bg-orange-500/10 text-orange-600">
-                                    <Users className="w-3.5 h-3.5 shrink-0" />
+                <HydrationBoundary>
+                    <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                            <Button variant="outline" className="h-9 text-xs justify-between bg-background font-medium px-3 border-muted-foreground/20 hover:border-primary/50 transition-all rounded-xl shadow-sm w-full sm:min-w-[140px] sm:w-auto">
+                                <div className="flex items-center gap-2 truncate">
+                                    <div className="p-1.5 rounded-lg bg-orange-500/10 text-orange-600">
+                                        <Users className="w-3.5 h-3.5 shrink-0" />
+                                    </div>
+                                    <span className="truncate">
+                                        {selectedUserIds.length === 0
+                                            ? "Semua Pengguna"
+                                            : `${selectedUserIds.length} Pengguna`}
+                                    </span>
                                 </div>
-                                <span className="truncate">
-                                    {selectedUserIds.length === 0
-                                        ? "Semua Pengguna"
-                                        : `${selectedUserIds.length} Pengguna`}
-                                </span>
-                            </div>
-                            <ChevronDown className="w-4 h-4 opacity-50 shrink-0" />
-                        </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent className="w-[240px] max-h-[350px] flex flex-col p-0 rounded-xl shadow-xl border-muted-foreground/10">
-                        <div className="p-2 border-b bg-muted/30">
-                            <DropdownMenuLabel className="text-[10px] uppercase tracking-wider text-muted-foreground p-1">Pencarian Pengguna</DropdownMenuLabel>
-                            <div className="relative">
-                                <Search className="absolute left-2 top-2 h-3 w-3 text-muted-foreground" />
-                                <input
-                                    className="w-full bg-background border rounded-md px-7 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-primary"
-                                    placeholder="Cari..."
-                                    value={userSearch}
-                                    onChange={(e) => setUserSearch(e.target.value)}
-                                    autoFocus
-                                />
-                            </div>
-                        </div>
-                        <div className="flex-1 overflow-y-auto p-1">
-                            <DropdownMenuCheckboxItem
-                                checked={selectedUserIds.length === 0}
-                                onCheckedChange={() => setSelectedUserIds([])}
-                                className="text-xs"
-                            >
-                                Semua Pengguna
-                            </DropdownMenuCheckboxItem>
-                            <DropdownMenuSeparator />
-                            {userOptions.length === 0 && (
-                                <div className="p-4 text-center text-muted-foreground text-[10px]">
-                                    Tidak ada data
+                                <ChevronDown className="w-4 h-4 opacity-50 shrink-0" />
+                            </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent className="w-[240px] max-h-[350px] flex flex-col p-0 rounded-xl shadow-xl border-muted-foreground/10">
+                            <div className="p-2 border-b bg-muted/30">
+                                <DropdownMenuLabel className="text-[10px] uppercase tracking-wider text-muted-foreground p-1">Pencarian Pengguna</DropdownMenuLabel>
+                                <div className="relative">
+                                    <Search className="absolute left-2 top-2 h-3 w-3 text-muted-foreground" />
+                                    <input
+                                        className="w-full bg-background border rounded-md px-7 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-primary"
+                                        placeholder="Cari..."
+                                        value={userSearch}
+                                        onChange={(e) => setUserSearch(e.target.value)}
+                                        autoFocus
+                                    />
                                 </div>
-                            )}
-                            {userOptions.map(u => (
-                            <DropdownMenuCheckboxItem
-                                key={u.id}
-                                checked={selectedUserIds.includes(u.id)}
-                                onCheckedChange={(checked) => {
-                                    if (checked) {
-                                        setSelectedUserIds([...selectedUserIds, u.id]);
-                                    } else {
-                                        setSelectedUserIds(selectedUserIds.filter(id => id !== u.id));
-                                    }
-                                }}
-                                className="text-xs"
-                            >
-                                {u.nama.toUpperCase()}
-                            </DropdownMenuCheckboxItem>
-                            ))}
-                        </div>
-                    </DropdownMenuContent>
-                </DropdownMenu>
+                            </div>
+                            <div className="flex-1 overflow-y-auto p-1">
+                                <DropdownMenuCheckboxItem
+                                    checked={selectedUserIds.length === 0}
+                                    onCheckedChange={() => setSelectedUserIds([])}
+                                    className="text-xs"
+                                >
+                                    Semua Pengguna
+                                </DropdownMenuCheckboxItem>
+                                <DropdownMenuSeparator />
+                                {userOptions.length === 0 && (
+                                    <div className="p-4 text-center text-muted-foreground text-[10px]">
+                                        Tidak ada data
+                                    </div>
+                                )}
+                                {userOptions.map(u => (
+                                    <DropdownMenuCheckboxItem
+                                        key={u.id}
+                                        checked={selectedUserIds.includes(u.id)}
+                                        onCheckedChange={(checked) => {
+                                            if (checked) {
+                                                setSelectedUserIds([...selectedUserIds, u.id]);
+                                            } else {
+                                                setSelectedUserIds(selectedUserIds.filter(id => id !== u.id));
+                                            }
+                                        }}
+                                        className="text-xs"
+                                    >
+                                        {u.nama.toUpperCase()}
+                                    </DropdownMenuCheckboxItem>
+                                ))}
+                            </div>
+                        </DropdownMenuContent>
+                    </DropdownMenu>
+                </HydrationBoundary>
             )}
         </div>
     );

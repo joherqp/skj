@@ -174,15 +174,35 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
+  const profileLoadingRef = useRef<string | null>(null);
+
   const applySessionUser = useCallback(async (sUser: SupabaseUser | null) => {
     if (!sUser) {
       setUser(null);
       setSupabaseUser(null);
+      profileLoadingRef.current = null;
       return;
     }
 
-    setSupabaseUser(sUser);
-    const profile = await loadUserProfile(sUser);
+    // Avoid redundant loading for same user if already in progress
+    if (profileLoadingRef.current === sUser.id) {
+      console.log('Profile already loading for user:', sUser.id);
+      return;
+    }
+    profileLoadingRef.current = sUser.id;
+
+    try {
+      setSupabaseUser(sUser);
+    
+    // Defensive timeout for profile loading
+    const profile = await withTimeout(
+      loadUserProfile(sUser),
+      15000,
+      'User profile load'
+    ).catch(err => {
+      console.error('Profile load timed out or failed:', err);
+      return null;
+    });
     if (profile) {
       if (!profile.isActive) {
         toast.error('Akun Anda belum aktif. Silakan hubungi admin untuk aktivasi.');
@@ -195,8 +215,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         ...profile,
         email: sUser.email || profile.email,
       });
-    } else {
-      console.error('Failed to load user profile after session restoration');
+      } else {
+        console.error('Failed to load user profile after session restoration');
+      }
+    } finally {
+      profileLoadingRef.current = null;
     }
   }, [loadUserProfile]);
 
@@ -228,25 +251,33 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const duration = Date.now() - startTime;
       console.log(`Auth session retrieved in ${duration}ms. Session found:`, !!session);
 
-      await applySessionUser(session?.user ?? null);
+      if (session) {
+        console.log('Session user ID:', session.user.id);
+        await applySessionUser(session.user);
+      } else {
+        console.log('No session found during initialization');
+        await applySessionUser(null);
+      }
     } catch (err) {
-      console.warn('Auth initialization warning:', err instanceof Error ? err.message : err);
+      console.error('Auth initialization error:', err);
       if (err instanceof Error && err.message.includes('timeout')) {
         toast.error('Koneksi lambat. Memeriksa sesi...');
       }
     } finally {
+      console.log('Finishing auth initialization, setting isLoading to false');
       setIsLoading(false);
       isInitializingRef.current = false;
     }
   }, [applySessionUser]);
 
   useEffect(() => {
+    console.log('AuthProvider useEffect mounting');
     initialize();
 
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange(async (event, session) => {
-      console.log(`Auth State Change Event: ${event}`);
+      console.log(`Auth State Change Event: ${event}, Session: ${!!session}`);
       
       if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED' || event === 'INITIAL_SESSION') {
         await applySessionUser(session?.user ?? null);
@@ -258,7 +289,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // Only set loading false if we're not already in the middle of initialization
       // to avoid race conditions with the initialize() function
       if (!isInitializingRef.current) {
+        console.log(`Setting isLoading to false from onAuthStateChange (${event})`);
         setIsLoading(false);
+      } else {
+        console.log(`Skipping setIsLoading(false) in onAuthStateChange because initialization is in progress`);
       }
     });
 

@@ -14,6 +14,7 @@ interface ApprovalConfirmDialogProps {
         type: string;
         refId: string;
         diajukanOleh?: string;
+        targetUserId?: string;
         data?: Record<string, unknown>;
     };
     onConfirm: () => void;
@@ -23,6 +24,7 @@ interface ApprovalConfirmDialogProps {
     reimburse: Reimburse[];
     barang: Barang[];
     cabang: Cabang[];
+    satuan: any[];
     rejectionReason: string;
     setRejectionReason: (reason: string) => void;
 }
@@ -38,6 +40,7 @@ export function ApprovalConfirmDialog({
     reimburse,
     barang,
     cabang,
+    satuan,
     rejectionReason,
     setRejectionReason
 }: ApprovalConfirmDialogProps) {
@@ -48,7 +51,7 @@ export function ApprovalConfirmDialog({
                 <AlertDialogHeader>
                     <AlertDialogTitle>
                         {confirmDialog.action === 'approve' 
-                            ? (['mutasi', 'permintaan', 'restock'].includes(confirmDialog.type) ? 'Konfirmasi Terima Barang' 
+                            ? (['mutasi', 'permintaan', 'restock', 'mutasi_stok'].includes(confirmDialog.type) ? 'Konfirmasi Terima Barang' 
                               : confirmDialog.type === 'setoran' ? 'Konfirmasi Terima Uang' 
                               : 'Konfirmasi Persetujuan')
                             : 'Konfirmasi Penolakan'}
@@ -209,74 +212,99 @@ export function ApprovalConfirmDialog({
                                                                 )}
                                                             </div>
                                                         );
-                                                     case 'permintaan':
-                                                     case 'restock':
-                                                         return (
-                                                             <div className="space-y-1">
-                                                                 <p>Jenis: <span className="font-semibold text-amber-700 capitalize">{type} Stok</span></p>
-                                                                 <p>Total: <span className="font-bold">{(data.items as unknown[])?.length || 0} Jenis Barang</span></p>
-                                                                 {/* List items if not too many */}
-                                                                 {(data.items as any[])?.length > 0 && (
-                                                                     <div className="mt-1 pt-1 border-t border-dashed">
-                                                                         <div className="max-h-[80px] overflow-y-auto space-y-0.5">
-                                                                             {(data.items as any[]).map((it, i) => {
-                                                                                 const b = barang.find(x => x.id === it.barangId);
-                                                                                 return (
-                                                                                     <div key={i} className="flex justify-between text-[10px]">
-                                                                                         <span className="truncate pr-2">{b?.nama || it.barangId}</span>
-                                                                                         <span className="font-bold">{it.jumlah}</span>
-                                                                                     </div>
-                                                                                 );
-                                                                             })}
-                                                                         </div>
-                                                                     </div>
-                                                                 )}
-                                                             </div>
-                                                         );
-                                                    case 'mutasi':
-                                                    case 'mutasi_stok': {
-                                                         let items = (data.items as { barangId: string; jumlah: number; satuanId?: string }[]) || [];
-                                                         // Fallback for single item mutasi in dialog
-                                                         if (!items.length && (data as any).barangId) {
-                                                             items = [{ 
-                                                                 barangId: (data as any).barangId, 
-                                                                 jumlah: ((data as any).jumlah || 1) as number, 
-                                                                 satuanId: (data as any).satuanId 
-                                                             }];
-                                                         }
+                                                     case 'mutasi':
+                                                    case 'mutasi_stok':
+                                                    case 'permintaan':
+                                                    case 'restock': {
+                                                        let items = (data.items as any[]) || [];
+                                                        if (!items.length && (data.barangId || data.namaBarang)) {
+                                                            items = [{
+                                                                barangId: data.barangId,
+                                                                namaBarang: data.namaBarang,
+                                                                jumlah: data.jumlah || data.nilai || 0,
+                                                                satuanId: data.satuanId
+                                                            }];
+                                                        }
+
+                                                        const isPermintaan = type === 'permintaan';
+                                                        const isRestock = type === 'restock';
+                                                        
+                                                        // Determine Source (Pengirim) and Destination (Penerima)
+                                                        // MATCHING ApprovalDetailDialog logic:
+                                                        // For 'permintaan': source is the target branch (keCabangId), dest is the requesting branch (dariCabangId)
+                                                        // For others: source is origin (dariCabangId), dest is target (keCabangId)
+                                                        const sourceBranchId = isPermintaan 
+                                                            ? data.keCabangId 
+                                                            : (data.dariCabangId || requester?.cabangId || (isRestock ? 'pusat' : undefined));
+                                                            
+                                                        const destBranchId = isPermintaan
+                                                            ? (data.dariCabangId || requester?.cabangId)
+                                                            : (data.keCabangId || (confirmDialog as any).targetCabangId || (data as any).targetCabangId);
+
+                                                        const receiverId = isPermintaan 
+                                                            ? requesterId 
+                                                            : (confirmDialog.targetUserId || data.receiverId || data.penerimaId);
+
                                                         return (
-                                                            <div className="space-y-1 text-left">
-                                                                <p className="font-bold text-indigo-700 mb-1">Pengajuan Mutasi Stok</p>
-                                                                 <div className="flex justify-between items-center text-[10px] bg-indigo-50 p-2 rounded border border-indigo-100 mb-2">
-                                                                     <div className="flex flex-col">
-                                                                         <span className="text-muted-foreground uppercase text-[8px]">Dari Cabang</span>
-                                                                         <span className="font-bold text-indigo-900">
-                                                                             {getCabangName(data.dariCabangId || data.senderCabangId || (data as any).dari_cabang_id || requester?.cabangId)}
+                                                            <div className="space-y-1">
+                                                                <p className="font-bold text-amber-700 capitalize mb-1">{type.replace(/_/g, ' ')} Stok</p>
+                                                                
+                                                                <div className="flex justify-between items-center text-[10px] bg-amber-50 p-2 rounded border border-amber-100 mb-2">
+                                                                    <div className="flex flex-col">
+                                                                        <span className="text-muted-foreground uppercase text-[8px]">Cabang Pengirim</span>
+                                                                        <span className="font-bold text-amber-900">
+                                                                            {getCabangName(sourceBranchId)}
+                                                                        </span>
+                                                                    </div>
+                                                                    <ArrowRight size={12} className="text-amber-300" />
+                                                                     <div className="flex flex-col text-right">
+                                                                         <span className="text-muted-foreground uppercase text-[8px]">Cabang Penerima</span>
+                                                                         <span className="font-bold text-amber-900">
+                                                                             {getCabangName(destBranchId)}
                                                                          </span>
                                                                      </div>
-                                                                     <ArrowRight size={12} className="text-indigo-300" />
-                                                                      <div className="flex flex-col text-right">
-                                                                          <span className="text-muted-foreground uppercase text-[8px]">Ke Cabang</span>
-                                                                          <span className="font-bold text-indigo-900">
-                                                                              {getCabangName(data.keCabangId || (data as any).ke_cabang_id || (confirmDialog as any).targetCabangId || (data as any).destinationCabangId || (data as any).cabangId)}
-                                                                          </span>
-                                                                      </div>
                                                                 </div>
-                                                                
-                                                                {items.length > 0 && (
+
+                                                                {(receiverId || data.receiverName) && (
+                                                                    <div className='flex justify-between items-center text-[10px] mb-2 px-1'>
+                                                                        <span className="text-muted-foreground">Penerima:</span>
+                                                                        <span className="font-bold text-amber-800 bg-amber-100 px-1.5 py-0.5 rounded">
+                                                                            {data.receiverName || findUser(receiverId)?.nama || (typeof receiverId === 'string' && receiverId.length > 20 ? `User ${receiverId.substring(0, 8)}` : receiverId) || 'Unknown'}
+                                                                        </span>
+                                                                    </div>
+                                                                )}
+
+                                                                {items.length > 1 ? (
                                                                     <div className="space-y-1">
                                                                         <p className="text-[10px] font-bold text-muted-foreground uppercase mb-1">Daftar Barang ({items.length}):</p>
-                                                                        <div className="max-h-[150px] overflow-y-auto pr-1 space-y-1 chat-scroll">
+                                                                        <div className="max-h-[120px] overflow-y-auto pr-1 space-y-1 chat-scroll">
                                                                             {items.map((it, i) => {
                                                                                 const bInfo = barang.find(b => b.id === it.barangId);
                                                                                 return (
                                                                                     <div key={i} className="flex justify-between items-center text-[10px] bg-white p-1.5 rounded border border-slate-100 shadow-sm">
-                                                                                        <span className="truncate pr-2 font-medium">{bInfo?.nama || it.barangId}</span>
-                                                                                        <span className="shrink-0 font-bold text-indigo-600 bg-indigo-50 px-1.5 py-0.5 rounded">{it.jumlah.toLocaleString('id-ID')}</span>
+                                                                                        <span className="truncate pr-2 font-medium">{bInfo?.nama || it.namaBarang || it.barangId}</span>
+                                                                                        <span className="shrink-0 font-bold text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded">{(Number(it.jumlah) || 0).toLocaleString('id-ID')} {satuan.find(s => s.id === (it.satuanId || bInfo?.satuanId))?.simbol || ''}</span>
                                                                                     </div>
                                                                                 );
                                                                             })}
                                                                         </div>
+                                                                    </div>
+                                                                ) : items.length === 1 ? (
+                                                                    <div className="bg-amber-50 p-2 rounded border border-amber-100 my-1">
+                                                                        <p className="font-bold text-amber-900">{barang.find(b => b.id === items[0].barangId)?.nama || items[0].namaBarang || items[0].barangId}</p>
+                                                                        <p className="text-lg font-black text-amber-700">
+                                                                            {(Number(items[0].jumlah) || 0).toLocaleString('id-ID')} 
+                                                                            <span className="text-xs ml-1 font-normal uppercase">{satuan.find(s => s.id === (items[0].satuanId || barang.find(b => b.id === items[0].barangId)?.satuanId))?.simbol || 'Unit'}</span>
+                                                                        </p>
+                                                                    </div>
+                                                                ) : (
+                                                                    <p className="font-bold text-rose-600">0 Jenis Barang (Cek Data)</p>
+                                                                )}
+                                                                
+                                                                {data.nilai && (
+                                                                    <div className="flex justify-between items-center text-[10px] bg-emerald-50 p-2 rounded border border-emerald-100 mt-2 font-bold text-emerald-800">
+                                                                        <span>Total Nilai (Estimasi):</span>
+                                                                        <span>{formatRupiah(Number(data.nilai))}</span>
                                                                     </div>
                                                                 )}
                                                             </div>

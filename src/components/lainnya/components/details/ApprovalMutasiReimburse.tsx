@@ -12,7 +12,17 @@ export function ApprovalMutasi({
     barang: Barang[]; 
     satuan: Satuan[];
 }) {
-    const items = (data.items || []) as { barangId: string; jumlah: number; satuanId?: string }[];
+    let items = (data.items || []) as { barangId: string; jumlah: number; satuanId?: string; namaBarang?: string }[];
+    
+    // Fallback for single item (used in some Restock/Mutasi forms)
+    if (!items.length && ((data as any).barangId || (data as any).namaBarang)) {
+        items = [{
+            barangId: (data as any).barangId,
+            namaBarang: (data as any).namaBarang,
+            jumlah: (data as any).jumlah || (data as any).nilai || 0,
+            satuanId: (data as any).satuanId
+        }];
+    }
     
     const getUnitName = (id?: string) => satuan.find(s => s.id === id)?.nama || '';
 
@@ -26,12 +36,18 @@ export function ApprovalMutasi({
                     const unit = getUnitName(it.satuanId || b?.satuanId);
                     return (
                         <div key={idx} className="flex justify-between items-center p-2 border-b last:border-0 hover:bg-muted/50 text-sm">
-                            <span className="font-medium">{b?.nama || it.barangId}</span>
-                            <span className="font-mono bg-slate-100 px-2 py-0.5 rounded">{it.jumlah} {unit}</span>
+                            <span className="font-medium">{b?.nama || it.namaBarang || it.barangId}</span>
+                            <span className="font-mono bg-slate-100 px-2 py-0.5 rounded">{(Number(it.jumlah) || 0).toLocaleString('id-ID')} {unit}</span>
                         </div>
                     );
                 })}
             </div>
+            {(data.nilai !== undefined && data.nilai !== null) && (
+                <div className="flex justify-between items-center p-3 bg-emerald-50 text-emerald-800 rounded border border-emerald-100 font-bold">
+                    <span>Total Nilai (Estimasi):</span>
+                    <span>{formatRupiah(Number(data.nilai))}</span>
+                </div>
+            )}
             {data.catatan && (
                 <div className="p-3 bg-blue-50 text-blue-800 text-sm italic rounded border border-blue-100">
                     Catatan: "{data.catatan}"

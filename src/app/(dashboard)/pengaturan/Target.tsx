@@ -180,7 +180,7 @@ export default function TargetPage() {
         is_looping: formData.isLooping,
         start_date: formData.startDate.toISOString(), // Always save start_date
         end_date: formData.isLooping ? null : formData.endDate.toISOString(), // Only end_date is null for looping
-        cabang_id: formData.scope === 'cabang' ? formData.cabangId : null,
+        cabang_id: formData.scope === 'cabang' ? formData.cabangId : (salesList.find(s => s.id === formData.salesId)?.cabangId || null),
         sales_id: formData.scope === 'sales' ? formData.salesId : null,
         target_amount: formData.nilai, // Required by DB
         created_by: user?.id,

@@ -29,7 +29,9 @@ import {
   PembayaranPenjualan,
   Restock,
   RiwayatPelanggan,
-  SalesTarget
+  SalesTarget,
+  StokLog,
+  StokHarian
 } from '@/types';
 import { toCamelCase, toSnakeCase } from '@/lib/utils';
 import { playNotificationSound } from '@/lib/notificationSound';
@@ -78,6 +80,13 @@ export function DatabaseProvider({ children }: { children: ReactNode }) {
   const [pettyCash, setPettyCash] = useState<PettyCash[]>([]);
   const [restock, setRestock] = useState<Restock[]>([]);
   const [targets, setTargets] = useState<SalesTarget[]>([]);
+  const [stokHarian, setStokHarian] = useState<StokHarian[]>([]);
+  const [stokLog, setStokLog] = useState<StokLog[]>([]);
+  const [pembayaranPenjualan, setPembayaranPenjualan] = useState<PembayaranPenjualan[]>([]);
+  const [userLocations, setUserLocations] = useState<any[]>([]);
+  const [pushSubscriptions, setPushSubscriptions] = useState<any[]>([]);
+  const [salesTargetHistory, setSalesTargetHistory] = useState<any[]>([]);
+  const [stokSnapshot, setStokSnapshot] = useState<any[]>([]);
 
   // Profil Perusahaan
   const [profilPerusahaan, setProfilPerusahaan] = useState<ProfilPerusahaan>({
@@ -221,12 +230,16 @@ export function DatabaseProvider({ children }: { children: ReactNode }) {
 
   // Helper to determine schema for a table
   const getTableSchema = useCallback((tableName: string, currentMode: 'public' | 'demo' = dbMode) => {
-    const publicOnlyTables = ['profil_perusahaan', 'cabang', 'users', 'area', 'kategori', 'satuan', 'rekening_bank', 'kategori_pelanggan'];
+    const publicOnlyTables = ['profil_perusahaan', 'cabang', 'users', 'stok_log', 'stok_harian', 'stok_snapshot', 'push_subscriptions'];
     return publicOnlyTables.includes(tableName) ? 'public' : currentMode;
   }, [dbMode]);
 
-  // Generic fetch function
+  // Generic fetch function with timeout and robust error handling
   const fetchData = useCallback(async <T,>(tableName: string, daysToFetch: number = 30, schemaOverride?: 'public' | 'demo'): Promise<T[]> => {
+    const timeoutPromise = new Promise<never>((_, reject) =>
+      setTimeout(() => reject(new Error(`Timeout fetching ${tableName}`)), 15000)
+    );
+
     try {
       let sortColumn = 'created_at';
       let dateFilterColumn: string | null = null;
@@ -243,47 +256,81 @@ export function DatabaseProvider({ children }: { children: ReactNode }) {
         if (tableName === 'penjualan' || tableName === 'setoran' || tableName === 'absensi' || tableName === 'reimburse' || tableName === 'petty_cash') {
           sortColumn = 'tanggal';
         }
+      } else if (tableName === 'user_locations' || tableName === 'sales_target_history' || tableName === 'stok_snapshot' || tableName === 'push_subscriptions') {
+        sortColumn = 'id';
       }
 
       const schema = schemaOverride || getTableSchema(tableName);
 
-      let query = supabase
-        .schema(schema)
-        .from(tableName)
-        .select('*')
-        .order(sortColumn, { ascending: false });
+      const performFetch = async (useSort = true) => {
+        let query = supabase
+          .schema(schema)
+          .from(tableName)
+          .select('*');
+        
+        if (useSort) {
+          query = query.order(sortColumn, { ascending: false });
+        }
 
-      // Apply daysToFetch limit for high-volume transaction tables
-      if (dateFilterColumn) {
-        const limitDate = new Date();
-        limitDate.setDate(limitDate.getDate() - daysToFetch);
-        // Set to beginning of that day to be safe
-        limitDate.setHours(0, 0, 0, 0);
+        // Apply daysToFetch limit for high-volume transaction tables
+        if (dateFilterColumn) {
+          const limitDate = new Date();
+          limitDate.setDate(limitDate.getDate() - daysToFetch);
+          limitDate.setHours(0, 0, 0, 0);
+          query = query.gte(dateFilterColumn, limitDate.toISOString());
+        }
 
-        query = query.gte(dateFilterColumn, limitDate.toISOString());
+        return await query;
+      };
+
+      // Race the fetch against a timeout
+      const response = await Promise.race([performFetch(), timeoutPromise]);
+      
+      if (response.error) {
+        // If sorting failed (column might not exist, error 42703), retry without sort
+        if (response.error.code === '42703') {
+          console.warn(`Sort column ${sortColumn} not found in ${tableName}, retrying without sort`);
+          const retryResponse = await performFetch(false);
+          if (retryResponse.error) throw retryResponse.error;
+          return (toCamelCase(retryResponse.data || [])) as T[];
+        }
+        throw response.error;
       }
 
-      const { data, error } = await query;
-      if (error) throw error;
-
-      const result = toCamelCase(data || []) as T[];
-      return result;
+      return (toCamelCase(response.data || [])) as T[];
     } catch (error) {
       console.error(`Error fetching ${tableName}:`, error);
+      // Don't show toast for every table to avoid spamming the user
+      // if (tableName === 'barang' || tableName === 'pelanggan') {
+      //   toast.error(`Gagal memuat data ${tableName}`);
+      // }
       return [];
     }
   }, [getTableSchema]);
 
   // Load all data
   const loadAllData = useCallback(async (isManualRefresh = false) => {
+    console.log('loadAllData called', { isManualRefresh, isFetching: isFetchingRef.current, hasUser: !!currentUser, isAuthLoading });
+    
     if (!currentUser || isFetchingRef.current) {
       if (!currentUser && !isAuthLoading) {
+        console.log('No user and auth not loading, setting isDbLoading to false');
         setIsLoading(false);
       }
       return;
     }
 
     isFetchingRef.current = true;
+    
+    // Safety timeout for the entire data loading process
+    const globalTimeout = setTimeout(() => {
+      if (isFetchingRef.current) {
+        console.warn('loadAllData is taking too long (> 45s), forcing isLoading(false)');
+        setIsLoading(false);
+        setIsRefreshing(false);
+      }
+    }, 45000);
+
     try {
       if (isManualRefresh || isInitialized) {
         setIsRefreshing(true);
@@ -291,12 +338,17 @@ export function DatabaseProvider({ children }: { children: ReactNode }) {
         setIsLoading(true);
       }
 
-      // 1. Fetch CORE Data from PUBLIC schema first (this determines our dbMode)
+      // 1. Fetch CORE Data from PUBLIC schema first
+      console.log('Fetching core data...');
       const [profileRes, cabangRes, usersRes] = await Promise.all([
-        supabase.from('profil_perusahaan').select('*').limit(1).maybeSingle(),
-        supabase.from('cabang').select('*').order('nama'),
-        supabase.from('users').select('*').order('nama')
+        Promise.resolve(supabase.from('profil_perusahaan').select('*').limit(1).maybeSingle()).catch(e => ({ error: e, data: null })),
+        Promise.resolve(supabase.from('cabang').select('*').order('nama')).catch(e => ({ error: e, data: [] })),
+        Promise.resolve(supabase.from('users').select('*').order('nama')).catch(e => ({ error: e, data: [] }))
       ]);
+
+      if (profileRes.error) console.error('Error fetching profil_perusahaan:', profileRes.error);
+      if (cabangRes.error) console.error('Error fetching cabang:', cabangRes.error);
+      if (usersRes.error) console.error('Error fetching users:', usersRes.error);
 
       const profile = profileRes.data ? (toCamelCase(profileRes.data) as ProfilPerusahaan) : null;
       const branches = (cabangRes.data ? toCamelCase(cabangRes.data) : []) as Cabang[];
@@ -316,9 +368,10 @@ export function DatabaseProvider({ children }: { children: ReactNode }) {
       const effectiveMode = (isGlobalDemo || isBranchDemo || isUserDemo) ? 'demo' : 'public';
       const daysLimit = profile?.config?.daysToFetch || 30;
 
-      console.log(`Loading data in mode: ${effectiveMode}`);
+      console.log(`Loading master data in mode: ${effectiveMode}`);
 
       // 2. Fetch Master Data and Transactions using the effectiveMode
+      // Use Promise.all but fetchData already has individual catch blocks
       const [
         kategoriRes,
         satuanRes,
@@ -344,7 +397,14 @@ export function DatabaseProvider({ children }: { children: ReactNode }) {
         restockRes,
         penyesuaianRes,
         permintaanRes,
-        targetsRes
+        targetsRes,
+        stokHarianRes,
+        stokLogRes,
+        pembayaranPenjualanRes,
+        userLocationsRes,
+        pushSubscriptionsRes,
+        salesTargetHistoryRes,
+        stokSnapshotRes
       ] = await Promise.all([
         fetchData<Kategori>('kategori', 30, effectiveMode),
         fetchData<Satuan>('satuan', 30, effectiveMode),
@@ -370,7 +430,14 @@ export function DatabaseProvider({ children }: { children: ReactNode }) {
         fetchData<Restock>('restock', daysLimit, effectiveMode),
         fetchData<any>('penyesuaian_stok', daysLimit, effectiveMode),
         fetchData<any>('permintaan_barang', daysLimit, effectiveMode),
-        fetchData<SalesTarget>('sales_targets', 30, effectiveMode)
+        fetchData<SalesTarget>('sales_targets', 30, effectiveMode),
+        fetchData<StokHarian>('stok_harian', daysLimit, effectiveMode),
+        fetchData<StokLog>('stok_log', daysLimit, effectiveMode),
+        fetchData<PembayaranPenjualan>('pembayaran_penjualan', daysLimit, effectiveMode),
+        fetchData<any>('user_locations', 7, effectiveMode),
+        fetchData<any>('push_subscriptions', 30, effectiveMode),
+        fetchData<any>('sales_target_history', 30, effectiveMode),
+        fetchData<any>('stok_snapshot', 30, effectiveMode)
       ]);
 
       setKategori(kategoriRes);
@@ -398,6 +465,13 @@ export function DatabaseProvider({ children }: { children: ReactNode }) {
       setPenyesuaianStok(penyesuaianRes);
       setPermintaanBarang(permintaanRes);
       setTargets(targetsRes);
+      setStokHarian(stokHarianRes);
+      setStokLog(stokLogRes);
+      setPembayaranPenjualan(pembayaranPenjualanRes);
+      setUserLocations(userLocationsRes);
+      setPushSubscriptions(pushSubscriptionsRes);
+      setSalesTargetHistory(salesTargetHistoryRes);
+      setStokSnapshot(stokSnapshotRes);
 
       if (pettyCashRes && pettyCashRes.length > 0) {
         setPettyCashBalance(pettyCashRes[0].saldoAkhir);
@@ -405,16 +479,16 @@ export function DatabaseProvider({ children }: { children: ReactNode }) {
         setPettyCashBalance(0);
       }
     } catch (error) {
-      console.error('Error loading data:', error);
+      console.error('Error in loadAllData:', error);
+      toast.error('Gagal menyinkronkan data. Beberapa fitur mungkin tidak tersedia.');
     } finally {
+      clearTimeout(globalTimeout);
+      console.log('loadAllData finished');
       isFetchingRef.current = false;
       setIsLoading(false);
+      setIsRefreshing(false);
       setIsInitialized(true);
       isInitializedRef.current = true;
-
-      if (isManualRefresh || isInitialized) {
-        setTimeout(() => setIsRefreshing(false), 1000);
-      }
     }
   }, [currentUser, isInitialized, fetchData, isAuthLoading]);
 
@@ -675,6 +749,14 @@ export function DatabaseProvider({ children }: { children: ReactNode }) {
     penyesuaianStok,
     notifikasi,
     persetujuan,
+    stokLog,
+    stokHarian,
+    pembayaranPenjualan,
+    restock,
+    userLocations,
+    pushSubscriptions,
+    salesTargetHistory,
+    stokSnapshot,
     profilPerusahaan,
     // Reimbursement & Petty Cash
     reimburse,
@@ -1049,7 +1131,6 @@ export function DatabaseProvider({ children }: { children: ReactNode }) {
     deleteRiwayatPelanggan: (id) => deleteItem('riwayat_pelanggan', id, setRiwayatPelanggan),
 
     // Restock
-    restock,
     addRestock: (item) => createItem('restock', item, setRestock),
     updateRestock: (id, item) => updateItem('restock', id, item, setRestock),
     deleteRestock: (id) => deleteItem('restock', id, setRestock),
@@ -1154,8 +1235,15 @@ export function DatabaseProvider({ children }: { children: ReactNode }) {
     saldoPengguna,
     satuan,
     setoran,
+    stokHarian,
+    stokLog,
     stokPengguna,
     targets,
+    pembayaranPenjualan,
+    userLocations,
+    pushSubscriptions,
+    salesTargetHistory,
+    stokSnapshot,
     updateItem,
     users,
     viewMode,

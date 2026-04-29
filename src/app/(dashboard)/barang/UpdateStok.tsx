@@ -10,6 +10,16 @@ import { PermintaanBarangForm } from './PermintaanBarang';
 import { MutasiBarangForm } from './MutasiBarang';
 import { PenyesuaianBarangForm } from './PenyesuaianBarang';
 import { useAuth } from '@/contexts/AuthContext';
+import {
+    AlertDialog,
+    AlertDialogAction,
+    AlertDialogContent,
+    AlertDialogDescription,
+    AlertDialogFooter,
+    AlertDialogHeader,
+    AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { CheckCircle2 } from 'lucide-react';
 
 export default function UpdateStok() {
     const router = useRouter();
@@ -18,6 +28,7 @@ export default function UpdateStok() {
     const searchParams = useSearchParams();
     const tabParam = searchParams.get('tab');
     const [activeTab, setActiveTab] = useState(tabParam || '');
+    const [showSuccessDialog, setShowSuccessDialog] = useState(false);
 
     // Determine Access
     const isOwner = user?.roles.includes('owner');
@@ -103,7 +114,7 @@ export default function UpdateStok() {
                             {showMutasi && (
                                 <TabsContent value="mutasi">
                                     <div className="p-2 md:p-4 border rounded-lg bg-slate-50">
-                                        <MutasiBarangForm embedded onSuccess={() => { }} />
+                                        <MutasiBarangForm embedded onSuccess={() => setShowSuccessDialog(true)} />
                                     </div>
                                 </TabsContent>
                             )}
@@ -111,7 +122,7 @@ export default function UpdateStok() {
                             {showRestock && (
                                 <TabsContent value="restock">
                                     <div className="p-2 md:p-4 border rounded-lg bg-slate-50">
-                                        <RestockForm embedded onSuccess={() => { }} />
+                                        <RestockForm embedded onSuccess={() => setShowSuccessDialog(true)} />
                                     </div>
                                 </TabsContent>
                             )}
@@ -119,7 +130,7 @@ export default function UpdateStok() {
                             {showPermintaan && (
                                 <TabsContent value="permintaan">
                                     <div className="p-2 md:p-4 border rounded-lg bg-slate-50">
-                                        <PermintaanBarangForm embedded onSuccess={() => { }} />
+                                        <PermintaanBarangForm embedded onSuccess={() => setShowSuccessDialog(true)} />
                                     </div>
                                 </TabsContent>
                             )}
@@ -127,13 +138,35 @@ export default function UpdateStok() {
                             {showOpname && (
                                 <TabsContent value="opname">
                                     <div className="p-2 md:p-4 border rounded-lg bg-slate-50">
-                                        <PenyesuaianBarangForm embedded onSuccess={() => { }} />
+                                        <PenyesuaianBarangForm embedded onSuccess={() => setShowSuccessDialog(true)} />
                                     </div>
                                 </TabsContent>
                             )}
                         </Tabs>
                     </CardContent>
                 </Card>
+
+                <AlertDialog open={showSuccessDialog} onOpenChange={setShowSuccessDialog}>
+                    <AlertDialogContent className="max-w-[400px]">
+                        <AlertDialogHeader className="flex flex-col items-center text-center">
+                            <div className="w-12 h-12 rounded-full bg-success/10 flex items-center justify-center mb-4">
+                                <CheckCircle2 className="w-8 h-8 text-success" />
+                            </div>
+                            <AlertDialogTitle className="text-xl">Update Berhasil!</AlertDialogTitle>
+                            <AlertDialogDescription className="text-base">
+                                Data stok barang telah berhasil disimpan dan diteruskan untuk proses selanjutnya.
+                            </AlertDialogDescription>
+                        </AlertDialogHeader>
+                        <AlertDialogFooter className="sm:justify-center">
+                            <AlertDialogAction 
+                                onClick={() => router.push('/barang')}
+                                className="w-full bg-success hover:bg-success/90"
+                            >
+                                Selesai
+                            </AlertDialogAction>
+                        </AlertDialogFooter>
+                    </AlertDialogContent>
+                </AlertDialog>
             </div>
         </div>
     );

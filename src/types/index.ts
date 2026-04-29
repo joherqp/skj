@@ -348,6 +348,15 @@ export interface PersetujuanPayload {
   id?: string;
   barangId?: string;
   namaPromo?: string;
+  receiverName?: string;
+  receiverId?: string;
+  targetCabangName?: string;
+  totalQty?: number;
+  konversi?: number;
+  userName?: string;
+  namaUser?: string;
+  operator?: string;
+  diajukanOlehName?: string;
   selisih?: number;
   satuanId?: string;
   hargaBaru?: number;
@@ -597,9 +606,13 @@ export interface PenyesuaianStok {
   tanggal: Date;
   updatedAt?: Date;
   createdAt: Date;
+  createdBy?: string;
+  updatedBy?: string;
   cabangId?: string;
   nomorPenyesuaian?: string;
   persetujuanId?: string; // FK to persetujuan for bidirectional sync
+  stokFisik?: number;
+  stokTercatat?: number;
 }
 
 export interface PermintaanBarang {
@@ -674,6 +687,14 @@ export interface DatabaseContextType {
   // Other tables
   permintaanBarang: PermintaanBarang[];
   penyesuaianStok: PenyesuaianStok[];
+  pembayaranPenjualan: PembayaranPenjualan[];
+  restock: Restock[];
+  stokLog: StokLog[];
+  stokHarian: StokHarian[];
+  userLocations: any[];
+  pushSubscriptions: any[];
+  salesTargetHistory: any[];
+  stokSnapshot: any[];
 
   // UI/System State
   profilPerusahaan: ProfilPerusahaan;
@@ -800,7 +821,7 @@ export interface DatabaseContextType {
   addPembayaranPenjualan: (item: Partial<PembayaranPenjualan>) => Promise<PembayaranPenjualan>;
 
   // Restock
-  restock: Restock[];
+  // Restock
   addRestock: (item: Partial<Restock>) => Promise<Restock>;
   updateRestock: (id: string, item: Partial<Restock>) => Promise<void>;
   deleteRestock: (id: string) => Promise<void>;
@@ -813,3 +834,33 @@ export interface DatabaseContextType {
   // Merge Pelanggan
   mergePelanggan: (targetId: string, sourceId: string) => Promise<void>;
 }
+
+export interface StokLog {
+  id: string;
+  tanggal: Date;
+  barangId: string;
+  cabangId?: string;
+  userId?: string;
+  tipe: 'masuk' | 'keluar' | 'penjualan' | 'promo' | 'mutasi_in' | 'mutasi_out' | 'penyesuaian' | 'restock' | string;
+  jumlah: number;
+  saldoSetelah?: number;
+  referensiId?: string;
+  keterangan?: string;
+  createdAt: Date;
+}
+
+export interface StokHarian {
+  id: string;
+  tanggal: Date | string;
+  barangId: string;
+  cabangId?: string;
+  userId?: string;
+  stokAwal: number;
+  masuk: number;
+  keluar: number;
+  terjual: number;
+  promo: number;
+  stokAkhir: number;
+  createdAt: Date;
+}
+
