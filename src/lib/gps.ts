@@ -31,7 +31,39 @@ export const getCurrentLocation = async (): Promise<Location> => {
 
   const getPosition = (options: PositionOptions): Promise<GeolocationPosition> => {
     return new Promise((resolve, reject) => {
-      navigator.geolocation.getCurrentPosition(resolve, reject, options);
+      // Menggunakan watchPosition sebagai workaround untuk error kCLErrorLocationUnknown di iOS
+      let watchId: number;
+      let timeoutId: ReturnType<typeof setTimeout>;
+
+      const cleanup = () => {
+        if (watchId !== undefined) navigator.geolocation.clearWatch(watchId);
+        if (timeoutId !== undefined) clearTimeout(timeoutId);
+      };
+
+      // Set timeout manual untuk memastikan watchPosition berhenti jika terlalu lama
+      const timeoutTime = options.timeout || 15000;
+      timeoutId = setTimeout(() => {
+        cleanup();
+        reject({ code: 3, message: 'Timeout expired' }); // 3 = TIMEOUT
+      }, timeoutTime);
+
+      watchId = navigator.geolocation.watchPosition(
+        (pos) => {
+          cleanup();
+          resolve(pos);
+        },
+        (error) => {
+          if (error.code === 2) { // 2 = POSITION_UNAVAILABLE (termasuk kCLErrorLocationUnknown)
+            // Di iOS Safari, error ini sering muncul langsung padahal GPS sedang mencari sinyal.
+            // Kita biarkan watchPosition berlanjut sampai timeout atau dapat lokasi.
+            console.warn('GPS sementara tidak tersedia (mencari sinyal)...', error.message);
+            return;
+          }
+          cleanup();
+          reject(error);
+        },
+        options
+      );
     });
   };
 
@@ -39,23 +71,19 @@ export const getCurrentLocation = async (): Promise<Location> => {
 
   try {
     // Attempt 1: High Accuracy (15s timeout)
-    position = await new Promise((resolve, reject) => {
-      navigator.geolocation.getCurrentPosition(resolve, reject, {
-        enableHighAccuracy: true,
-        timeout: 15000,
-        maximumAge: 0
-      });
+    position = await getPosition({
+      enableHighAccuracy: true,
+      timeout: 15000,
+      maximumAge: 0
     });
   } catch (error) {
     console.warn('High accuracy GPS failed, trying fallback...', error);
     try {
-      // Attempt 2: Low Accuracy (30s timeout) - better for indoors/timeouts
-      position = await new Promise((resolve, reject) => {
-        navigator.geolocation.getCurrentPosition(resolve, reject, {
-          enableHighAccuracy: false,
-          timeout: 30000,
-          maximumAge: 0
-        });
+      // Attempt 2: Low Accuracy (30s timeout) - fallback untuk area indoor atau sinyal lemah
+      position = await getPosition({
+        enableHighAccuracy: false,
+        timeout: 30000,
+        maximumAge: 0
       });
     } catch (finalError: unknown) {
       let msg = 'Gagal mendapatkan lokasi.';
@@ -65,7 +93,7 @@ export const getCurrentLocation = async (): Promise<Location> => {
         if (err.code === 1) {
           msg = 'Izin lokasi ditolak. Mohon aktifkan izin lokasi di browser.';
         } else if (err.code === 2) {
-          msg = 'Informasi lokasi tidak tersedia. Pastikan GPS aktif.';
+          msg = 'Informasi lokasi tidak tersedia. Pastikan GPS perangkat Anda aktif.';
         } else if (err.code === 3) {
           msg = 'Waktu permintaan lokasi habis. Coba lagi di area terbuka.';
         }

@@ -69,6 +69,7 @@ export default function LaporanStok() {
     const [search, setSearch] = useState('');
 
     const isAdminOrOwner = currentUser?.roles.includes('admin') || currentUser?.roles.includes('owner');
+    const isLeaderOrFinance = currentUser?.roles.includes('leader') || currentUser?.roles.includes('finance');
 
     // Sync selectedCabangIds with currentUser on load
     useEffect(() => {
@@ -208,9 +209,12 @@ export default function LaporanStok() {
             if (selectedCabangIds.length > 0) {
                 candidates = users.filter(u => u.cabangId && selectedCabangIds.includes(u.cabangId));
             }
-        } else {
-            // 2. Others (Leader/Sales/Staff): Restricted to their branch
+        } else if (isLeaderOrFinance) {
+            // 2. Leader/Finance: Restricted to their branch
             candidates = users.filter(u => u.cabangId === currentUser?.cabangId);
+        } else {
+            // 3. Others (Sales/Staff): Restricted to themselves
+            candidates = users.filter(u => u.id === currentUser?.id);
         }
 
         return candidates
@@ -250,8 +254,13 @@ export default function LaporanStok() {
             } else if (selectedCabangIds.length > 0) {
                 targetUsers = users.filter(u => u.cabangId && selectedCabangIds.includes(u.cabangId));
             } else if (!isAdminOrOwner && currentUser?.cabangId) {
-                // Non-admin: Force their branch if no selection
-                targetUsers = users.filter(u => u.cabangId === currentUser.cabangId);
+                if (isLeaderOrFinance) {
+                    // Leader/Finance: Force their branch if no selection
+                    targetUsers = users.filter(u => u.cabangId === currentUser.cabangId);
+                } else {
+                    // Normal user: Force themselves
+                    targetUsers = users.filter(u => u.id === currentUser.id);
+                }
             } else if (isGlobalView) {
                 // Admin: Global view (all users)
                 targetUsers = users;
@@ -289,7 +298,7 @@ export default function LaporanStok() {
                     : selectedCabangIds.length > 0
                         ? selectedCabangIds.includes(p.cabangId || '')
                         : (!isAdminOrOwner && currentUser?.cabangId)
-                            ? p.cabangId === currentUser.cabangId
+                            ? (isLeaderOrFinance ? p.cabangId === currentUser.cabangId : p.salesId === currentUser.id)
                             : isAdminOrOwner; // Admin sees all if no filter
 
                 if (!isRelevant) return;
@@ -345,6 +354,16 @@ export default function LaporanStok() {
 
                     // If user is neither origin nor dest, skip
                     if (!isOriginScope && !isDestScope) return;
+                } else if (!isAdminOrOwner && !isLeaderOrFinance) {
+                    // Normal user without specific user filter should only see their own mutations
+                    const relatedPersetujuan = persetujuan.find(p => p.id === m.persetujuanId);
+                    const mutasiCreatorId = m.createdBy || relatedPersetujuan?.diajukanOleh;
+                    const mutasiTargetId = relatedPersetujuan?.targetUserId;
+                    
+                    isOriginScope = isOriginScope && (mutasiCreatorId === currentUser.id);
+                    isDestScope = isDestScope && (mutasiTargetId === currentUser.id);
+                    
+                    if (!isOriginScope && !isDestScope) return;
                 }
 
                 // If the mutasi is internal to the current scope (e.g. within the same branch),
@@ -391,11 +410,20 @@ export default function LaporanStok() {
 
                 const pDate = new Date(p.tanggalPersetujuan || p.tanggalPengajuan);
 
-                const isRelevant = specFilterUser !== 'all'
-                    ? p.targetUserId === specFilterUser
-                    : selectedCabangIds.length > 0
-                        ? selectedCabangIds.includes(p.targetCabangId || '') || (p.targetUserId && selectedCabangIds.some(cId => users.find(u => u.id === p.targetUserId)?.cabangId === cId))
-                        : isAdminOrOwner;
+                let isRelevant = false;
+                if (specFilterUser !== 'all') {
+                    isRelevant = p.targetUserId === specFilterUser;
+                } else if (selectedCabangIds.length > 0) {
+                    isRelevant = selectedCabangIds.includes(p.targetCabangId || '') || (p.targetUserId && selectedCabangIds.some(cId => users.find(u => u.id === p.targetUserId)?.cabangId === cId));
+                } else if (!isAdminOrOwner && currentUser?.cabangId) {
+                    if (isLeaderOrFinance) {
+                        isRelevant = p.targetCabangId === currentUser.cabangId || (p.targetUserId && users.find(u => u.id === p.targetUserId)?.cabangId === currentUser.cabangId);
+                    } else {
+                        isRelevant = p.targetUserId === currentUser.id;
+                    }
+                } else {
+                    isRelevant = isAdminOrOwner;
+                }
 
                 if (!isRelevant) return;
 

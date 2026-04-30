@@ -66,6 +66,7 @@ export default function LaporanSalesPerformance() {
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
 
   const isAdminOrOwner = user?.roles.some(r => ['admin', 'owner'].includes(r));
+  const isLeaderOrFinance = user?.roles.some(r => ['leader', 'finance'].includes(r));
   const userCabangId = user?.cabangId;
 
   const [selectedCabangIds, setSelectedCabangIds] = useState<string[]>([]);
@@ -115,10 +116,15 @@ export default function LaporanSalesPerformance() {
 
         // Security: Filter targets by branch if not admin
         if (!isAdminOrOwner && userCabangId) {
-          if (branchUserIds.length > 0) {
-            query = query.or(`cabang_id.eq.${userCabangId},sales_id.in.(${branchUserIds.join(',')})`);
+          if (isLeaderOrFinance) {
+            if (branchUserIds.length > 0) {
+              query = query.or(`cabang_id.eq.${userCabangId},sales_id.in.(${branchUserIds.join(',')})`);
+            } else {
+              query = query.eq('cabang_id', userCabangId);
+            }
           } else {
-            query = query.eq('cabang_id', userCabangId);
+            // Normal user: Only their own target
+            query = query.eq('sales_id', user.id);
           }
         }
         
@@ -153,7 +159,11 @@ export default function LaporanSalesPerformance() {
 
         if (!isAdminOrOwner) {
           if (userCabangId) {
-            salesQuery = salesQuery.eq('cabang_id', userCabangId);
+            if (isLeaderOrFinance) {
+                salesQuery = salesQuery.eq('cabang_id', userCabangId);
+            } else {
+                salesQuery = salesQuery.eq('sales_id', user.id);
+            }
           } else if (user) {
              // User exists but has no branch, should not see anything if restricted
              salesQuery = salesQuery.eq('cabang_id', 'none');
@@ -235,8 +245,13 @@ export default function LaporanSalesPerformance() {
             return selectedCabangIds.includes(item.cabang_id || '') ||
               (item.scope === 'sales' && salesData?.some(p => p.salesId === item.sales_id));
           }
-          // Allow if target belongs to branch OR target is for a user in this branch
-          return item.cabang_id === userCabangId || (item.scope === 'sales' && branchUserIds.includes(item.sales_id || ''));
+          if (isLeaderOrFinance) {
+            // Allow if target belongs to branch OR target is for a user in this branch
+            return item.cabang_id === userCabangId || (item.scope === 'sales' && branchUserIds.includes(item.sales_id || ''));
+          }
+          
+          // Regular user
+          return item.scope === 'sales' && item.sales_id === user?.id;
         });
 
         const sortedData = (filteredData || []).sort((a: PerformanceItem, b: PerformanceItem) => {

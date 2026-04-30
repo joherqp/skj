@@ -484,8 +484,8 @@ export interface MutasiBarang {
   dariCabangId?: string;
   persetujuanId?: string; // FK to persetujuan for bidirectional sync
   createdBy?: string;
-  disetujuiOleh?: string;
   updatedAt?: Date;
+  updatedBy?: string;
 }
 
 export interface MutasiItem {

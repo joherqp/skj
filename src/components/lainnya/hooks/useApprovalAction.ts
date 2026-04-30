@@ -310,7 +310,7 @@ export const useApprovalAction = () => {
                         try {
                             await updateMutasiBarang(mutasiId, {
                                 status: 'disetujui',
-                                disetujuiOleh: user?.id,
+                                updatedBy: user?.id,
                                 persetujuanId: id,
                                 tanggal: new Date(),
                                 updatedAt: new Date()

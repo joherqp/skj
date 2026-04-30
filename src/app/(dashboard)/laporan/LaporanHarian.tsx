@@ -102,6 +102,7 @@ export default function LaporanHarian() {
 
     const [selectedDate, setSelectedDate] = useState<string>(() => format(new Date(), 'yyyy-MM-dd'));
     const isAdminOrOwner = currentUser?.roles.some(r => ['admin', 'owner'].includes(r));
+    const isLeaderOrFinance = currentUser?.roles.some(r => ['leader', 'finance'].includes(r));
     const [selectedCabangIds, setSelectedCabangIds] = useState<string[]>([]);
     const [selectedUserIds, setSelectedUserIds] = useState<string[]>([]);
 
@@ -203,10 +204,14 @@ export default function LaporanHarian() {
             ? [currentUser.cabangId]
             : selectedCabangIds;
 
-        const isUserScope = selectedUserIds.length > 0;
+        const effectiveUserIds = (!isAdminOrOwner && !isLeaderOrFinance) 
+            ? [currentUser.id] 
+            : selectedUserIds;
+
+        const isUserScope = effectiveUserIds.length > 0;
         const isGlobalView = isAdminOrOwner && effectiveCabangIds.length === 0 && !isUserScope;
         const scopeUserIds = isUserScope
-            ? selectedUserIds
+            ? effectiveUserIds
             : (isGlobalView
                 ? users.map(u => u.id)
                 : users.filter(u => u.cabangId && effectiveCabangIds.includes(u.cabangId)).map(u => u.id));
@@ -220,7 +225,7 @@ export default function LaporanHarian() {
             const inBranch = isGlobalView || isUserScope || (p.cabangId && effectiveCabangIds.includes(p.cabangId));
 
             // User/Sales Filter
-            const inUser = selectedUserIds.length === 0 || selectedUserIds.includes(p.salesId) || selectedUserIds.includes(p.createdBy);
+            const inUser = effectiveUserIds.length === 0 || effectiveUserIds.includes(p.salesId) || effectiveUserIds.includes(p.createdBy);
 
             return inDate && inBranch && inUser && p.status !== 'batal' && p.status !== 'draft';
         });
@@ -360,7 +365,7 @@ export default function LaporanHarian() {
             const payload = p.data || {};
             const senderCabangId = typeof payload.senderCabangId === 'string' ? payload.senderCabangId : undefined;
             const inBranch = isGlobalView || isUserScope || (senderCabangId ? effectiveCabangIds.includes(senderCabangId) : false);
-            const inUser = selectedUserIds.length === 0 || selectedUserIds.includes(p.diajukanOleh);
+            const inUser = effectiveUserIds.length === 0 || effectiveUserIds.includes(p.diajukanOleh);
 
             return inBranch && inUser;
         }).map(p => {
@@ -413,7 +418,7 @@ export default function LaporanHarian() {
             if (!sale || sale.status === 'batal') return false;
 
             const inBranch = isGlobalView || isUserScope || (sale.cabangId && effectiveCabangIds.includes(sale.cabangId));
-            const inUser = selectedUserIds.length === 0 || selectedUserIds.includes(sale.salesId) || selectedUserIds.includes(sale.createdBy);
+            const inUser = effectiveUserIds.length === 0 || effectiveUserIds.includes(sale.salesId) || effectiveUserIds.includes(sale.createdBy);
 
             return inBranch && inUser;
         });
@@ -437,7 +442,7 @@ export default function LaporanHarian() {
                 const pDate = new Date(p.tanggal);
                 const inDate = pDate >= dayStart;
                 const inBranch = isGlobalView || isUserScope || (p.cabangId && effectiveCabangIds.includes(p.cabangId));
-                const inUser = selectedUserIds.length === 0 || selectedUserIds.includes(p.salesId) || selectedUserIds.includes(p.createdBy);
+                const inUser = effectiveUserIds.length === 0 || effectiveUserIds.includes(p.salesId) || effectiveUserIds.includes(p.createdBy);
                 return inDate && inBranch && inUser && p.status === 'lunas' && p.metodePembayaran === 'tunai';
             })
             .reduce((acc, curr) => acc + (curr.bayar || 0) - (curr.kembalian || 0), 0);
@@ -452,7 +457,7 @@ export default function LaporanHarian() {
                 const inDate = sDate >= dayStart;
                 const inBranch = isGlobalView || isUserScope || effectiveCabangIds.includes(s.cabangId || users.find(u => u.id === (s.salesId || s.userId))?.cabangId || '');
                 const depositUserId = s.salesId || s.userId;
-                const inUser = selectedUserIds.length === 0 || (depositUserId ? selectedUserIds.includes(depositUserId) : false);
+                const inUser = effectiveUserIds.length === 0 || (depositUserId ? effectiveUserIds.includes(depositUserId) : false);
                 const isApproved = s.status === 'disetujui' || s.status === 'diterima';
                 return inDate && inBranch && inUser && isApproved;
             })
@@ -467,7 +472,7 @@ export default function LaporanHarian() {
                 const payload = p.data || {};
                 const senderCabangId = typeof payload.senderCabangId === 'string' ? payload.senderCabangId : undefined;
                 const inBranch = isGlobalView || isUserScope || (senderCabangId ? effectiveCabangIds.includes(senderCabangId) : false);
-                const inUser = selectedUserIds.length === 0 || selectedUserIds.includes(p.diajukanOleh);
+                const inUser = effectiveUserIds.length === 0 || effectiveUserIds.includes(p.diajukanOleh);
 
                 return inBranch && inUser;
             })
