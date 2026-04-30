@@ -181,7 +181,7 @@ export default function AnalisaVisual() {
 
     // Render Helpers
     const renderChart = (w: WidgetConfig, data: ChartDataPoint[]) => {
-        const commonProps = { width: "100%", height: "100%" };
+        const commonProps = { width: "100%" as const, height: "100%" as const };
 
         switch (w.type) {
             case 'line':

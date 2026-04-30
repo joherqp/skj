@@ -5,8 +5,8 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Progress } from '@/components/ui/progress';
-import { 
-  FileUp, CheckCircle2, AlertCircle, Loader2, 
+import {
+  FileUp, CheckCircle2, AlertCircle, Loader2,
   ArrowRight, Database, Users, ShoppingCart, Building2, Package, Info
 } from 'lucide-react';
 import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert';
@@ -17,6 +17,8 @@ import * as XLSX from 'xlsx';
 
 interface ImportRow {
   tanggal: string;
+  created_at?: string;
+  pelanggan_created_at?: string;
   cabang: string;
   salesman: string;
   transaksi: string;
@@ -44,18 +46,18 @@ interface MappingResult {
 const cleanCustomerName = (name: string): string => {
   if (!name) return '';
   let n = name.trim();
-  
+
   // 1. Remove anything in parentheses (Bi), (In), (Av), etc.
   n = n.replace(/\([^)]*\)/g, '').trim();
 
   // 2. Remove common business and person prefixes/tags at the start
   // The user specifically mentioned "Mdr" and "Madura" as tags to remove
   const prefixes = [
-    'toko', 'tk', 'pt', 'cv', 'ud', 'wr', 'warung', 'warkop', 'kedai', 'rm', 
-    'rumah makan', 'outlet', 'grosir', 'agen', 'madura', 'mdr', 'bpk', 'ibu', 
+    'toko', 'tk', 'pt', 'cv', 'ud', 'wr', 'warung', 'warkop', 'kedai', 'rm',
+    'rumah makan', 'outlet', 'grosir', 'agen', 'madura', 'mdr', 'bpk', 'ibu',
     'pak', 'bu', 'teh', 'aa', 'kang', 'neng', 'haji', 'hajah', 'h', 'hj', 'rb'
   ];
-  
+
   const prefixRegex = new RegExp(`^(${prefixes.join('|')})[\\s,.]+`, 'i');
   let prev;
   do {
@@ -68,13 +70,13 @@ const cleanCustomerName = (name: string): string => {
 
   // 3. Remove common business and location suffixes at the end
   const suffixes = [
-    'toko', 'tk', 'pt', 'cv', 'ud', 'wr', 'warung', 'warkop', 'jaya', 'makmur', 
+    'toko', 'tk', 'pt', 'cv', 'ud', 'wr', 'warung', 'warkop', 'jaya', 'makmur',
     'abadi', 'sentosa', 'motor', 'cell', 'cellular', 'com', 'computer', 'shop',
     'grosir', 'agen', 'madura', 'mdr',
-    'bogor', 'sukabumi', 'rangkas', 'pandeglang', 'serang', 'banten', 'jabar', 
+    'bogor', 'sukabumi', 'rangkas', 'pandeglang', 'serang', 'banten', 'jabar',
     'jakarta', 'tangerang', 'bekasi', 'depok', 'cianjur', 'lebak'
   ];
-  
+
   const suffixRegex = new RegExp(`[\\s,.-]+(${suffixes.join('|')})$`, 'i');
   do {
     prev = n;
@@ -82,7 +84,7 @@ const cleanCustomerName = (name: string): string => {
   } while (n !== prev && n.length > 0);
 
   if (!n) n = prev;
-  
+
   // 4. Final clean up of extra spaces and punctuation
   return n.replace(/^[,.\-\s]+|[,.\-\s]+$/g, '').replace(/\s+/g, ' ').trim();
 };
@@ -95,10 +97,10 @@ const normalizeCustomer = (name: string): string => {
 };
 
 export default function ImportPenjualan() {
-  const { 
-    cabang: dbCabang, 
-    users: dbUsers, 
-    pelanggan: dbPelanggan, 
+  const {
+    cabang: dbCabang,
+    users: dbUsers,
+    pelanggan: dbPelanggan,
     barang: dbBarang,
     satuan: dbSatuan,
     kategori: dbKategori,
@@ -150,6 +152,8 @@ export default function ImportPenjualan() {
 
       const idxMap = {
         tanggal: getIdx(['tanggal', 'date']),
+        created_at: getIdx(['created_at', 'registered']),
+        pelanggan_created_at: getIdx(['pelanggan_created_at', 'p_registered', 'pelanggan_create_at']),
         cabang: getIdx(['cabang', 'branch']),
         salesman: getIdx(['salesman', 'sales']),
         transaksi: getIdx(['transaksi', 'type', 'skema']),
@@ -171,6 +175,8 @@ export default function ImportPenjualan() {
 
         return {
           tanggal: String(getVal(idxMap.tanggal) || ''),
+          created_at: String(getVal(idxMap.created_at) || ''),
+          pelanggan_created_at: String(getVal(idxMap.pelanggan_created_at) || ''),
           cabang: String(getVal(idxMap.cabang) || '').trim(),
           salesman: String(getVal(idxMap.salesman) || '').trim(),
           transaksi: String(getVal(idxMap.transaksi) || '').trim(),
@@ -199,6 +205,17 @@ export default function ImportPenjualan() {
   };
 
   const analyzeMappings = (rows: ImportRow[]) => {
+    const isSimilar = (a: string, b: string) => {
+      if (!a || !b) return false;
+      const cleanA = a.toLowerCase().replace(/[^a-z0-9]/g, '');
+      const cleanB = b.toLowerCase().replace(/[^a-z0-9]/g, '');
+      if (cleanA === cleanB) return true;
+      if (cleanA.length > 3 && cleanB.length > 3) {
+        return cleanA.includes(cleanB) || cleanB.includes(cleanA);
+      }
+      return false;
+    };
+
     const newMappings = {
       cabang: {} as Record<string, MappingResult>,
       salesman: {} as Record<string, MappingResult>,
@@ -219,11 +236,12 @@ export default function ImportPenjualan() {
       if (cabangName) {
         const lowerCabang = cabangName.toLowerCase();
         if (!newMappings.cabang[lowerCabang]) {
-          const found = dbCabang.find(c => c.nama.toLowerCase() === lowerCabang);
+          const found = dbCabang.find(c => c.nama.toLowerCase() === lowerCabang) ||
+            dbCabang.find(c => isSimilar(c.nama, lowerCabang));
           newMappings.cabang[lowerCabang] = {
             existing: !!found,
             id: found?.id,
-            name: cabangName
+            name: found?.nama || cabangName
           };
         }
       }
@@ -233,11 +251,17 @@ export default function ImportPenjualan() {
       if (salesmanName) {
         const lowerSales = salesmanName.toLowerCase();
         if (!newMappings.salesman[lowerSales]) {
-          const found = dbUsers.find(u => u.nama.toLowerCase() === lowerSales);
+          const found = dbUsers.find(u => 
+            u.nama.toLowerCase() === lowerSales || 
+            (u.username && u.username.toLowerCase() === lowerSales)
+          ) || dbUsers.find(u => 
+            isSimilar(u.nama, lowerSales) || 
+            (u.username && isSimilar(u.username, lowerSales))
+          );
           newMappings.salesman[lowerSales] = {
             existing: !!found,
             id: found?.id,
-            name: salesmanName
+            name: found?.nama || salesmanName
           };
         }
       }
@@ -248,9 +272,9 @@ export default function ImportPenjualan() {
         const normKey = normalizeCustomer(pelangganName);
         if (!newMappings.pelanggan[normKey]) {
           // Try exact match first, then normalized match
-          const found = dbPelanggan.find(p => p.nama.toLowerCase() === pelangganName.toLowerCase()) || 
-                        dbPelangganMap.get(normKey);
-          
+          const found = dbPelanggan.find(p => p.nama.toLowerCase() === pelangganName.toLowerCase()) ||
+            dbPelangganMap.get(normKey);
+
           newMappings.pelanggan[normKey] = {
             existing: !!found,
             id: found?.id,
@@ -264,14 +288,15 @@ export default function ImportPenjualan() {
       if (produkName) {
         const lowerProd = produkName.toLowerCase();
         if (!newMappings.produk[lowerProd]) {
-          const found = dbBarang.find(b => 
-            b.nama.toLowerCase() === lowerProd || 
+          const found = dbBarang.find(b =>
+            b.nama.toLowerCase() === lowerProd ||
             b.kode?.toLowerCase() === lowerProd
-          );
+          ) || dbBarang.find(b => isSimilar(b.nama, lowerProd) || (b.kode && isSimilar(b.kode, lowerProd)));
+
           newMappings.produk[lowerProd] = {
             existing: !!found,
             id: found?.id,
-            name: produkName,
+            name: found?.nama || produkName,
             satuanId: found?.satuanId
           };
         }
@@ -327,7 +352,7 @@ export default function ImportPenjualan() {
       setProgress(2);
       const newCabangList = Object.keys(finalMappings.cabang)
         .filter(name => !finalMappings.cabang[name].existing);
-      
+
       if (newCabangList.length > 0) {
         const cabData = newCabangList.map(name => ({
           nama: name,
@@ -348,7 +373,7 @@ export default function ImportPenjualan() {
       setProgress(3);
       const newSalesList = Object.keys(finalMappings.salesman)
         .filter(name => !finalMappings.salesman[name].existing);
-      
+
       if (newSalesList.length > 0) {
         const salesData = newSalesList.map(name => {
           const salesmanRow = firstRowPerSales[finalMappings.salesman[name].name];
@@ -376,7 +401,7 @@ export default function ImportPenjualan() {
       setProgress(4);
       const newProdList = Object.keys(finalMappings.produk)
         .filter(name => !finalMappings.produk[name].existing);
-      
+
       if (newProdList.length > 0) {
         const prodData = newProdList.map(name => ({
           nama: name,
@@ -390,11 +415,11 @@ export default function ImportPenjualan() {
         const { data: res, error } = await supabase.from('barang').insert(prodData).select();
         if (error) throw error;
         res?.forEach(p => {
-          finalMappings.produk[p.nama.toLowerCase()] = { 
-            existing: true, 
-            id: p.id, 
-            name: p.nama, 
-            satuanId: p.satuan_id 
+          finalMappings.produk[p.nama.toLowerCase()] = {
+            existing: true,
+            id: p.id,
+            name: p.nama,
+            satuanId: p.satuan_id
           };
         });
       }
@@ -403,7 +428,7 @@ export default function ImportPenjualan() {
       setStatus('Membuat data Pelanggan baru...');
       const newPelList = Object.keys(finalMappings.pelanggan)
         .filter(name => !finalMappings.pelanggan[name].existing);
-      
+
       if (newPelList.length > 0) {
         const chunkSize = 200;
         for (let i = 0; i < newPelList.length; i += chunkSize) {
@@ -413,10 +438,18 @@ export default function ImportPenjualan() {
             const row = firstRowPerPelanggan[originalName];
             const cabangId = finalMappings.cabang[row?.cabang?.toLowerCase() || '']?.id || defaultCabangId;
             const salesId = finalMappings.salesman[row?.salesman?.toLowerCase() || '']?.id || defaultSalesId;
-            
+
             // Normalize phone: only digits, min 7
             let cleanPhone = row?.telp?.toString().replace(/\D/g, '') || '';
             if (cleanPhone.length < 7) cleanPhone = '-';
+
+            // Date handling for pelanggan
+            let pelCreatedAt = new Date().toISOString();
+            const rawPelDate = row?.pelanggan_created_at || row?.created_at;
+            if (rawPelDate) {
+              const d = new Date(rawPelDate);
+              if (!isNaN(d.getTime())) pelCreatedAt = d.toISOString();
+            }
 
             return {
               nama: originalName,
@@ -426,9 +459,14 @@ export default function ImportPenjualan() {
               sales_id: salesId,
               kategori_id: defaultKategoriPelangganId,
               kode: originalName.substring(0, 5).toUpperCase() + Math.random().toString(36).substring(2, 5).toUpperCase(),
-              lokasi: { lat: Number(row?.lat) || 0, lng: Number(row?.long) || 0 },
-              is_active: false,
-              sisa_kredit: 0
+              lokasi: {
+                alamat: row?.alamat || '-',
+                latitude: Number(row?.lat) || 0,
+                longitude: Number(row?.long) || 0
+              },
+              is_active: true,
+              sisa_kredit: 0,
+              created_at: pelCreatedAt
             };
           });
           const { data: res, error } = await supabase.from('pelanggan').insert(pelData).select();
@@ -437,7 +475,7 @@ export default function ImportPenjualan() {
             const normKey = normalizeCustomer(p.nama);
             finalMappings.pelanggan[normKey] = { existing: true, id: p.id, name: p.nama };
           });
-          
+
           const pelProgress = Math.min(5 + Math.round(((i + chunk.length) / newPelList.length) * 20), 25);
           setProgress(pelProgress);
           setStatus(`Membuat data Pelanggan baru (${Math.min(i + chunk.length, newPelList.length)} / ${newPelList.length})...`);
@@ -452,7 +490,7 @@ export default function ImportPenjualan() {
       // Helper to parse dates as UTC to prevent timezone shifts
       const parseCSVDate = (val: any) => {
         if (!val) return new Date();
-        
+
         // If XLSX already parsed it as a Date object, use its components directly
         if (val instanceof Date) {
           return new Date(Date.UTC(val.getFullYear(), val.getMonth(), val.getDate()));
@@ -460,7 +498,7 @@ export default function ImportPenjualan() {
 
         const dateStr = String(val).trim();
         if (!dateStr) return new Date();
-        
+
         // Handle Excel numeric dates (serial numbers)
         if (!isNaN(Number(dateStr)) && Number(dateStr) > 40000) {
           const excelDate = new Date((Number(dateStr) - 25569) * 86400 * 1000);
@@ -476,7 +514,7 @@ export default function ImportPenjualan() {
           let p2 = parseInt(parts[2], 10);
 
           let day, month, year;
-          
+
           if (p2 > 1000) { // Format: DD/MM/YYYY or MM/DD/YYYY
             year = p2;
             // Always assume DD/MM/YYYY for the user's data
@@ -491,7 +529,7 @@ export default function ImportPenjualan() {
             day = p0;
             month = p1 - 1;
           }
-          
+
           // Validate date components
           if (!isNaN(day) && !isNaN(month) && !isNaN(year) && month >= 0 && month < 12 && day > 0 && day <= 31) {
             const result = new Date(Date.UTC(year, month, day));
@@ -504,7 +542,7 @@ export default function ImportPenjualan() {
         if (!isNaN(d.getTime())) {
           return new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
         }
-        
+
         console.error('Failed to parse date:', dateStr);
         return new Date();
       };
@@ -512,7 +550,7 @@ export default function ImportPenjualan() {
       // 2. Import Penjualan in batches
       setStatus('Mengimport transaksi penjualan...');
       const batchSize = 100;
-      
+
       // Filter out rows with missing critical data to avoid crashes
       const validData = data.filter(row => row.pelanggan?.trim() && row.produk?.trim());
 
@@ -526,7 +564,7 @@ export default function ImportPenjualan() {
 
           // Find matching promo for "transaksi" column (Skema)
           const transaksiClean = row.transaksi?.trim()?.toLowerCase();
-          const matchingPromo = promos?.find(p => 
+          const matchingPromo = promos?.find(p =>
             p.nama.toLowerCase() === transaksiClean ||
             p.kode?.toLowerCase() === transaksiClean
           );
@@ -543,14 +581,24 @@ export default function ImportPenjualan() {
           }];
 
           const isLunas = transaksiClean !== 'tempo';
-          
+
           const normCustKey = normalizeCustomer(row.pelanggan || '');
-          
+
           const rowDate = parseCSVDate(row.tanggal);
           const dateStr = rowDate.toISOString().split('T')[0].replace(/-/g, '');
-          
+
+          // Use created_at if available and valid, otherwise fallback to rowDate
+          let createdAtDate = rowDate;
+          if (row.created_at) {
+            const d = new Date(row.created_at);
+            if (!isNaN(d.getTime())) {
+              createdAtDate = d;
+            }
+          }
+
           return {
             tanggal: rowDate.toISOString(),
+            created_at: createdAtDate.toISOString(),
             pelanggan_id: finalMappings.pelanggan[normCustKey]?.id || defaultPelangganId,
             sales_id: finalMappings.salesman[row.salesman?.trim()?.toLowerCase()]?.id || defaultSalesId,
             cabang_id: finalMappings.cabang[row.cabang?.trim()?.toLowerCase()]?.id || defaultCabangId,
@@ -564,7 +612,12 @@ export default function ImportPenjualan() {
             metode_pembayaran: transaksiClean === 'tunai' ? 'tunai' : (transaksiClean === 'tempo' ? 'tempo' : 'transfer'),
             items: items,
             nomor_nota: `INV/${dateStr}-${i + idx + 1}`,
-            catatan: row.note || (matchingPromo ? `Promo: ${matchingPromo.nama}` : 'Import data')
+            catatan: row.note || (matchingPromo ? `Promo: ${matchingPromo.nama}` : 'Import data'),
+            lokasi: {
+              alamat: row.alamat || '-',
+              latitude: Number(row.lat) || 0,
+              longitude: Number(row.long) || 0
+            }
           };
         });
 
@@ -626,9 +679,9 @@ export default function ImportPenjualan() {
 
       <div className="grid grid-cols-3 gap-4 mb-6">
         {[1, 2, 3].map((s) => (
-          <div 
-            key={s} 
-            className={`h-1.5 rounded-full transition-colors ${s <= step ? 'bg-primary' : 'bg-muted'}`} 
+          <div
+            key={s}
+            className={`h-1.5 rounded-full transition-colors ${s <= step ? 'bg-primary' : 'bg-muted'}`}
           />
         ))}
       </div>
@@ -646,15 +699,15 @@ export default function ImportPenjualan() {
               </p>
             </div>
             <div className="w-full max-w-xs pt-4">
-              <Input 
-                id="file-upload" 
-                type="file" 
-                accept=".csv,.xlsx" 
+              <Input
+                id="file-upload"
+                type="file"
+                accept=".csv,.xlsx"
                 onChange={handleFileUpload}
                 disabled={isProcessing}
                 className="hidden"
               />
-              <Button 
+              <Button
                 onClick={() => document.getElementById('file-upload')?.click()}
                 disabled={isProcessing}
                 className="w-full h-12 text-lg rounded-xl"
@@ -682,98 +735,98 @@ export default function ImportPenjualan() {
             </CardHeader>
             <CardContent className="space-y-6">
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                <MappingCard 
-                  icon={Building2} 
-                  label="Cabang" 
-                  total={mappingSummary.cabang.total} 
-                  newCount={mappingSummary.cabang.new} 
+                <MappingCard
+                  icon={Building2}
+                  label="Cabang"
+                  total={mappingSummary.cabang.total}
+                  newCount={mappingSummary.cabang.new}
                 />
-                <MappingCard 
-                  icon={Users} 
-                  label="Salesman" 
-                  total={mappingSummary.salesman.total} 
-                  newCount={mappingSummary.salesman.new} 
+                <MappingCard
+                  icon={Users}
+                  label="Salesman"
+                  total={mappingSummary.salesman.total}
+                  newCount={mappingSummary.salesman.new}
                 />
-                <MappingCard 
-                  icon={Users} 
-                  label="Pelanggan" 
-                  total={mappingSummary.pelanggan.total} 
-                  newCount={mappingSummary.pelanggan.new} 
+                <MappingCard
+                  icon={Users}
+                  label="Pelanggan"
+                  total={mappingSummary.pelanggan.total}
+                  newCount={mappingSummary.pelanggan.new}
                 />
-                <MappingCard 
-                  icon={Package} 
-                  label="Produk" 
-                  total={mappingSummary.produk.total} 
-                  newCount={mappingSummary.produk.new} 
+                <MappingCard
+                  icon={Package}
+                  label="Produk"
+                  total={mappingSummary.produk.total}
+                  newCount={mappingSummary.produk.new}
                 />
               </div>
 
-                <h4 className="text-sm font-semibold flex items-center gap-2">
-                  <Database className="w-4 h-4" />
-                  Pratinjau Data (5 Baris Pertama)
-                </h4>
-                <div className="rounded-xl border overflow-hidden">
-                  <table className="w-full text-xs text-left">
-                    <thead className="bg-muted text-muted-foreground uppercase tracking-wider">
-                      <tr>
-                        <th className="p-3 border-b font-semibold">Tanggal</th>
-                        <th className="p-3 border-b font-semibold">Nama CSV (Original)</th>
-                        <th className="p-3 border-b font-semibold">Nama Sistem (Hasil Clean)</th>
-                        <th className="p-3 border-b font-semibold">Produk</th>
-                        <th className="p-3 border-b font-semibold text-right">Qty</th>
-                        <th className="p-3 border-b font-semibold text-right">Total</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {data.slice(0, 5).map((row, i) => {
-                        const rawCust = row.pelanggan || '';
-                        const cleanCust = cleanCustomerName(rawCust);
-                        const normCust = normalizeCustomer(rawCust);
-                        const isNewPel = !mappings.pelanggan[normCust]?.existing;
-                        const isNewProd = !mappings.produk[row.produk?.toLowerCase() || '']?.existing;
+              <h4 className="text-sm font-semibold flex items-center gap-2">
+                <Database className="w-4 h-4" />
+                Pratinjau Data (5 Baris Pertama)
+              </h4>
+              <div className="rounded-xl border overflow-hidden">
+                <table className="w-full text-xs text-left">
+                  <thead className="bg-muted text-muted-foreground uppercase tracking-wider">
+                    <tr>
+                      <th className="p-3 border-b font-semibold">Tanggal</th>
+                      <th className="p-3 border-b font-semibold">Nama CSV (Original)</th>
+                      <th className="p-3 border-b font-semibold">Nama Sistem (Hasil Clean)</th>
+                      <th className="p-3 border-b font-semibold">Produk</th>
+                      <th className="p-3 border-b font-semibold text-right">Qty</th>
+                      <th className="p-3 border-b font-semibold text-right">Total</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {data.slice(0, 5).map((row, i) => {
+                      const rawCust = row.pelanggan || '';
+                      const cleanCust = cleanCustomerName(rawCust);
+                      const normCust = normalizeCustomer(rawCust);
+                      const isNewPel = !mappings.pelanggan[normCust]?.existing;
+                      const isNewProd = !mappings.produk[row.produk?.toLowerCase() || '']?.existing;
 
-                        return (
-                          <tr key={i} className="hover:bg-muted/50 transition-colors">
-                            <td className="p-3 border-b whitespace-nowrap">{row.tanggal}</td>
-                            <td className="p-3 border-b text-muted-foreground">{rawCust}</td>
-                            <td className="p-3 border-b">
-                              <div className="flex flex-col min-w-[150px]">
-                                <span className="font-semibold text-blue-900">{cleanCust}</span>
-                                {isNewPel ? (
-                                  <span className="text-[10px] text-amber-600 font-bold uppercase tracking-tight flex items-center gap-1">
-                                    <div className="w-1.5 h-1.5 rounded-full bg-amber-600" /> + Baru (Belum Terdaftar)
-                                  </span>
-                                ) : (
-                                  <span className="text-[10px] text-green-600 font-bold uppercase tracking-tight flex items-center gap-1">
-                                    <div className="w-1.5 h-1.5 rounded-full bg-green-600" /> ✓ Sudah Terdaftar
-                                  </span>
-                                )}
-                              </div>
-                            </td>
-                            <td className="p-3 border-b">
-                              <div className="flex flex-col min-w-[120px]">
-                                <span className="line-clamp-1">{row.produk}</span>
-                                {isNewProd ? (
-                                  <span className="text-[10px] text-amber-500 italic">Produk Baru</span>
-                                ) : (
-                                  <span className="text-[10px] text-blue-500 italic">Produk Terdaftar</span>
-                                )}
-                              </div>
-                            </td>
-                            <td className="p-3 border-b text-right font-mono font-semibold">{row.qty}</td>
-                            <td className="p-3 border-b text-right font-bold text-blue-700">
-                              Rp {row.total?.toLocaleString('id-ID')}
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
+                      return (
+                        <tr key={i} className="hover:bg-muted/50 transition-colors">
+                          <td className="p-3 border-b whitespace-nowrap">{row.tanggal}</td>
+                          <td className="p-3 border-b text-muted-foreground">{rawCust}</td>
+                          <td className="p-3 border-b">
+                            <div className="flex flex-col min-w-[150px]">
+                              <span className="font-semibold text-blue-900">{cleanCust}</span>
+                              {isNewPel ? (
+                                <span className="text-[10px] text-amber-600 font-bold uppercase tracking-tight flex items-center gap-1">
+                                  <div className="w-1.5 h-1.5 rounded-full bg-amber-600" /> + Baru (Belum Terdaftar)
+                                </span>
+                              ) : (
+                                <span className="text-[10px] text-green-600 font-bold uppercase tracking-tight flex items-center gap-1">
+                                  <div className="w-1.5 h-1.5 rounded-full bg-green-600" /> ✓ Sudah Terdaftar
+                                </span>
+                              )}
+                            </div>
+                          </td>
+                          <td className="p-3 border-b">
+                            <div className="flex flex-col min-w-[120px]">
+                              <span className="line-clamp-1">{row.produk}</span>
+                              {isNewProd ? (
+                                <span className="text-[10px] text-amber-500 italic">Produk Baru</span>
+                              ) : (
+                                <span className="text-[10px] text-blue-500 italic">Produk Terdaftar</span>
+                              )}
+                            </div>
+                          </td>
+                          <td className="p-3 border-b text-right font-mono font-semibold">{row.qty}</td>
+                          <td className="p-3 border-b text-right font-bold text-blue-700">
+                            Rp {row.total?.toLocaleString('id-ID')}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
 
               {mappingSummary.pelanggan.new > 0 && (
                 <div className="space-y-3">
-                   <h4 className="text-sm font-semibold flex items-center gap-2">
+                  <h4 className="text-sm font-semibold flex items-center gap-2">
                     <Users className="w-4 h-4" />
                     Review Pelanggan Baru (Sampling 10 dari {mappingSummary.pelanggan.new})
                   </h4>
@@ -819,7 +872,7 @@ export default function ImportPenjualan() {
                 <div className="space-y-1">
                   <p className="text-sm font-semibold text-primary">Konfirmasi Import</p>
                   <p className="text-xs text-primary/80">
-                    Sebanyak <span className="font-bold">{data.length.toLocaleString()}</span> transaksi penjualan siap untuk diimport. 
+                    Sebanyak <span className="font-bold">{data.length.toLocaleString()}</span> transaksi penjualan siap untuk diimport.
                     Pastikan kolom <span className="font-bold">Tanggal</span> pada pratinjau di atas sudah terlihat benar.
                   </p>
                 </div>
@@ -846,10 +899,10 @@ export default function ImportPenjualan() {
                 <CheckCircle2 className="w-20 h-20 text-green-500 animate-in zoom-in" />
               ) : (
                 <div className="flex flex-col items-center">
-                   <div className="p-6 rounded-full bg-primary/5 relative">
-                     <Database className="w-12 h-12 text-primary animate-pulse" />
-                     <div className="absolute inset-0 border-4 border-primary border-t-transparent rounded-full animate-spin" />
-                   </div>
+                  <div className="p-6 rounded-full bg-primary/5 relative">
+                    <Database className="w-12 h-12 text-primary animate-pulse" />
+                    <div className="absolute inset-0 border-4 border-primary border-t-transparent rounded-full animate-spin" />
+                  </div>
                 </div>
               )}
             </div>
@@ -863,9 +916,9 @@ export default function ImportPenjualan() {
             </div>
 
             {progress === 100 ? (
-               <Button onClick={() => window.location.href = '/penjualan'} className="rounded-xl">
-                 Lihat Transaksi Penjualan
-               </Button>
+              <Button onClick={() => window.location.href = '/penjualan'} className="rounded-xl">
+                Lihat Transaksi Penjualan
+              </Button>
             ) : (
               <p className="text-sm text-muted-foreground animate-pulse">
                 Mohon jangan tutup halaman ini sampai proses selesai...
