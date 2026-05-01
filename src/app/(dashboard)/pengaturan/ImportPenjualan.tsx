@@ -23,6 +23,7 @@ interface ImportRow {
   salesman: string;
   transaksi: string;
   pelanggan: string;
+  kategori_pelanggan?: string;
   alamat: string;
   lat: string | number;
   long: string | number;
@@ -151,17 +152,18 @@ export default function ImportPenjualan() {
       const getIdx = (keys: string[]) => headers.findIndex(h => keys.includes(h));
 
       const idxMap = {
-        tanggal: getIdx(['tanggal', 'date']),
-        created_at: getIdx(['created_at', 'registered']),
+        tanggal: getIdx(['tanggal', 'date', 'waktu']),
+        created_at: getIdx(['created_at', 'registered', 'waktu']),
         pelanggan_created_at: getIdx(['pelanggan_created_at', 'p_registered', 'pelanggan_create_at']),
-        cabang: getIdx(['cabang', 'branch']),
-        salesman: getIdx(['salesman', 'sales']),
+        cabang: getIdx(['cabang', 'branch', 'divisi']),
+        salesman: getIdx(['salesman', 'sales', 'nama']),
         transaksi: getIdx(['transaksi', 'type', 'skema']),
-        pelanggan: getIdx(['pelanggan', 'customer']),
+        pelanggan: getIdx(['pelanggan', 'customer', 'toko']),
+        kategori_pelanggan: getIdx(['kategori_pelanggan', 'kategori', 'category', 'status_pelanggan']),
         alamat: getIdx(['alamat', 'address']),
         lat: getIdx(['lat', 'latitude']),
         long: getIdx(['long', 'longitude', 'lng']),
-        telp: getIdx(['telp', 'telepon', 'phone', 'telepon']),
+        telp: getIdx(['telp', 'telepon', 'phone']),
         note: getIdx(['note', 'catatan', 'keterangan']),
         produk: getIdx(['produk', 'item', 'barang']),
         qty: getIdx(['qty', 'jumlah', 'quantity']),
@@ -181,6 +183,7 @@ export default function ImportPenjualan() {
           salesman: String(getVal(idxMap.salesman) || '').trim(),
           transaksi: String(getVal(idxMap.transaksi) || '').trim(),
           pelanggan: String(getVal(idxMap.pelanggan) || '').trim(),
+          kategori_pelanggan: String(getVal(idxMap.kategori_pelanggan) || '').trim(),
           alamat: String(getVal(idxMap.alamat) || '').trim(),
           lat: getVal(idxMap.lat),
           long: getVal(idxMap.long),
@@ -190,7 +193,7 @@ export default function ImportPenjualan() {
           qty: Number(getVal(idxMap.qty)) || 0,
           harga: Number(getVal(idxMap.harga)) || 0,
           promo: Number(getVal(idxMap.promo)) || 0,
-          total: Number(getVal(idxMap.total)) || 0,
+          total: Number(getVal(idxMap.total)) || (Number(getVal(idxMap.qty)) * Number(getVal(idxMap.harga)) - (Number(getVal(idxMap.promo)) || 0)) || 0,
         };
       });
 
@@ -451,13 +454,19 @@ export default function ImportPenjualan() {
               if (!isNaN(d.getTime())) pelCreatedAt = d.toISOString();
             }
 
+            const catName = row?.kategori_pelanggan;
+            const catId = dbKategoriPelanggan.find(c => 
+              c.nama.toLowerCase() === catName?.toLowerCase() || 
+              (catName === 'Retail' && c.nama === 'Umum')
+            )?.id || defaultKategoriPelangganId;
+
             return {
               nama: originalName,
               alamat: row?.alamat || '-',
               telepon: cleanPhone,
               cabang_id: cabangId,
               sales_id: salesId,
-              kategori_id: defaultKategoriPelangganId,
+              kategori_id: catId,
               kode: originalName.substring(0, 5).toUpperCase() + Math.random().toString(36).substring(2, 5).toUpperCase(),
               lokasi: {
                 alamat: row?.alamat || '-',
