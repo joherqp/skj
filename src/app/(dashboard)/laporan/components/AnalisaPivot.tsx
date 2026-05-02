@@ -32,7 +32,8 @@ import {
     Trophy,
     Target,
     Search,
-    Activity
+    Activity,
+    CreditCard
 } from 'lucide-react';
 import { ScopeFilters } from '@/components/shared/ScopeFilters';
 import {
@@ -52,7 +53,7 @@ import autoTable from 'jspdf-autotable';
 import { cn } from '@/lib/utils';
 import { motion, AnimatePresence } from 'framer-motion';
 
-type PivotField = 'tanggal' | 'bulan' | 'tahun' | 'kategori' | 'produk' | 'pelanggan' | 'sales' | 'cabang' | 'kategoriPelanggan';
+type PivotField = 'tanggal' | 'bulan' | 'tahun' | 'kategori' | 'produk' | 'pelanggan' | 'sales' | 'cabang' | 'kategoriPelanggan' | 'jenisTransaksi';
 type AggregationType = 'sum_total' | 'sum_qty' | 'count_trx';
 type SortOrder = 'asc' | 'desc';
 
@@ -66,6 +67,7 @@ interface PivotDataItem {
     kategoriPelanggan: string;
     sales: string;
     cabang: string;
+    jenisTransaksi: string;
     total: number;
     qty: number;
     trx: number;
@@ -81,15 +83,18 @@ const FIELD_LABELS: Record<PivotField, string> = {
     pelanggan: 'Toko/Pelanggan',
     kategoriPelanggan: 'Kategori Pelanggan',
     sales: 'Sales',
-    cabang: 'Cabang'
+    cabang: 'Cabang',
+    jenisTransaksi: 'Jenis Transaksi'
 };
+
+const TRANSACTION_TYPES = ['Tunai', 'Kredit', 'Retur', 'Promo'];
 
 export default function AnalisaPivot() {
     const { penjualan, barang, kategori: kategoriList, pelanggan, kategoriPelanggan: kategoriPelangganList, users, cabang, viewMode } = useDatabase();
     const { user: currentUser } = useAuth();
 
     // Configuration State
-    const [rowFields, setRowFields] = useState<PivotField[]>(['tanggal', 'cabang', 'sales', 'kategoriPelanggan', 'pelanggan']);
+    const [rowFields, setRowFields] = useState<PivotField[]>(['tanggal', 'cabang', 'sales', 'kategoriPelanggan', 'pelanggan', 'jenisTransaksi']);
     const [colFields, setColFields] = useState<PivotField[]>(['produk']);
     const [metrics, setMetrics] = useState<AggregationType[]>(['sum_qty', 'sum_total']);
     const [sortOrder, setSortOrder] = useState<SortOrder>('asc');
@@ -108,7 +113,7 @@ export default function AnalisaPivot() {
     const isAdminOrOwner = currentUser?.roles.some(r => ['admin', 'owner'].includes(r));
 
     // Configuration Helpers
-    const availableKeys: PivotField[] = ['tanggal', 'bulan', 'tahun', 'cabang', 'sales', 'kategoriPelanggan', 'kategori', 'produk', 'pelanggan'];
+    const availableKeys: PivotField[] = ['tanggal', 'bulan', 'tahun', 'cabang', 'sales', 'kategoriPelanggan', 'kategori', 'produk', 'pelanggan', 'jenisTransaksi'];
 
     const toggleRow = (k: PivotField) => {
         if (rowFields.includes(k)) {
@@ -141,6 +146,7 @@ export default function AnalisaPivot() {
     const [selectedKategoriIds, setSelectedKategoriIds] = useState<string[]>([]);
     const [selectedKategoriPelangganIds, setSelectedKategoriPelangganIds] = useState<string[]>([]);
     const [selectedBarangIds, setSelectedBarangIds] = useState<string[]>([]);
+    const [selectedTransactionTypes, setSelectedTransactionTypes] = useState<string[]>([]);
     const [isMobile, setIsMobile] = useState(false);
     const [searchQuery, setSearchQuery] = useState({ kategori: '', barang: '', kategoriPelanggan: '' });
     const [showFilters, setShowFilters] = useState(false);
@@ -279,7 +285,6 @@ export default function AnalisaPivot() {
 
         const data: PivotDataItem[] = [];
         penjualan
-            .filter(p => p.status !== 'batal' && p.status !== 'draft')
             .filter(p => {
                 const pSalesId = p.salesId || p.createdBy;
                 // Base access check (Same as RekapPenjualan)
@@ -324,6 +329,21 @@ export default function AnalisaPivot() {
                     const catId = product?.kategoriId || '';
                     const catName = kategoriList.find(c => c.id === catId)?.nama || 'Lainnya';
 
+                    // Determine Transaction Type
+                    let jenisTransaksi = 'Tunai';
+                    if (item.isBonus || item.harga === 0 || item.subtotal === 0) {
+                        jenisTransaksi = 'Promo';
+                    } else if (p.status === 'batal') {
+                        jenisTransaksi = 'Retur';
+                    } else if (p.metodePembayaran === 'tempo') {
+                        jenisTransaksi = 'Kredit';
+                    } else if (p.metodePembayaran === 'transfer' || p.metodePembayaran === 'tunai') {
+                        jenisTransaksi = 'Tunai';
+                    }
+
+                    // Transaction Type Filter
+                    if (selectedTransactionTypes.length > 0 && !selectedTransactionTypes.includes(jenisTransaksi)) return;
+
                     // Product & Category Filters
                     if (selectedKategoriIds.length > 0 && !selectedKategoriIds.includes(catId)) return;
                     if (selectedBarangIds.length > 0 && !selectedBarangIds.includes(item.barangId)) return;
@@ -338,6 +358,7 @@ export default function AnalisaPivot() {
                         kategoriPelanggan: custCatName,
                         sales: salesName,
                         cabang: cabangName,
+                        jenisTransaksi: jenisTransaksi,
                         total: Number(item.subtotal) || 0,
                         qty: (Number(item.jumlah) || 0) * (Number(item.konversi) || 1),
                         trx: 1,
@@ -843,6 +864,7 @@ export default function AnalisaPivot() {
         setSelectedKategoriIds([]);
         setSelectedKategoriPelangganIds([]);
         setSelectedBarangIds([]);
+        setSelectedTransactionTypes([]);
         setSearchQuery({ kategori: '', barang: '', kategoriPelanggan: '' });
     };
 
@@ -915,7 +937,7 @@ export default function AnalisaPivot() {
                                             showFilters ? "bg-indigo-50 border-indigo-200 text-indigo-600 shadow-lg shadow-indigo-100" : "bg-white text-slate-600 hover:border-indigo-400 hover:text-indigo-600"
                                         )}
                                     >
-                                        <Filter className={cn("w-3.5 h-3.5 sm:w-4 sm:h-4", (showFilters || selectedCabangIds.length > 0 || selectedUserIds.length > 0 || selectedKategoriIds.length > 0 || selectedBarangIds.length > 0) && "fill-indigo-600 text-indigo-600")} />
+                                        <Filter className={cn("w-3.5 h-3.5 sm:w-4 sm:h-4", (showFilters || selectedCabangIds.length > 0 || selectedUserIds.length > 0 || selectedKategoriIds.length > 0 || selectedBarangIds.length > 0 || selectedTransactionTypes.length > 0) && "fill-indigo-600 text-indigo-600")} />
                                         <span className="hidden xs:inline">{showFilters ? "TUTUP FILTER" : "FILTER DATA"}</span>
                                         <span className="xs:hidden">{showFilters ? "TUTUP" : "FILTER"}</span>
                                     </Button>
@@ -1218,6 +1240,77 @@ export default function AnalisaPivot() {
                                                                             </DropdownMenuCheckboxItem>
                                                                         );
                                                                     })}
+                                                            </div>
+                                                        </DropdownMenuContent>
+                                                    </DropdownMenu>
+
+                                                    <DropdownMenu>
+                                                        <DropdownMenuTrigger asChild>
+                                                            <Button variant="outline" className="h-12 text-xs justify-between bg-white/50 backdrop-blur-sm font-bold px-4 sm:px-5 border-slate-200 hover:border-indigo-400 hover:ring-4 hover:ring-indigo-50 transition-all rounded-2xl shadow-sm w-auto min-w-[60px] sm:min-w-[180px]">
+                                                                <div className="flex items-center gap-2 sm:gap-3 truncate">
+                                                                    <CreditCard className="w-4 h-4 text-emerald-500 shrink-0" />
+                                                                    <span className="truncate hidden sm:inline">
+                                                                        {selectedTransactionTypes.length === 0 ? "Semua Jenis" : `${selectedTransactionTypes.length} Jenis`}
+                                                                    </span>
+                                                                    <span className="truncate sm:hidden text-emerald-600 font-black">
+                                                                        {selectedTransactionTypes.length === 0 ? "ALL" : selectedTransactionTypes.length}
+                                                                    </span>
+                                                                </div>
+                                                                <ChevronDown className="w-4 h-4 text-slate-400 ml-2 hidden sm:block" />
+                                                            </Button>
+                                                        </DropdownMenuTrigger>
+                                                        <DropdownMenuContent className="w-[240px] rounded-[1.5rem] shadow-2xl border-slate-100 p-0 bg-white/95 backdrop-blur-xl">
+                                                            <DropdownMenuLabel className="text-[10px] font-black uppercase tracking-widest text-slate-400 px-4 py-3">Jenis Transaksi</DropdownMenuLabel>
+                                                            <div className="flex items-center justify-between px-3 py-2 border-b bg-muted/20">
+                                                                <Button
+                                                                    variant="ghost"
+                                                                    size="sm"
+                                                                    className="h-7 text-[10px] text-primary hover:text-primary hover:bg-primary/5 font-semibold"
+                                                                    onClick={() => setSelectedTransactionTypes([])}
+                                                                >
+                                                                    PILIH SEMUA
+                                                                </Button>
+                                                                <Button
+                                                                    variant="ghost"
+                                                                    size="sm"
+                                                                    className="h-7 text-[10px] text-muted-foreground hover:bg-muted font-semibold"
+                                                                    onClick={() => setSelectedTransactionTypes(['__none__'])}
+                                                                >
+                                                                    BATAL SEMUA
+                                                                </Button>
+                                                            </div>
+                                                            <div className="p-2 space-y-1.5">
+                                                                {TRANSACTION_TYPES.map(type => {
+                                                                    const isAllSelected = selectedTransactionTypes.length === 0;
+                                                                    const isChecked = !selectedTransactionTypes.includes('__none__') && (isAllSelected || selectedTransactionTypes.includes(type));
+                                                                    return (
+                                                                        <DropdownMenuCheckboxItem
+                                                                            key={type}
+                                                                            checked={isChecked}
+                                                                            onCheckedChange={(checked) => {
+                                                                                if (checked) {
+                                                                                    if (selectedTransactionTypes.includes('__none__')) {
+                                                                                        setSelectedTransactionTypes([type]);
+                                                                                    } else {
+                                                                                        const newList = [...selectedTransactionTypes, type];
+                                                                                        if (newList.length >= TRANSACTION_TYPES.length) setSelectedTransactionTypes([]);
+                                                                                        else setSelectedTransactionTypes(newList);
+                                                                                    }
+                                                                                } else {
+                                                                                    if (isAllSelected) {
+                                                                                        setSelectedTransactionTypes(TRANSACTION_TYPES.filter(t => t !== type));
+                                                                                    } else {
+                                                                                        const newList = selectedTransactionTypes.filter(t => t !== type);
+                                                                                        setSelectedTransactionTypes(newList.length === 0 ? ['__none__'] : newList);
+                                                                                    }
+                                                                                }
+                                                                            }}
+                                                                            className="text-xs rounded-xl py-3.5 pl-10 pr-5 font-medium"
+                                                                        >
+                                                                            {type}
+                                                                        </DropdownMenuCheckboxItem>
+                                                                    );
+                                                                })}
                                                             </div>
                                                         </DropdownMenuContent>
                                                     </DropdownMenu>
@@ -1700,16 +1793,16 @@ export default function AnalisaPivot() {
                         showFilters ? "bg-indigo-50 border-indigo-200 text-indigo-600 shadow-lg shadow-indigo-100" : "bg-white text-slate-600 active:bg-slate-50"
                     )}
                 >
-                    <Filter className={cn("w-4 h-4", (showFilters || selectedCabangIds.length > 0 || selectedUserIds.length > 0 || selectedKategoriIds.length > 0 || selectedBarangIds.length > 0) && "fill-indigo-600 text-indigo-600")} />
+                    <Filter className={cn("w-4 h-4", (showFilters || selectedCabangIds.length > 0 || selectedUserIds.length > 0 || selectedKategoriIds.length > 0 || selectedBarangIds.length > 0 || selectedKategoriPelangganIds.length > 0 || selectedTransactionTypes.length > 0) && "fill-indigo-600 text-indigo-600")} />
                     {showFilters ? "Tutup" : "Filter"}
-                    {(selectedCabangIds.length > 0 || selectedUserIds.length > 0 || selectedKategoriIds.length > 0 || selectedBarangIds.length > 0) && (
+                    {(selectedCabangIds.length > 0 || selectedUserIds.length > 0 || selectedKategoriIds.length > 0 || selectedBarangIds.length > 0 || selectedKategoriPelangganIds.length > 0 || selectedTransactionTypes.length > 0) && (
                         <Badge className="bg-indigo-600 text-white h-5 min-w-[20px] p-0 flex items-center justify-center text-[10px]">
-                            {selectedCabangIds.length + selectedUserIds.length + selectedKategoriIds.length + selectedBarangIds.length + selectedKategoriPelangganIds.length}
+                            {selectedCabangIds.length + selectedUserIds.length + selectedKategoriIds.length + selectedBarangIds.length + selectedKategoriPelangganIds.length + selectedTransactionTypes.length}
                         </Badge>
                     )}
                 </Button>
 
-                {(selectedCabangIds.length > 0 || selectedUserIds.length > 0 || selectedKategoriIds.length > 0 || selectedBarangIds.length > 0) && (
+                {(selectedCabangIds.length > 0 || selectedUserIds.length > 0 || selectedKategoriIds.length > 0 || selectedBarangIds.length > 0 || selectedKategoriPelangganIds.length > 0 || selectedTransactionTypes.length > 0) && (
                     <Button
                         variant="ghost"
                         onClick={clearAllFilters}
