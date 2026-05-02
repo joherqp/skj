@@ -30,7 +30,9 @@ import {
     Settings2,
     Database,
     Trophy,
-    Target
+    Target,
+    Search,
+    Activity
 } from 'lucide-react';
 import { ScopeFilters } from '@/components/shared/ScopeFilters';
 import { 
@@ -105,6 +107,33 @@ export default function AnalisaPivot() {
 
     const isAdminOrOwner = currentUser?.roles.some(r => ['admin', 'owner'].includes(r));
 
+    // Configuration Helpers
+    const availableKeys: PivotField[] = ['tanggal', 'bulan', 'tahun', 'cabang', 'sales', 'kategoriPelanggan', 'kategori', 'produk', 'pelanggan'];
+    
+    const toggleRow = (k: PivotField) => {
+        if (rowFields.includes(k)) {
+            if (rowFields.length > 1) setRowFields(rowFields.filter(x => x !== k));
+        } else {
+            setRowFields([...rowFields, k]);
+        }
+    };
+
+    const toggleCol = (k: PivotField) => {
+        if (colFields.includes(k)) {
+            if (colFields.length > 1) setColFields(colFields.filter(x => x !== k));
+        } else {
+            setColFields([...colFields, k]);
+        }
+    };
+
+    const toggleMetric = (m: AggregationType) => {
+        if (metrics.includes(m)) {
+            if (metrics.length > 1) setMetrics(metrics.filter(x => x !== m));
+        } else {
+            setMetrics([...metrics, m]);
+        }
+    };
+
     // UI State
     const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
     const [selectedCabangIds, setSelectedCabangIds] = useState<string[]>([]);
@@ -113,6 +142,8 @@ export default function AnalisaPivot() {
     const [selectedKategoriPelangganIds, setSelectedKategoriPelangganIds] = useState<string[]>([]);
     const [selectedBarangIds, setSelectedBarangIds] = useState<string[]>([]);
     const [isMobile, setIsMobile] = useState(false);
+    const [searchQuery, setSearchQuery] = useState({ kategori: '', barang: '', kategoriPelanggan: '' });
+    const [showFilters, setShowFilters] = useState(false);
 
     useEffect(() => {
         const checkMobile = () => setIsMobile(window.innerWidth < 640);
@@ -166,12 +197,25 @@ export default function AnalisaPivot() {
 
     const collapseAll = () => setExpandedRows(new Set());
 
-    // Calculate available branches and users based on data in the selected period and access rights
-    const { availableCabangIds, availableUserIds } = useMemo(() => {
+    // Calculate available dimensions based on data in the selected period and access rights
+    const { 
+        availableCabangIds, 
+        availableUserIds, 
+        availableKategoriIds, 
+        availableBarangIds, 
+        availableKategoriPelangganIds 
+    } = useMemo(() => {
         const cabs = new Set<string>();
         const usrs = new Set<string>();
+        const cats = new Set<string>();
+        const brgs = new Set<string>();
+        const custCats = new Set<string>();
 
         const isLeader = currentUser?.roles.includes('leader');
+        
+        // Pre-create Maps for faster lookup
+        const barangMap = new Map(barang.map(b => [b.id, b]));
+        const pelangganMap = new Map(pelanggan.map(p => [p.id, p]));
 
         penjualan.forEach(p => {
             if (p.status === 'batal' || p.status === 'draft') return;
@@ -182,7 +226,7 @@ export default function AnalisaPivot() {
             if (inPeriod) {
                 const pSalesId = p.salesId || p.createdBy;
                 
-                // Permission check for available filters
+                // 1. Check basic visibility (permissions)
                 let canSee = false;
                 if (isAdminOrOwner) {
                     canSee = true;
@@ -193,17 +237,38 @@ export default function AnalisaPivot() {
                 }
 
                 if (canSee) {
+                    // Branch and User filters are populated based on the date range and basic permissions
                     if (p.cabangId) cabs.add(p.cabangId);
                     if (pSalesId) usrs.add(pSalesId);
+                    
+                    // Category, Product, and Customer Category filters are ALSO narrowed by selected scope
+                    const matchesCabang = selectedCabangIds.length === 0 || selectedCabangIds.includes(p.cabangId || '');
+                    const matchesUser = selectedUserIds.length === 0 || selectedUserIds.includes(pSalesId || '');
+                    
+                    if (matchesCabang && matchesUser) {
+                        const cust = pelangganMap.get(p.pelangganId);
+                        if (cust?.kategoriId) custCats.add(cust.kategoriId);
+
+                        p.items.forEach(item => {
+                            if (item.barangId) {
+                                brgs.add(item.barangId);
+                                const product = barangMap.get(item.barangId);
+                                if (product?.kategoriId) cats.add(product.kategoriId);
+                            }
+                        });
+                    }
                 }
             }
         });
 
         return {
             availableCabangIds: Array.from(cabs),
-            availableUserIds: Array.from(usrs)
+            availableUserIds: Array.from(usrs),
+            availableKategoriIds: Array.from(cats),
+            availableBarangIds: Array.from(brgs),
+            availableKategoriPelangganIds: Array.from(custCats)
         };
-    }, [penjualan, isSingleDate, singleDate, startDate, endDate, currentUser, isAdminOrOwner]);
+    }, [penjualan, isSingleDate, singleDate, startDate, endDate, currentUser, isAdminOrOwner, pelanggan, barang, selectedCabangIds, selectedUserIds]);
 
 
     // 1. Flatten Data Source
@@ -614,15 +679,33 @@ export default function AnalisaPivot() {
         doc.text(`Dicetak pada: ${timestamp}`, 14, 22);
         doc.text(`Periode: ${isSingleDate ? singleDate : `${startDate} s/d ${endDate}`}`, 14, 27);
 
-        // Filters Info
-        let filterText = "Filter: ";
+        const filters = [];
+        if (selectedCabangIds.length > 0) {
+            const names = selectedCabangIds.map(id => cabang.find(c => c.id === id)?.nama).join(', ');
+            filters.push(`Cabang: ${names}`);
+        }
+        if (selectedUserIds.length > 0) {
+            const names = selectedUserIds.map(id => users.find(u => u.id === id)?.nama).join(', ');
+            filters.push(`Sales: ${names}`);
+        }
         if (selectedKategoriIds.length > 0) {
             const names = selectedKategoriIds.map(id => kategoriList.find(k => k.id === id)?.nama).join(', ');
-            filterText += `Kategori (${names})`;
-        } else {
-            filterText += "Semua Kategori";
+            filters.push(`Kategori: ${names}`);
         }
-        doc.text(filterText, 14, 32);
+        if (selectedBarangIds.length > 0) {
+            const names = selectedBarangIds.map(id => barang.find(b => b.id === id)?.nama).join(', ');
+            filters.push(`Produk: ${names}`);
+        }
+        if (selectedKategoriPelangganIds.length > 0) {
+            const names = selectedKategoriPelangganIds.map(id => kategoriPelangganList.find(k => k.id === id)?.nama).join(', ');
+            filters.push(`Tipe Toko: ${names}`);
+        }
+
+        const filterText = filters.length > 0 ? `Filter: ${filters.join(' | ')}` : "Filter: Semua Data";
+        
+        // Wrap text if too long
+        const splitFilterText = doc.splitTextToSize(filterText, 270);
+        doc.text(splitFilterText, 14, 32);
 
         const tableHeaders = [['Hierarki Baris']];
         pivotTable.cols.forEach(col => {
@@ -716,6 +799,7 @@ export default function AnalisaPivot() {
         setSelectedKategoriIds([]);
         setSelectedKategoriPelangganIds([]);
         setSelectedBarangIds([]);
+        setSearchQuery({ kategori: '', barang: '', kategoriPelanggan: '' });
     };
 
     return (
@@ -757,37 +841,60 @@ export default function AnalisaPivot() {
 
                                 <div className="flex flex-wrap items-center gap-4">
                                     <div className="flex items-center gap-2 bg-slate-50/80 p-1.5 rounded-2xl border border-slate-100 shadow-sm">
-                                        <Button
-                                            variant="ghost"
-                                            size="sm"
-                                            onClick={handleExportCSV}
-                                            className="h-10 px-6 rounded-xl text-slate-600 hover:text-indigo-600 hover:bg-white transition-all font-bold text-xs gap-2.5"
-                                        >
-                                            <Download className="w-4 h-4" /> EXPORT CSV
-                                        </Button>
+                                            <Button
+                                                variant="ghost"
+                                                size="sm"
+                                                onClick={handleExportCSV}
+                                                className="h-10 px-4 sm:px-6 rounded-xl text-slate-600 hover:text-indigo-600 hover:bg-white transition-all font-bold text-xs gap-2.5"
+                                            >
+                                                <Download className="w-4 h-4" /> 
+                                                <span className="hidden sm:inline">EXPORT CSV</span>
+                                            </Button>
                                         <div className="w-px h-6 bg-slate-200"></div>
-                                        <Button
-                                            variant="ghost"
-                                            size="sm"
-                                            onClick={handleExportPDF}
-                                            className="h-10 px-6 rounded-xl text-slate-600 hover:text-red-600 hover:bg-white transition-all font-bold text-xs gap-2.5"
-                                        >
-                                            <Download className="w-4 h-4" /> EXPORT PDF
-                                        </Button>
+                                            <Button
+                                                variant="ghost"
+                                                size="sm"
+                                                onClick={handleExportPDF}
+                                                className="h-10 px-4 sm:px-6 rounded-xl text-slate-600 hover:text-red-600 hover:bg-white transition-all font-bold text-xs gap-2.5"
+                                            >
+                                                <Download className="w-4 h-4" />
+                                                <span className="hidden sm:inline">EXPORT PDF</span>
+                                            </Button>
                                     </div>
+                                    <Button 
+                                        variant="outline"
+                                        onClick={() => setShowFilters(!showFilters)}
+                                        className={cn(
+                                            "h-11 px-6 rounded-2xl transition-all font-black text-xs gap-2.5 border-slate-200 hidden sm:flex",
+                                            showFilters ? "bg-indigo-50 border-indigo-200 text-indigo-600 shadow-lg shadow-indigo-100" : "bg-white text-slate-600 hover:border-indigo-400 hover:text-indigo-600"
+                                        )}
+                                    >
+                                        <Filter className={cn("w-4 h-4", showFilters && "fill-indigo-600")} />
+                                        {showFilters ? "TUTUP FILTER" : "FILTER DATA"}
+                                    </Button>
                                     <Button 
                                         variant="ghost"
                                         size="sm"
                                         onClick={clearAllFilters} 
-                                        className="h-11 px-6 text-xs text-slate-400 hover:text-red-500 hover:bg-red-50/50 transition-all font-black rounded-2xl gap-2 border border-transparent hover:border-red-100"
+                                        className="h-11 px-4 sm:px-6 text-xs text-slate-400 hover:text-red-500 hover:bg-red-50/50 transition-all font-black rounded-2xl gap-2 border border-transparent hover:border-red-100"
                                     >
-                                        <X className="w-4 h-4" /> RESET ENGINE
+                                        <X className="w-4 h-4" /> 
+                                        <span className="hidden sm:inline">RESET ENGINE</span>
                                     </Button>
                                 </div>
                             </div>
 
-                            {/* Second row: Data Scope & Date Range */}
-                            <div className="grid grid-cols-1 xl:grid-cols-12 gap-10">
+                            <AnimatePresence>
+                                {showFilters && (
+                                    <motion.div
+                                        initial={{ height: 0, opacity: 0 }}
+                                        animate={{ height: "auto", opacity: 1 }}
+                                        exit={{ height: 0, opacity: 0 }}
+                                        transition={{ duration: 0.5, ease: "easeInOut" }}
+                                        className="overflow-hidden"
+                                    >
+                                        {/* Second row: Data Scope & Date Range */}
+                                        <div className="grid grid-cols-1 xl:grid-cols-12 gap-10 pt-4 pb-4 border-b border-slate-100/80">
                                 <div className="xl:col-span-7 space-y-6">
                                     <div className="flex items-center gap-3">
                                         <div className="p-2.5 rounded-2xl bg-slate-100 text-slate-500 ring-1 ring-slate-200/50">
@@ -812,53 +919,259 @@ export default function AnalisaPivot() {
 
                                         <DropdownMenu>
                                             <DropdownMenuTrigger asChild>
-                                                <Button variant="outline" className="h-12 text-xs justify-between bg-white/50 backdrop-blur-sm font-bold px-5 border-slate-200 hover:border-indigo-400 hover:ring-4 hover:ring-indigo-50 transition-all rounded-2xl shadow-sm min-w-[180px]">
-                                                    <div className="flex items-center gap-3 truncate">
-                                                        <Tag className="w-4 h-4 text-purple-500" />
-                                                        <span className="truncate">
+                                                <Button variant="outline" className="h-12 text-xs justify-between bg-white/50 backdrop-blur-sm font-bold px-4 sm:px-5 border-slate-200 hover:border-indigo-400 hover:ring-4 hover:ring-indigo-50 transition-all rounded-2xl shadow-sm w-auto min-w-[60px] sm:min-w-[180px]">
+                                                    <div className="flex items-center gap-2 sm:gap-3 truncate">
+                                                        <Tag className="w-4 h-4 text-indigo-500 shrink-0" />
+                                                        <span className="truncate hidden sm:inline">
                                                             {selectedKategoriIds.length === 0 ? "Semua Kategori" : `${selectedKategoriIds.length} Kategori`}
                                                         </span>
+                                                        <span className="truncate sm:hidden text-indigo-600 font-black">
+                                                            {selectedKategoriIds.length === 0 ? "ALL" : selectedKategoriIds.length}
+                                                        </span>
                                                     </div>
-                                                    <ChevronDown className="w-4 h-4 text-slate-400 ml-2" />
+                                                    <ChevronDown className="w-4 h-4 text-slate-400 ml-2 hidden sm:block" />
                                                 </Button>
                                             </DropdownMenuTrigger>
-                                            <DropdownMenuContent className="w-[280px] max-h-[400px] overflow-y-auto rounded-[1.5rem] shadow-2xl border-slate-100 p-3 bg-white/95 backdrop-blur-xl">
+                                            <DropdownMenuContent className="w-[280px] max-h-[400px] flex flex-col rounded-[1.5rem] shadow-2xl border-slate-100 p-0 bg-white/95 backdrop-blur-xl">
                                                 <DropdownMenuLabel className="text-[10px] font-black uppercase tracking-widest text-slate-400 px-4 py-3">Produk Kategori</DropdownMenuLabel>
-                                                <DropdownMenuSeparator className="my-2 bg-slate-100" />
-                                                <DropdownMenuCheckboxItem checked={selectedKategoriIds.length === 0} onCheckedChange={() => setSelectedKategoriIds([])} className="text-xs rounded-xl py-3 px-4 font-medium">
-                                                    Semua Kategori
-                                                </DropdownMenuCheckboxItem>
-                                                {kategoriList.map(cat => (
-                                                    <DropdownMenuCheckboxItem key={cat.id} checked={selectedKategoriIds.includes(cat.id)} onCheckedChange={(checked) => checked ? setSelectedKategoriIds([...selectedKategoriIds, cat.id]) : setSelectedKategoriIds(selectedKategoriIds.filter(id => id !== cat.id))} className="text-xs rounded-xl py-3 px-4 font-medium">
-                                                        {cat.nama}
-                                                    </DropdownMenuCheckboxItem>
-                                                ))}
+                                                <div className="px-3 pb-2">
+                                                    <div className="relative">
+                                                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
+                                                        <Input 
+                                                            placeholder="Cari kategori..." 
+                                                            className="h-9 pl-9 text-xs rounded-xl bg-slate-50 border-none focus-visible:ring-1 focus-visible:ring-indigo-500"
+                                                            value={searchQuery.kategori}
+                                                            onChange={(e) => setSearchQuery({ ...searchQuery, kategori: e.target.value })}
+                                                        />
+                                                    </div>
+                                                </div>
+                                                <div className="flex items-center justify-between px-3 py-2 border-b bg-muted/20">
+                                                    <Button 
+                                                        variant="ghost" 
+                                                        size="sm" 
+                                                        className="h-7 text-[10px] text-primary hover:text-primary hover:bg-primary/5 font-semibold"
+                                                        onClick={() => setSelectedKategoriIds([])}
+                                                    >
+                                                        PILIH SEMUA
+                                                    </Button>
+                                                    <Button 
+                                                        variant="ghost" 
+                                                        size="sm" 
+                                                        className="h-7 text-[10px] text-muted-foreground hover:bg-muted font-semibold"
+                                                        onClick={() => setSelectedKategoriIds(['__none__'])}
+                                                    >
+                                                        BATAL SEMUA
+                                                    </Button>
+                                                </div>
+                                                <div className="flex-1 overflow-y-auto p-2 space-y-1.5">
+                                                    {kategoriList
+                                                        .filter(cat => availableKategoriIds.includes(cat.id))
+                                                        .filter(cat => cat.nama.toLowerCase().includes(searchQuery.kategori.toLowerCase()))
+                                                        .map(cat => {
+                                                            const isAllSelected = selectedKategoriIds.length === 0;
+                                                            const isChecked = !selectedKategoriIds.includes('__none__') && (isAllSelected || selectedKategoriIds.includes(cat.id));
+                                                            return (
+                                                                <DropdownMenuCheckboxItem 
+                                                                    key={cat.id} 
+                                                                    checked={isChecked} 
+                                                                    onCheckedChange={(checked) => {
+                                                                        if (checked) {
+                                                                            if (selectedKategoriIds.includes('__none__')) {
+                                                                                setSelectedKategoriIds([cat.id]);
+                                                                            } else {
+                                                                                const newList = [...selectedKategoriIds, cat.id];
+                                                                                if (newList.length >= kategoriList.length) setSelectedKategoriIds([]);
+                                                                                else setSelectedKategoriIds(newList);
+                                                                            }
+                                                                        } else {
+                                                                            if (isAllSelected) {
+                                                                                setSelectedKategoriIds(kategoriList.filter(o => o.id !== cat.id).map(o => o.id));
+                                                                            } else {
+                                                                                const newList = selectedKategoriIds.filter(id => id !== cat.id);
+                                                                                setSelectedKategoriIds(newList.length === 0 ? ['__none__'] : newList);
+                                                                            }
+                                                                        }
+                                                                    }} 
+                                                                    className="rounded-xl text-xs py-3.5 pl-10 pr-5 font-medium"
+                                                                >
+                                                                    {cat.nama}
+                                                                </DropdownMenuCheckboxItem>
+                                                            );
+                                                        })}
+                                                </div>
                                             </DropdownMenuContent>
                                         </DropdownMenu>
 
                                         <DropdownMenu>
                                             <DropdownMenuTrigger asChild>
-                                                <Button variant="outline" className="h-12 text-xs justify-between bg-white/50 backdrop-blur-sm font-bold px-5 border-slate-200 hover:border-indigo-400 hover:ring-4 hover:ring-indigo-50 transition-all rounded-2xl shadow-sm min-w-[180px]">
-                                                    <div className="flex items-center gap-3 truncate">
-                                                        <Users className="w-4 h-4 text-orange-500" />
-                                                        <span className="truncate">
-                                                            {selectedKategoriPelangganIds.length === 0 ? "Semua Tipe Toko" : `${selectedKategoriPelangganIds.length} Tipe Toko`}
+                                                <Button variant="outline" className="h-12 text-xs justify-between bg-white/50 backdrop-blur-sm font-bold px-4 sm:px-5 border-slate-200 hover:border-indigo-400 hover:ring-4 hover:ring-indigo-50 transition-all rounded-2xl shadow-sm w-auto min-w-[60px] sm:min-w-[180px]">
+                                                    <div className="flex items-center gap-2 sm:gap-3 truncate">
+                                                        <Package className="w-4 h-4 text-indigo-500 shrink-0" />
+                                                        <span className="truncate hidden sm:inline">
+                                                            {selectedBarangIds.length === 0 ? "Semua Produk" : `${selectedBarangIds.length} Produk`}
+                                                        </span>
+                                                        <span className="truncate sm:hidden text-indigo-600 font-black">
+                                                            {selectedBarangIds.length === 0 ? "ALL" : selectedBarangIds.length}
                                                         </span>
                                                     </div>
-                                                    <ChevronDown className="w-4 h-4 text-slate-400 ml-2" />
+                                                    <ChevronDown className="w-4 h-4 text-slate-400 ml-2 hidden sm:block" />
                                                 </Button>
                                             </DropdownMenuTrigger>
-                                            <DropdownMenuContent className="w-[280px] max-h-[400px] overflow-y-auto rounded-[1.5rem] shadow-2xl border-slate-100 p-3 bg-white/95 backdrop-blur-xl">
+                                            <DropdownMenuContent className="w-[320px] max-h-[400px] flex flex-col rounded-[1.5rem] shadow-2xl border-slate-100 p-0 bg-white/95 backdrop-blur-xl">
+                                                <DropdownMenuLabel className="text-[10px] font-black uppercase tracking-widest text-slate-400 px-4 py-3">Filter Produk</DropdownMenuLabel>
+                                                <div className="px-3 pb-2">
+                                                    <div className="relative">
+                                                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
+                                                        <Input 
+                                                            placeholder="Cari produk..." 
+                                                            className="h-9 pl-9 text-xs rounded-xl bg-slate-50 border-none focus-visible:ring-1 focus-visible:ring-indigo-500"
+                                                            value={searchQuery.barang}
+                                                            onChange={(e) => setSearchQuery({ ...searchQuery, barang: e.target.value })}
+                                                        />
+                                                    </div>
+                                                </div>
+                                                <div className="flex items-center justify-between px-3 py-2 border-b bg-muted/20">
+                                                    <Button 
+                                                        variant="ghost" 
+                                                        size="sm" 
+                                                        className="h-7 text-[10px] text-primary hover:text-primary hover:bg-primary/5 font-semibold"
+                                                        onClick={() => setSelectedBarangIds([])}
+                                                    >
+                                                        PILIH SEMUA
+                                                    </Button>
+                                                    <Button 
+                                                        variant="ghost" 
+                                                        size="sm" 
+                                                        className="h-7 text-[10px] text-muted-foreground hover:bg-muted font-semibold"
+                                                        onClick={() => setSelectedBarangIds(['__none__'])}
+                                                    >
+                                                        BATAL SEMUA
+                                                    </Button>
+                                                </div>
+                                                <div className="flex-1 overflow-y-auto p-2 space-y-1.5 custom-scrollbar">
+                                                    {barang
+                                                        .filter(b => availableBarangIds.includes(b.id))
+                                                        .filter(b => selectedKategoriIds.length === 0 || selectedKategoriIds.includes(b.kategoriId))
+                                                        .filter(b => b.nama.toLowerCase().includes(searchQuery.barang.toLowerCase()))
+                                                        .sort((a, b) => a.nama.localeCompare(b.nama))
+                                                        .slice(0, 100)
+                                                        .map(b => {
+                                                            const isAllSelected = selectedBarangIds.length === 0;
+                                                            const isChecked = !selectedBarangIds.includes('__none__') && (isAllSelected || selectedBarangIds.includes(b.id));
+                                                            return (
+                                                                <DropdownMenuCheckboxItem 
+                                                                    key={b.id} 
+                                                                    checked={isChecked}
+                                                                    onCheckedChange={(checked) => {
+                                                                        if (checked) {
+                                                                            if (selectedBarangIds.includes('__none__')) {
+                                                                                setSelectedBarangIds([b.id]);
+                                                                            } else {
+                                                                                const newList = [...selectedBarangIds, b.id];
+                                                                                if (newList.length >= barang.length) setSelectedBarangIds([]);
+                                                                                else setSelectedBarangIds(newList);
+                                                                            }
+                                                                        } else {
+                                                                            if (isAllSelected) {
+                                                                                setSelectedBarangIds(barang.filter(o => o.id !== b.id).map(o => o.id));
+                                                                            } else {
+                                                                                const newList = selectedBarangIds.filter(id => id !== b.id);
+                                                                                setSelectedBarangIds(newList.length === 0 ? ['__none__'] : newList);
+                                                                            }
+                                                                        }
+                                                                    }}
+                                                                    className="rounded-xl text-xs py-3.5 pl-10 pr-5 font-medium"
+                                                                >
+                                                                    {b.nama}
+                                                                </DropdownMenuCheckboxItem>
+                                                            );
+                                                        })}
+                                                </div>
+                                            </DropdownMenuContent>
+                                        </DropdownMenu>
+
+                                        <DropdownMenu>
+                                            <DropdownMenuTrigger asChild>
+                                                <Button variant="outline" className="h-12 text-xs justify-between bg-white/50 backdrop-blur-sm font-bold px-4 sm:px-5 border-slate-200 hover:border-indigo-400 hover:ring-4 hover:ring-indigo-50 transition-all rounded-2xl shadow-sm w-auto min-w-[60px] sm:min-w-[180px]">
+                                                    <div className="flex items-center gap-2 sm:gap-3 truncate">
+                                                        <Users className="w-4 h-4 text-orange-500 shrink-0" />
+                                                        <span className="truncate hidden sm:inline">
+                                                            {selectedKategoriPelangganIds.length === 0 ? "Semua Tipe Toko" : `${selectedKategoriPelangganIds.length} Tipe Toko`}
+                                                        </span>
+                                                        <span className="truncate sm:hidden text-orange-600 font-black">
+                                                            {selectedKategoriPelangganIds.length === 0 ? "ALL" : selectedKategoriPelangganIds.length}
+                                                        </span>
+                                                    </div>
+                                                    <ChevronDown className="w-4 h-4 text-slate-400 ml-2 hidden sm:block" />
+                                                </Button>
+                                            </DropdownMenuTrigger>
+                                            <DropdownMenuContent className="w-[280px] max-h-[400px] flex flex-col rounded-[1.5rem] shadow-2xl border-slate-100 p-0 bg-white/95 backdrop-blur-xl">
                                                 <DropdownMenuLabel className="text-[10px] font-black uppercase tracking-widest text-slate-400 px-4 py-3">Kategori Pelanggan</DropdownMenuLabel>
-                                                <DropdownMenuSeparator className="my-2 bg-slate-100" />
-                                                <DropdownMenuCheckboxItem checked={selectedKategoriPelangganIds.length === 0} onCheckedChange={() => setSelectedKategoriPelangganIds([])} className="text-xs rounded-xl py-3 px-4 font-medium">
-                                                    Semua Tipe Toko
-                                                </DropdownMenuCheckboxItem>
-                                                {kategoriPelangganList.map(cat => (
-                                                    <DropdownMenuCheckboxItem key={cat.id} checked={selectedKategoriPelangganIds.includes(cat.id)} onCheckedChange={(checked) => checked ? setSelectedKategoriPelangganIds([...selectedKategoriPelangganIds, cat.id]) : setSelectedKategoriPelangganIds(selectedKategoriPelangganIds.filter(id => id !== cat.id))} className="text-xs rounded-xl py-3 px-4 font-medium">
-                                                        {cat.nama}
-                                                    </DropdownMenuCheckboxItem>
-                                                ))}
+                                                <div className="px-3 pb-2">
+                                                    <div className="relative">
+                                                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
+                                                        <Input 
+                                                            placeholder="Cari tipe..." 
+                                                            className="h-9 pl-9 text-xs rounded-xl bg-slate-50 border-none focus-visible:ring-1 focus-visible:ring-indigo-500"
+                                                            value={searchQuery.kategoriPelanggan}
+                                                            onChange={(e) => setSearchQuery({ ...searchQuery, kategoriPelanggan: e.target.value })}
+                                                        />
+                                                    </div>
+                                                </div>
+                                                <div className="flex items-center justify-between px-3 py-2 border-b bg-muted/20">
+                                                    <Button 
+                                                        variant="ghost" 
+                                                        size="sm" 
+                                                        className="h-7 text-[10px] text-primary hover:text-primary hover:bg-primary/5 font-semibold"
+                                                        onClick={() => setSelectedKategoriPelangganIds([])}
+                                                    >
+                                                        PILIH SEMUA
+                                                    </Button>
+                                                    <Button 
+                                                        variant="ghost" 
+                                                        size="sm" 
+                                                        className="h-7 text-[10px] text-muted-foreground hover:bg-muted font-semibold"
+                                                        onClick={() => setSelectedKategoriPelangganIds(['__none__'])}
+                                                    >
+                                                        BATAL SEMUA
+                                                    </Button>
+                                                </div>
+                                                <div className="flex-1 overflow-y-auto p-2 space-y-1.5">
+                                                    {kategoriPelangganList
+                                                        .filter(k => availableKategoriPelangganIds.includes(k.id))
+                                                        .filter(k => k.nama.toLowerCase().includes(searchQuery.kategoriPelanggan.toLowerCase()))
+                                                        .map(k => {
+                                                            const isAllSelected = selectedKategoriPelangganIds.length === 0;
+                                                            const isChecked = !selectedKategoriPelangganIds.includes('__none__') && (isAllSelected || selectedKategoriPelangganIds.includes(k.id));
+                                                            return (
+                                                                <DropdownMenuCheckboxItem 
+                                                                    key={k.id} 
+                                                                    checked={isChecked}
+                                                                    onCheckedChange={(checked) => {
+                                                                        if (checked) {
+                                                                            if (selectedKategoriPelangganIds.includes('__none__')) {
+                                                                                setSelectedKategoriPelangganIds([k.id]);
+                                                                            } else {
+                                                                                const newList = [...selectedKategoriPelangganIds, k.id];
+                                                                                if (newList.length >= kategoriPelangganList.length) setSelectedKategoriPelangganIds([]);
+                                                                                else setSelectedKategoriPelangganIds(newList);
+                                                                            }
+                                                                        } else {
+                                                                            if (isAllSelected) {
+                                                                                setSelectedKategoriPelangganIds(kategoriPelangganList.filter(o => o.id !== k.id).map(o => o.id));
+                                                                            } else {
+                                                                                const newList = selectedKategoriPelangganIds.filter(id => id !== k.id);
+                                                                                setSelectedKategoriPelangganIds(newList.length === 0 ? ['__none__'] : newList);
+                                                                            }
+                                                                        }
+                                                                    }}
+                                                                    className="text-xs rounded-xl py-3.5 pl-10 pr-5 font-medium"
+                                                                >
+                                                                    {k.nama}
+                                                                </DropdownMenuCheckboxItem>
+                                                            );
+                                                        })}
+                                                </div>
                                             </DropdownMenuContent>
                                         </DropdownMenu>
                                     </div>
@@ -914,7 +1227,7 @@ export default function AnalisaPivot() {
                             </div>
 
                             {/* Third row: Pivot Schema Config */}
-                            <div className="grid grid-cols-1 md:grid-cols-3 gap-10 pt-4">
+                            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-10 pt-4">
                                 {/* Baris Configuration */}
                                 <div className="space-y-5 group">
                                     <div className="flex items-center gap-3">
@@ -1005,108 +1318,122 @@ export default function AnalisaPivot() {
                                     </div>
                                 </div>
 
-                                {/* Metrics & Sorting */}
-                                <div className="grid grid-cols-2 gap-6">
-                                    <div className="space-y-5">
-                                        <div className="flex items-center gap-3">
-                                            <div className="p-2.5 rounded-2xl bg-slate-100 text-slate-500 ring-1 ring-slate-200/50">
-                                                <BarChart3 className="w-4 h-4" />
-                                            </div>
-                                            <h3 className="text-sm font-black text-slate-800 uppercase tracking-widest">Value</h3>
+                                {/* Metrics Configuration */}
+                                <div className="space-y-5 group">
+                                    <div className="flex items-center gap-3">
+                                        <div className="p-2.5 rounded-2xl bg-slate-100 text-slate-500 group-hover:bg-emerald-50 group-hover:text-emerald-600 transition-colors ring-1 ring-slate-200/50">
+                                            <Activity className="w-4 h-4" />
                                         </div>
-                                        <div className="flex flex-col gap-2 p-2.5 bg-slate-50/50 rounded-[1.5rem] border border-slate-100">
-                                            {(['sum_qty', 'sum_total', 'count_trx'] as AggregationType[]).map(m => (
-                                                <Button
-                                                    key={m}
-                                                    variant={metrics.includes(m) ? 'default' : 'ghost'}
-                                                    size="sm"
-                                                    className={cn(
-                                                        "h-10 text-[10px] px-4 rounded-xl uppercase font-black tracking-widest transition-all justify-start gap-3",
-                                                        metrics.includes(m) 
-                                                            ? "bg-white text-indigo-600 shadow-md ring-1 ring-indigo-100" 
-                                                            : "text-slate-400 hover:text-indigo-600 hover:bg-white"
-                                                    )}
-                                                    onClick={() => {
-                                                        if (metrics.includes(m)) {
-                                                            if (metrics.length > 1) setMetrics(metrics.filter(x => x !== m));
-                                                        } else {
-                                                            setMetrics([...metrics, m]);
-                                                        }
-                                                    }}
-                                                >
-                                                    <div className={cn("w-2 h-2 rounded-full", metrics.includes(m) ? "bg-indigo-500 animate-pulse" : "bg-slate-200")} />
-                                                    {m === 'sum_total' ? 'RP' : m === 'sum_qty' ? 'QUANTITY' : 'TRANSAKSI'}
-                                                </Button>
-                                            ))}
+                                        <div>
+                                            <h3 className="text-sm font-black text-slate-800 uppercase tracking-widest">Metrik (Values)</h3>
+                                            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-0.5">DATA AGREGASI</p>
                                         </div>
                                     </div>
+                                    <div className="grid grid-cols-1 gap-2 p-4 bg-slate-50/50 rounded-[1.5rem] border border-slate-100 group-hover:border-emerald-100/50 group-hover:bg-emerald-50/30 transition-all duration-500">
+                                        {(['sum_qty', 'sum_total', 'count_trx'] as AggregationType[]).map(m => (
+                                            <Button
+                                                key={m}
+                                                variant="ghost"
+                                                size="sm"
+                                                className={cn(
+                                                    "justify-start h-10 rounded-xl px-4 transition-all font-black text-[10px] tracking-widest gap-3",
+                                                    metrics.includes(m) 
+                                                        ? "bg-white text-emerald-700 shadow-md ring-1 ring-emerald-100" 
+                                                        : "text-slate-400 hover:bg-white hover:text-emerald-600"
+                                                )}
+                                                onClick={() => toggleMetric(m)}
+                                            >
+                                                <div className={cn("w-2 h-2 rounded-full", metrics.includes(m) ? "bg-emerald-500 animate-pulse" : "bg-slate-200")} />
+                                                {m === 'sum_total' ? 'RUPIAH (RP)' : m === 'sum_qty' ? 'QUANTITY (QTY)' : 'TOTAL TRANSAKSI'}
+                                            </Button>
+                                        ))}
+                                    </div>
+                                </div>
 
-                                    <div className="space-y-5">
-                                        <div className="flex items-center gap-3">
-                                            <div className="p-2.5 rounded-2xl bg-slate-100 text-slate-500 ring-1 ring-slate-200/50">
-                                                <SortAsc className="w-4 h-4" />
-                                            </div>
-                                            <h3 className="text-sm font-black text-slate-800 uppercase tracking-widest">Urutan (Sort)</h3>
+                                {/* Sorting Configuration */}
+                                <div className="space-y-5 group">
+                                    <div className="flex items-center gap-3">
+                                        <div className="p-2.5 rounded-2xl bg-slate-100 text-slate-500 group-hover:bg-orange-50 group-hover:text-orange-600 transition-colors ring-1 ring-slate-200/50">
+                                            <SortAsc className="w-4 h-4" />
                                         </div>
-                                        <div className="flex flex-col gap-4 p-4 bg-slate-50/50 rounded-[1.5rem] border border-slate-100">
-                                            {/* Sort Basis */}
-                                            <div className="grid grid-cols-2 gap-2 p-1.5 bg-white/50 rounded-2xl ring-1 ring-slate-200/30">
-                                                <Button
-                                                    variant={sortBy === 'label' ? 'default' : 'ghost'}
-                                                    size="sm"
-                                                    className={cn(
-                                                        "h-9 rounded-xl transition-all font-black text-[9px] tracking-widest gap-2",
-                                                        sortBy === 'label' ? "bg-white text-indigo-600 shadow-md ring-1 ring-indigo-100" : "text-slate-400 hover:text-indigo-600 hover:bg-white"
-                                                    )}
-                                                    onClick={() => setSortBy('label')}
-                                                >
-                                                    <Tag className="w-3 h-3" /> LABEL
-                                                </Button>
-                                                <Button
-                                                    variant={sortBy === 'value' ? 'default' : 'ghost'}
-                                                    size="sm"
-                                                    className={cn(
-                                                        "h-9 rounded-xl transition-all font-black text-[9px] tracking-widest gap-2",
-                                                        sortBy === 'value' ? "bg-white text-indigo-600 shadow-md ring-1 ring-indigo-100" : "text-slate-400 hover:text-indigo-600 hover:bg-white"
-                                                    )}
-                                                    onClick={() => setSortBy('value')}
-                                                >
-                                                    <BarChart3 className="w-3 h-3" /> VALUE
-                                                </Button>
-                                            </div>
+                                        <div>
+                                            <h3 className="text-sm font-black text-slate-800 uppercase tracking-widest">Urutan (Sort)</h3>
+                                            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-0.5">PENGATURAN TAMPILAN</p>
+                                        </div>
+                                    </div>
+                                    <div className="flex flex-col gap-4 p-4 bg-slate-50/50 rounded-[1.5rem] border border-slate-100 group-hover:border-orange-100/50 group-hover:bg-orange-50/30 transition-all duration-500">
+                                        {/* Sort Basis Button Group */}
+                                        <div className="grid grid-cols-2 gap-2 p-1.5 bg-white/80 rounded-2xl shadow-sm ring-1 ring-slate-200/50">
+                                            <Button
+                                                variant="ghost"
+                                                size="sm"
+                                                className={cn(
+                                                    "h-9 rounded-xl transition-all font-black text-[9px] tracking-widest gap-2",
+                                                    sortBy === 'label' 
+                                                        ? "bg-indigo-600 text-white shadow-lg shadow-indigo-100" 
+                                                        : "text-slate-400 hover:text-indigo-600 hover:bg-indigo-50/50"
+                                                )}
+                                                onClick={() => setSortBy('label')}
+                                            >
+                                                <Tag className="w-3.5 h-3.5" /> 
+                                                <span className="hidden sm:inline">LABEL</span>
+                                            </Button>
+                                            <Button
+                                                variant="ghost"
+                                                size="sm"
+                                                className={cn(
+                                                    "h-9 rounded-xl transition-all font-black text-[9px] tracking-widest gap-2",
+                                                    sortBy === 'value' 
+                                                        ? "bg-indigo-600 text-white shadow-lg shadow-indigo-100" 
+                                                        : "text-slate-400 hover:text-indigo-600 hover:bg-indigo-50/50"
+                                                )}
+                                                onClick={() => setSortBy('value')}
+                                            >
+                                                <BarChart3 className="w-3.5 h-3.5" /> 
+                                                <span className="hidden sm:inline">VALUE</span>
+                                            </Button>
+                                        </div>
 
-                                            {/* Sort Direction */}
-                                            <div className="grid grid-cols-2 gap-2">
-                                                <Button
-                                                    variant={sortOrder === 'asc' ? 'default' : 'ghost'}
-                                                    size="sm"
-                                                    className={cn(
-                                                        "h-9 rounded-xl transition-all font-black text-[9px] tracking-widest gap-2",
-                                                        sortOrder === 'asc' ? "bg-white text-emerald-600 shadow-md ring-1 ring-emerald-100" : "text-slate-400 hover:text-emerald-600 hover:bg-white"
-                                                    )}
-                                                    onClick={() => setSortOrder('asc')}
-                                                >
-                                                    <SortAsc className="w-3.5 h-3.5" /> ASC
-                                                </Button>
-                                                <Button
-                                                    variant={sortOrder === 'desc' ? 'default' : 'ghost'}
-                                                    size="sm"
-                                                    className={cn(
-                                                        "h-9 rounded-xl transition-all font-black text-[9px] tracking-widest gap-2",
-                                                        sortOrder === 'desc' ? "bg-white text-orange-600 shadow-md ring-1 ring-orange-100" : "text-slate-400 hover:text-orange-600 hover:bg-white"
-                                                    )}
-                                                    onClick={() => setSortOrder('desc')}
-                                                >
-                                                    <SortDesc className="w-3.5 h-3.5" /> DESC
-                                                </Button>
-                                            </div>
+                                        {/* Sort Direction Button Group */}
+                                        <div className="grid grid-cols-2 gap-2 p-1.5 bg-white/80 rounded-2xl shadow-sm ring-1 ring-slate-200/50">
+                                            <Button
+                                                variant="ghost"
+                                                size="sm"
+                                                className={cn(
+                                                    "h-9 rounded-xl transition-all font-black text-[9px] tracking-widest gap-2",
+                                                    sortOrder === 'asc' 
+                                                        ? "bg-emerald-600 text-white shadow-lg shadow-emerald-100" 
+                                                        : "text-slate-400 hover:text-emerald-600 hover:bg-emerald-50/50"
+                                                )}
+                                                onClick={() => setSortOrder('asc')}
+                                            >
+                                                <SortAsc className="w-4 h-4" /> 
+                                                <span className="hidden sm:inline">ASC</span>
+                                            </Button>
+                                            <Button
+                                                variant="ghost"
+                                                size="sm"
+                                                className={cn(
+                                                    "h-9 rounded-xl transition-all font-black text-[9px] tracking-widest gap-2",
+                                                    sortOrder === 'desc' 
+                                                        ? "bg-orange-600 text-white shadow-lg shadow-orange-100" 
+                                                        : "text-slate-400 hover:text-orange-600 hover:bg-orange-50/50"
+                                                )}
+                                                onClick={() => setSortOrder('desc')}
+                                            >
+                                                <SortDesc className="w-4 h-4" /> 
+                                                <span className="hidden sm:inline">DESC</span>
+                                            </Button>
                                         </div>
                                     </div>
                                 </div>
                             </div>
-                        </div>
-                    </CardContent>
-                </Card>
+                        </motion.div>
+                    )}
+                </AnimatePresence>
+                </div>
+            </CardContent>
+        </Card>
 
                 {/* Main Results Table Card */}
                 <Card className="border-none shadow-[0_32px_64px_-12px_rgba(0,0,0,0.12)] rounded-[3rem] bg-white/80 backdrop-blur-2xl ring-1 ring-slate-200/50">
@@ -1242,6 +1569,30 @@ export default function AnalisaPivot() {
                         </div>
                     </CardContent>
                 </Card>
+            </motion.div>
+
+            {/* Mobile Bottom Action Bar */}
+            <motion.div 
+                initial={{ y: 100 }}
+                animate={{ y: 0 }}
+                className="md:hidden fixed bottom-0 left-0 right-0 z-40 p-4 bg-white/80 backdrop-blur-2xl border-t border-slate-200/50 flex items-center gap-3 shadow-[0_-10px_40px_rgba(0,0,0,0.05)]"
+            >
+                <Button 
+                    variant="outline"
+                    onClick={() => setShowFilters(!showFilters)}
+                    className={cn(
+                        "h-14 flex-1 rounded-2xl transition-all font-black uppercase tracking-widest text-[10px] gap-2 border-slate-200",
+                        showFilters ? "bg-indigo-50 border-indigo-200 text-indigo-600" : "bg-white text-slate-600 active:bg-slate-50"
+                    )}
+                >
+                    <Filter className={cn("w-4 h-4", (showFilters || selectedCabangIds.length > 0 || selectedUserIds.length > 0 || selectedKategoriIds.length > 0 || selectedBarangIds.length > 0) && "fill-indigo-600 text-indigo-600")} />
+                    Filter
+                    {(selectedCabangIds.length > 0 || selectedUserIds.length > 0 || selectedKategoriIds.length > 0 || selectedBarangIds.length > 0) && (
+                        <Badge className="bg-indigo-600 text-white h-5 min-w-[20px] p-0 flex items-center justify-center text-[10px]">
+                            {selectedCabangIds.length + selectedUserIds.length + selectedKategoriIds.length + selectedBarangIds.length + selectedKategoriPelangganIds.length}
+                        </Badge>
+                    )}
+                </Button>
             </motion.div>
         </div>
     );

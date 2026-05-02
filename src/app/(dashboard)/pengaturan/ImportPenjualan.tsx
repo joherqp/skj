@@ -578,10 +578,13 @@ export default function ImportPenjualan() {
 
       for (let i = 0; i < validData.length; i += batchSize) {
         const batch = validData.slice(i, i + batchSize);
-        const penjualanBatch = batch.map((row, idx) => {
+        const penjualanBatch: any[] = [];
+        const pembayaranBatch: any[] = [];
+
+        batch.forEach((row, idx) => {
           const pKey = row.produk?.trim()?.toLowerCase();
           const custKey = row.pelanggan?.trim()?.toLowerCase();
-          const salesName = row.salesman?.trim();
+          const salesmanName = row.salesman?.trim();
           const cabName = row.cabang?.trim();
 
           // Find matching promo for "transaksi" column (Skema)
@@ -603,9 +606,7 @@ export default function ImportPenjualan() {
           }];
 
           const isLunas = transaksiClean !== 'tempo';
-
           const normCustKey = normalizeCustomer(row.pelanggan || '');
-
           const rowDate = parseCSVDate(row.tanggal);
           const dateStr = rowDate.toISOString().split('T')[0].replace(/-/g, '');
 
@@ -618,7 +619,12 @@ export default function ImportPenjualan() {
             }
           }
 
-          return {
+          const penjualanId = crypto.randomUUID();
+          const total = row.total || 0;
+          const metodePembayaran = transaksiClean === 'tunai' ? 'tunai' : (transaksiClean === 'tempo' ? 'tempo' : 'transfer');
+
+          penjualanBatch.push({
+            id: penjualanId,
             tanggal: rowDate.toISOString(),
             created_at: createdAtDate.toISOString(),
             pelanggan_id: finalMappings.pelanggan[normCustKey]?.id || defaultPelangganId,
@@ -627,11 +633,11 @@ export default function ImportPenjualan() {
             status: isLunas ? 'lunas' : 'tempo',
             subtotal: (row.total || 0) + (row.promo || 0),
             diskon: row.promo || 0,
-            total: row.total || 0,
-            bayar: isLunas ? (row.total || 0) : 0,
+            total: total,
+            bayar: isLunas ? total : 0,
             kembalian: 0,
             is_lunas: isLunas,
-            metode_pembayaran: transaksiClean === 'tunai' ? 'tunai' : (transaksiClean === 'tempo' ? 'tempo' : 'transfer'),
+            metode_pembayaran: metodePembayaran,
             items: items,
             nomor_nota: `INV/${dateStr}-${i + idx + 1}`,
             catatan: row.note || (matchingPromo ? `Promo: ${matchingPromo.nama}` : 'Import data'),
@@ -640,11 +646,37 @@ export default function ImportPenjualan() {
               latitude: Number(row.lat) || 0,
               longitude: Number(row.long) || 0
             }
-          };
+          });
+
+          if (isLunas && total > 0) {
+            pembayaranBatch.push({
+              id: crypto.randomUUID(),
+              penjualan_id: penjualanId,
+              jumlah: total,
+              bayar: total,
+              kembalian: 0,
+              metode_pembayaran: metodePembayaran,
+              tanggal: rowDate.toISOString(),
+              catatan: 'Pembayaran otomatis (Import)',
+              lokasi: {
+                alamat: row.alamat || '-',
+                latitude: Number(row.lat) || 0,
+                longitude: Number(row.long) || 0
+              },
+              created_at: createdAtDate.toISOString()
+            });
+          }
         });
 
-        const { error } = await supabase.from('penjualan').insert(penjualanBatch);
-        if (error) throw error;
+        // Insert Penjualan
+        const { error: errorPenjualan } = await supabase.from('penjualan').insert(penjualanBatch);
+        if (errorPenjualan) throw errorPenjualan;
+
+        // Insert Pembayaran if any
+        if (pembayaranBatch.length > 0) {
+          const { error: errorPembayaran } = await supabase.from('pembayaran_penjualan').insert(pembayaranBatch);
+          if (errorPembayaran) throw errorPembayaran;
+        }
 
         const currentProgress = Math.min(25 + Math.round(((i + batch.length) / validData.length) * 75), 100);
         setProgress(currentProgress);
