@@ -693,6 +693,18 @@ export default function AnalisaVisual() {
                         </PopoverContent>
                     </Popover>
 
+                    {/* Mobile Filter Toggle */}
+                    <Button 
+                        variant="outline"
+                        onClick={() => setShowFilters(!showFilters)}
+                        className={cn(
+                            "md:hidden h-11 w-11 shrink-0 rounded-2xl transition-all border-slate-200 shadow-sm",
+                            showFilters ? "bg-indigo-50 border-indigo-200 text-indigo-600 ring-2 ring-indigo-500/10" : "bg-white text-slate-600 active:bg-slate-50"
+                        )}
+                    >
+                        <Filter className={cn("w-4 h-4", (showFilters || selectedCabangIds.length > 0 || selectedUserIds.length > 0 || selectedKategoriIds.length > 0 || selectedBarangIds.length > 0) && "fill-indigo-600 text-indigo-600")} />
+                    </Button>
+
                     {/* Compact Filter Reset for Mobile */}
                     {(selectedCabangIds.length > 0 || selectedUserIds.length > 0 || selectedKategoriIds.length > 0 || selectedBarangIds.length > 0) && (
                         <Button 
@@ -704,7 +716,7 @@ export default function AnalisaVisual() {
                                 setSelectedKategoriIds([]);
                                 setSelectedBarangIds([]);
                             }}
-                            className="md:hidden h-11 w-11 rounded-2xl text-red-500 bg-red-50/50 border border-red-100"
+                            className="md:hidden h-11 w-11 shrink-0 rounded-2xl text-red-500 bg-red-50/50 border border-red-100"
                         >
                             <X className="w-4 h-4" />
                         </Button>
