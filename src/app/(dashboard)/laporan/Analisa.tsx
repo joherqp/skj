@@ -67,7 +67,7 @@ export default function Analisa() {
       <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-[0.04] pointer-events-none -z-10" />
       <div className="absolute inset-0 bg-[linear-gradient(to_right,#80808008_1px,transparent_1px),linear-gradient(to_bottom,#80808008_1px,transparent_1px)] bg-[size:40px_40px] -z-10" />
 
-      <div className="max-w-[1600px] mx-auto p-4 md:p-8 lg:p-10 space-y-10 relative z-10">
+      <div className="w-full px-4 sm:px-6 md:px-8 lg:px-10 xl:px-12 space-y-10 relative z-10">
         {/* Premium Header Section */}
         <header className="flex flex-col xl:flex-row xl:items-center justify-between gap-10">
           <div className="flex items-start sm:items-center gap-6">

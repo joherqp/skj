@@ -540,7 +540,7 @@ export default function AnalisaVisual() {
             <motion.div 
                 initial={{ y: -20, opacity: 0 }}
                 animate={{ y: 0, opacity: 1 }}
-                className="sticky top-[72px] z-30 -mx-4 px-4 py-4 bg-white/60 backdrop-blur-2xl border-b border-slate-200/50 flex flex-col md:flex-row items-center justify-between gap-6 transition-all shadow-sm"
+                className="sticky top-[72px] z-30 -mx-4 sm:-mx-6 md:-mx-8 lg:-mx-10 xl:-mx-12 px-4 sm:px-6 md:px-8 lg:px-10 xl:px-12 py-4 bg-white/60 backdrop-blur-2xl border-b border-slate-200/50 flex flex-col md:flex-row items-center justify-between gap-6 transition-all shadow-sm"
             >
                 <div className="flex items-center gap-4 w-full md:w-auto">
                     <Popover>
