@@ -15,6 +15,34 @@ if (!supabaseAnonKey) {
   throw new Error('Missing NEXT_PUBLIC_SUPABASE_ANON_KEY environment variable');
 }
 
+let cachedToken: string | null = null;
+let tokenPromise: Promise<string | null> | null = null;
+
+const getSupabaseToken = async () => {
+  if (typeof window === 'undefined') return null;
+  if (cachedToken) return cachedToken;
+  
+  if (!tokenPromise) {
+    tokenPromise = fetch('/api/auth/supabase-token')
+      .then(res => res.ok ? res.json() : null)
+      .then(data => {
+        if (data?.token) {
+          cachedToken = data.token;
+          return data.token;
+        }
+        return null;
+      })
+      .catch((e) => {
+        console.error("Error fetching supabase token:", e);
+        return null;
+      })
+      .finally(() => {
+        tokenPromise = null;
+      });
+  }
+  return tokenPromise;
+};
+
 const timeoutFetch = async (input: RequestInfo | URL, init: RequestInit = {}) => {
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), supabaseRequestTimeoutMs);
@@ -30,6 +58,22 @@ const timeoutFetch = async (input: RequestInfo | URL, init: RequestInit = {}) =>
   }
 
   try {
+    const token = await getSupabaseToken();
+    if (token) {
+      if (init.headers instanceof Headers) {
+        init.headers.set('Authorization', `Bearer ${token}`);
+      } else if (Array.isArray(init.headers)) {
+        const headers = new Headers(init.headers);
+        headers.set('Authorization', `Bearer ${token}`);
+        init.headers = headers;
+      } else {
+        init.headers = {
+          ...init.headers,
+          Authorization: `Bearer ${token}`
+        };
+      }
+    }
+
     return await fetch(input, { 
       ...init, 
       signal: controller.signal,

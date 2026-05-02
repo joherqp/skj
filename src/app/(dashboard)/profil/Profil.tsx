@@ -47,6 +47,7 @@ export default function Profil() {
   const [isEditingKode, setIsEditingKode] = useState(false);
   const [newKode, setNewKode] = useState(user?.kodeUnik || '');
   const [showPasswordForm, setShowPasswordForm] = useState(false);
+  const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [showPasswords, setShowPasswords] = useState(false);
@@ -114,8 +115,8 @@ export default function Profil() {
   };
 
   const handleUpdatePassword = async () => {
-    if (!newPassword || !confirmPassword) {
-      toast.error('Silakan isi kedua kolom password.');
+    if (!currentPassword || !newPassword || !confirmPassword) {
+      toast.error('Silakan isi semua kolom password.');
       return;
     }
 
@@ -131,8 +132,9 @@ export default function Profil() {
 
     setIsUpdatingPassword(true);
     try {
-      await updatePassword(newPassword);
+      await updatePassword(newPassword, currentPassword);
       toast.success('Password berhasil diperbarui');
+      setCurrentPassword('');
       setNewPassword('');
       setConfirmPassword('');
       setShowPasswordForm(false);
@@ -390,6 +392,18 @@ export default function Profil() {
             <CardContent>
               {showPasswordForm ? (
                 <div className="space-y-4 pt-2">
+                  <div className="space-y-1">
+                    <Label className="text-xs">Password Saat Ini</Label>
+                    <div className="relative">
+                      <Input
+                        type={showPasswords ? "text" : "password"}
+                        placeholder="Masukkan password saat ini"
+                        value={currentPassword}
+                        onChange={(e) => setCurrentPassword(e.target.value)}
+                        className="h-9 pr-9"
+                      />
+                    </div>
+                  </div>
                   <div className="space-y-1">
                     <Label className="text-xs">Password Baru</Label>
                     <div className="relative">

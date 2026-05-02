@@ -3,6 +3,11 @@
 if [ -f "supabase/datalama/excel/BQ.xlsx" ] && [ -f "supabase/datalama/excel/customer.xlsx" ] && [ -f "supabase/datalama/excel/employee.xlsx" ]; then
   echo "Ditemukan file Excel (BQ.xlsx, customer.xlsx, employee.xlsx). Menggunakan sumber data Excel..."
   node scripts/process_excel_to_csv.cjs
+  
+  if [ -f "supabase/datalama/excel/po-data.xlsx" ]; then
+    echo "Ditemukan file PO data (po-data.xlsx). Mengekstrak mutasi barang..."
+    node scripts/process_po_to_csv.cjs
+  fi
 else
   echo "Menggunakan sumber data SQL dump..."
   echo "Membuat database SQLite sementara..."

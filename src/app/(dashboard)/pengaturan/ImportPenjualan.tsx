@@ -16,24 +16,35 @@ import { toast } from 'sonner';
 import * as XLSX from 'xlsx';
 
 interface ImportRow {
+  // Common
   tanggal: string;
   created_at?: string;
-  pelanggan_created_at?: string;
   cabang: string;
-  salesman: string;
-  transaksi: string;
-  pelanggan: string;
-  kategori_pelanggan?: string;
-  alamat: string;
-  lat: string | number;
-  long: string | number;
-  telp?: string;
   note: string;
   produk: string;
   qty: number;
-  harga: number;
-  promo: number;
-  total: number;
+
+  // Penjualan specific
+  pelanggan?: string;
+  salesman?: string;
+  transaksi?: string;
+  kategori_pelanggan?: string;
+  alamat?: string;
+  lat?: string | number;
+  long?: string | number;
+  telp?: string;
+  harga?: number;
+  promo?: number;
+  total?: number;
+  pelanggan_created_at?: string;
+
+  // Mutasi specific
+  id?: string;
+  operator?: string;
+  cabang_asal?: string;
+  penerima?: string;
+  unit?: string;
+  jenis?: string;
 }
 
 interface MappingResult {
@@ -110,6 +121,7 @@ export default function ImportPenjualan() {
     refresh
   } = useDatabase();
 
+  const [importType, setImportType] = useState<'penjualan' | 'mutasi'>('penjualan');
   const [file, setFile] = useState<File | null>(null);
   const [data, setData] = useState<ImportRow[]>([]);
   const [step, setStep] = useState(1);
@@ -122,11 +134,13 @@ export default function ImportPenjualan() {
     salesman: Record<string, MappingResult>;
     pelanggan: Record<string, MappingResult>;
     produk: Record<string, MappingResult>;
+    penerima: Record<string, MappingResult>;
   }>({
     cabang: {},
     salesman: {},
     pelanggan: {},
-    produk: {}
+    produk: {},
+    penerima: {}
   });
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -152,11 +166,17 @@ export default function ImportPenjualan() {
       const getIdx = (keys: string[]) => headers.findIndex(h => keys.includes(h));
 
       const idxMap = {
+        // Common
         tanggal: getIdx(['tanggal', 'date', 'waktu']),
         created_at: getIdx(['created_at', 'registered', 'waktu']),
+        cabang: getIdx(['cabang', 'branch', 'divisi', 'cabang_asal']),
+        note: getIdx(['note', 'catatan', 'keterangan']),
+        produk: getIdx(['produk', 'item', 'barang']),
+        qty: getIdx(['qty', 'jumlah', 'quantity']),
+        
+        // Penjualan
         pelanggan_created_at: getIdx(['pelanggan_created_at', 'p_registered', 'pelanggan_create_at']),
-        cabang: getIdx(['cabang', 'branch', 'divisi']),
-        salesman: getIdx(['salesman', 'sales', 'nama']),
+        salesman: getIdx(['salesman', 'sales', 'nama', 'operator']),
         transaksi: getIdx(['transaksi', 'type', 'skema']),
         pelanggan: getIdx(['pelanggan', 'customer', 'toko']),
         kategori_pelanggan: getIdx(['kategori_pelanggan', 'kategori', 'category', 'status_pelanggan']),
@@ -164,22 +184,35 @@ export default function ImportPenjualan() {
         lat: getIdx(['lat', 'latitude']),
         long: getIdx(['long', 'longitude', 'lng']),
         telp: getIdx(['telp', 'telepon', 'phone']),
-        note: getIdx(['note', 'catatan', 'keterangan']),
-        produk: getIdx(['produk', 'item', 'barang']),
-        qty: getIdx(['qty', 'jumlah', 'quantity']),
         harga: getIdx(['harga', 'price']),
         promo: getIdx(['promo', 'diskon', 'discount']),
-        total: getIdx(['total', 'subtotal'])
+        total: getIdx(['total', 'subtotal']),
+
+        // Mutasi
+        id: getIdx(['id', 'nomor', 'no']),
+        operator: getIdx(['operator', 'salesman', 'nama']),
+        penerima: getIdx(['penerima', 'beneficiary', 'tujuan']),
+        unit: getIdx(['unit', 'satuan']),
+        jenis: getIdx(['jenis', 'type', 'kategori'])
       };
 
       const normalizedData: ImportRow[] = rawRows.slice(1).map((row: any[]) => {
         const getVal = (idx: number) => (idx !== -1 ? row[idx] : undefined);
 
+        const qty = Number(getVal(idxMap.qty)) || 0;
+        const harga = Number(getVal(idxMap.harga)) || 0;
+        const promo = Number(getVal(idxMap.promo)) || 0;
+
         return {
           tanggal: String(getVal(idxMap.tanggal) || ''),
           created_at: String(getVal(idxMap.created_at) || ''),
-          pelanggan_created_at: String(getVal(idxMap.pelanggan_created_at) || ''),
           cabang: String(getVal(idxMap.cabang) || '').trim(),
+          note: String(getVal(idxMap.note) || '').trim(),
+          produk: String(getVal(idxMap.produk) || '').trim(),
+          qty: qty,
+
+          // Penjualan
+          pelanggan_created_at: String(getVal(idxMap.pelanggan_created_at) || ''),
           salesman: String(getVal(idxMap.salesman) || '').trim(),
           transaksi: String(getVal(idxMap.transaksi) || '').trim(),
           pelanggan: String(getVal(idxMap.pelanggan) || '').trim(),
@@ -188,12 +221,16 @@ export default function ImportPenjualan() {
           lat: getVal(idxMap.lat),
           long: getVal(idxMap.long),
           telp: String(getVal(idxMap.telp) || '').trim(),
-          note: String(getVal(idxMap.note) || '').trim(),
-          produk: String(getVal(idxMap.produk) || '').trim(),
-          qty: Number(getVal(idxMap.qty)) || 0,
-          harga: Number(getVal(idxMap.harga)) || 0,
-          promo: Number(getVal(idxMap.promo)) || 0,
-          total: Number(getVal(idxMap.total)) || (Number(getVal(idxMap.qty)) * Number(getVal(idxMap.harga)) - (Number(getVal(idxMap.promo)) || 0)) || 0,
+          harga: harga,
+          promo: promo,
+          total: Number(getVal(idxMap.total)) || (qty * harga - promo) || 0,
+
+          // Mutasi
+          id: String(getVal(idxMap.id) || ''),
+          operator: String(getVal(idxMap.operator) || '').trim(),
+          penerima: String(getVal(idxMap.penerima) || '').trim(),
+          unit: String(getVal(idxMap.unit) || '').trim(),
+          jenis: String(getVal(idxMap.jenis) || '').trim(),
         };
       });
 
@@ -224,7 +261,8 @@ export default function ImportPenjualan() {
       cabang: {} as Record<string, MappingResult>,
       salesman: {} as Record<string, MappingResult>,
       pelanggan: {} as Record<string, MappingResult>,
-      produk: {} as Record<string, MappingResult>
+      produk: {} as Record<string, MappingResult>,
+      penerima: {} as Record<string, MappingResult>
     };
 
     // Pre-normalize DB customers for faster lookup
@@ -303,6 +341,41 @@ export default function ImportPenjualan() {
             name: found?.nama || produkName,
             satuanId: found?.satuanId
           };
+        }
+      }
+
+      // Mutasi Specific: Operator & Penerima (mapping to Users)
+      if (importType === 'mutasi') {
+        const operatorName = (row.operator || row.salesman)?.trim();
+        if (operatorName) {
+          const lowerOp = operatorName.toLowerCase();
+          if (!newMappings.salesman[lowerOp]) {
+            const found = dbUsers.find(u => 
+              u.nama.toLowerCase() === lowerOp || 
+              (u.username && u.username.toLowerCase() === lowerOp)
+            ) || dbUsers.find(u => isSimilar(u.nama, lowerOp));
+            newMappings.salesman[lowerOp] = {
+              existing: !!found,
+              id: found?.id,
+              name: found?.nama || operatorName
+            };
+          }
+        }
+
+        const penerimaName = row.penerima?.trim();
+        if (penerimaName) {
+          const lowerPen = penerimaName.toLowerCase();
+          if (!newMappings.penerima[lowerPen]) {
+            const found = dbUsers.find(u => 
+              u.nama.toLowerCase() === lowerPen || 
+              (u.username && u.username.toLowerCase() === lowerPen)
+            ) || dbUsers.find(u => isSimilar(u.nama, lowerPen));
+            newMappings.penerima[lowerPen] = {
+              existing: !!found,
+              id: found?.id,
+              name: found?.nama || penerimaName
+            };
+          }
         }
       }
     });
@@ -695,12 +768,158 @@ export default function ImportPenjualan() {
     }
   };
 
+  const executeImportMutasi = async () => {
+    setIsProcessing(true);
+    setStep(3);
+    setProgress(0);
+    setStatus('Menyiapkan data master mutasi...');
+
+    try {
+      const finalMappings = JSON.parse(JSON.stringify(mappings));
+      const defaultCabangId = dbCabang[0]?.id || crypto.randomUUID();
+      const defaultSalesId = dbUsers[0]?.id || crypto.randomUUID();
+      const defaultBarangId = dbBarang[0]?.id || crypto.randomUUID();
+      const defaultSatuanId = dbSatuan[0]?.id || crypto.randomUUID();
+      const defaultAreaId = dbArea[0]?.id || crypto.randomUUID();
+
+      // 1. Create missing Cabang
+      setStatus('Membuat data Cabang baru...');
+      const newCabangList = Object.keys(finalMappings.cabang).filter(name => !finalMappings.cabang[name].existing);
+      if (newCabangList.length > 0) {
+        const { data: res, error } = await supabase.from('cabang').insert(newCabangList.map(name => ({
+          nama: name, area_id: defaultAreaId, alamat: '-', kota: '-', telepon: '-'
+        }))).select();
+        if (error) throw error;
+        res?.forEach(c => finalMappings.cabang[c.nama] = { existing: true, id: c.id, name: c.nama });
+      }
+
+      // 2. Create missing Users (Operator & Penerima)
+      setStatus('Membuat data User baru...');
+      const allNewUsers = new Set<string>();
+      Object.keys(finalMappings.salesman).filter(name => !finalMappings.salesman[name].existing).forEach(n => allNewUsers.add(n));
+      Object.keys(finalMappings.penerima).filter(name => !finalMappings.penerima[name].existing).forEach(n => allNewUsers.add(n));
+      
+      if (allNewUsers.size > 0) {
+        const userData = Array.from(allNewUsers).map(name => {
+          const username = name.toLowerCase().replace(/\s+/g, '_') + '_' + Math.random().toString(36).substring(2, 5);
+          return {
+            nama: name, username, email: username + '@skj.com', roles: ['sales'], cabang_id: defaultCabangId, is_active: false
+          };
+        });
+        const { data: res, error } = await supabase.from('users').insert(userData).select();
+        if (error) throw error;
+        res?.forEach(u => {
+          const key = u.nama.toLowerCase();
+          if (finalMappings.salesman[key]) finalMappings.salesman[key] = { existing: true, id: u.id, name: u.nama };
+          if (finalMappings.penerima[key]) finalMappings.penerima[key] = { existing: true, id: u.id, name: u.nama };
+        });
+      }
+
+      // 3. Create missing Products
+      setStatus('Membuat data Produk baru...');
+      const newProdList = Object.keys(finalMappings.produk).filter(name => !finalMappings.produk[name].existing);
+      if (newProdList.length > 0) {
+        const { data: res, error } = await supabase.from('barang').insert(newProdList.map(name => ({
+          nama: finalMappings.produk[name].name, 
+          kode: name.substring(0, 5).toUpperCase() + Math.random().toString(36).substring(2, 5).toUpperCase(),
+          kategori_id: dbKategori[0]?.id || crypto.randomUUID(),
+          satuan_id: defaultSatuanId,
+          is_active: true
+        }))).select();
+        if (error) throw error;
+        res?.forEach(p => finalMappings.produk[p.nama.toLowerCase()] = { existing: true, id: p.id, name: p.nama, satuanId: p.satuan_id });
+      }
+
+      // 4. Batch Import Mutasi
+      setStatus('Mengimport mutasi barang...');
+      const groupedData = new Map<string, ImportRow[]>();
+      data.forEach(row => {
+        const key = row.id || `${row.tanggal}-${row.operator}-${row.penerima}`;
+        if (!groupedData.has(key)) groupedData.set(key, []);
+        groupedData.get(key)!.push(row);
+      });
+
+      const mutasiKeys = Array.from(groupedData.keys());
+      const batchSize = 50;
+      
+      for (let i = 0; i < mutasiKeys.length; i += batchSize) {
+        const keys = mutasiKeys.slice(i, i + batchSize);
+        const mutasiBatch: any[] = [];
+        const persetujuanBatch: any[] = [];
+
+        keys.forEach(key => {
+          const rows = groupedData.get(key)!;
+          const first = rows[0];
+          const mutasiId = crypto.randomUUID();
+          
+          const dariCabangId = finalMappings.cabang[first.cabang?.toLowerCase() || '']?.id || defaultCabangId;
+          const operatorId = finalMappings.salesman[first.operator?.toLowerCase() || first.salesman?.toLowerCase() || '']?.id || defaultSalesId;
+          const penerimaId = finalMappings.penerima[first.penerima?.toLowerCase() || '']?.id || defaultSalesId;
+
+          const items = rows.map(r => ({
+            barangId: finalMappings.produk[r.produk.toLowerCase()]?.id || defaultBarangId,
+            jumlah: r.qty,
+            satuanId: finalMappings.produk[r.produk.toLowerCase()]?.satuanId || defaultSatuanId,
+            konversi: 1,
+            totalQty: r.qty
+          }));
+
+          const tanggal = new Date(first.tanggal).toISOString();
+
+          mutasiBatch.push({
+            id: mutasiId,
+            nomor_mutasi: `MUT-IMP/${key.substring(0, 8)}`,
+            tanggal: tanggal,
+            dari_cabang_id: dariCabangId,
+            ke_cabang_id: dariCabangId,
+            items: items,
+            status: 'approved',
+            keterangan: first.note || 'Import data',
+            created_by: operatorId,
+            created_at: tanggal
+          });
+
+          persetujuanBatch.push({
+            jenis: 'mutasi_stok',
+            referensi_id: mutasiId,
+            status: 'approved',
+            diajukan_oleh: operatorId,
+            target_user_id: penerimaId,
+            tanggal_pengajuan: tanggal,
+            tanggal_persetujuan: tanggal,
+            disetujui_oleh: penerimaId,
+            catatan: 'Import data (Otomatis Approved)',
+            data: { items }
+          });
+        });
+
+        const { error: errorMutasi } = await supabase.from('mutasi_barang').insert(mutasiBatch);
+        if (errorMutasi) throw errorMutasi;
+
+        const { error: errorPersetujuan } = await supabase.from('persetujuan').insert(persetujuanBatch);
+        if (errorPersetujuan) throw errorPersetujuan;
+
+        setProgress(Math.round(((i + keys.length) / mutasiKeys.length) * 100));
+      }
+
+      toast.success('Import Mutasi berhasil!');
+      setStatus('Import Mutasi selesai!');
+      await refresh();
+    } catch (err: any) {
+      console.error(err);
+      toast.error(err.message || 'Gagal import mutasi');
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
   const mappingSummary = useMemo(() => {
     const summary = {
       cabang: { total: 0, new: 0 },
       salesman: { total: 0, new: 0 },
       pelanggan: { total: 0, new: 0 },
       produk: { total: 0, new: 0 },
+      penerima: { total: 0, new: 0 },
     };
 
     // Use Set to count unique mapping objects (since multiple CSV names can map to the same entity)
@@ -716,6 +935,9 @@ export default function ImportPenjualan() {
     const uniqueProduk = new Set(Object.values(mappings.produk));
     uniqueProduk.forEach(m => { summary.produk.total++; if (!m.existing) summary.produk.new++; });
 
+    const uniquePenerima = new Set(Object.values(mappings.penerima));
+    uniquePenerima.forEach(m => { summary.penerima.total++; if (!m.existing) summary.penerima.new++; });
+
     return summary;
   }, [mappings]);
 
@@ -726,9 +948,28 @@ export default function ImportPenjualan() {
           <ShoppingCart className="w-6 h-6 text-primary" />
         </div>
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">Import Penjualan</h1>
-          <p className="text-muted-foreground">Migrasi data transaksi penjualan dari file CSV</p>
+          <h1 className="text-2xl font-bold tracking-tight">Import Data Legacy</h1>
+          <p className="text-muted-foreground">Migrasi data transaksi {importType} dari file CSV</p>
         </div>
+      </div>
+
+      <div className="flex gap-2 p-1 bg-muted rounded-lg w-fit mb-6">
+        <Button
+          variant={importType === 'penjualan' ? 'default' : 'ghost'}
+          onClick={() => setImportType('penjualan')}
+          disabled={step > 1}
+          size="sm"
+        >
+          Penjualan
+        </Button>
+        <Button
+          variant={importType === 'mutasi' ? 'default' : 'ghost'}
+          onClick={() => setImportType('mutasi')}
+          disabled={step > 1}
+          size="sm"
+        >
+          Mutasi Barang
+        </Button>
       </div>
 
       <div className="grid grid-cols-3 gap-4 mb-6">
@@ -749,7 +990,9 @@ export default function ImportPenjualan() {
             <div className="text-center">
               <h3 className="text-lg font-medium">Unggah File CSV</h3>
               <p className="text-sm text-muted-foreground max-w-xs mx-auto">
-                Pastikan file memiliki kolom: tanggal, cabang, salesman, transaksi, pelanggan, alamat, lat, long, telp, produk, qty, harga, promo, total
+                {importType === 'penjualan' 
+                  ? 'Kolom: tanggal, cabang, salesman, transaksi, pelanggan, alamat, lat, long, telp, produk, qty, harga, promo, total'
+                  : 'Kolom: id, tanggal, cabang_asal, operator, penerima, produk, qty, note'}
               </p>
             </div>
             <div className="w-full max-w-xs pt-4">
@@ -797,16 +1040,25 @@ export default function ImportPenjualan() {
                 />
                 <MappingCard
                   icon={Users}
-                  label="Salesman"
+                  label={importType === 'penjualan' ? "Salesman" : "Operator"}
                   total={mappingSummary.salesman.total}
                   newCount={mappingSummary.salesman.new}
                 />
-                <MappingCard
-                  icon={Users}
-                  label="Pelanggan"
-                  total={mappingSummary.pelanggan.total}
-                  newCount={mappingSummary.pelanggan.new}
-                />
+                {importType === 'penjualan' ? (
+                  <MappingCard
+                    icon={Users}
+                    label="Pelanggan"
+                    total={mappingSummary.pelanggan.total}
+                    newCount={mappingSummary.pelanggan.new}
+                  />
+                ) : (
+                  <MappingCard
+                    icon={Users}
+                    label="Penerima"
+                    total={mappingSummary.penerima.total}
+                    newCount={mappingSummary.penerima.new}
+                  />
+                )}
                 <MappingCard
                   icon={Package}
                   label="Produk"
@@ -824,11 +1076,12 @@ export default function ImportPenjualan() {
                   <thead className="bg-muted text-muted-foreground uppercase tracking-wider">
                     <tr>
                       <th className="p-3 border-b font-semibold">Tanggal</th>
-                      <th className="p-3 border-b font-semibold">Nama CSV (Original)</th>
-                      <th className="p-3 border-b font-semibold">Nama Sistem (Hasil Clean)</th>
+                      <th className="p-3 border-b font-semibold">{importType === 'penjualan' ? 'Nama CSV (Original)' : 'Cabang Asal'}</th>
+                      <th className="p-3 border-b font-semibold">{importType === 'penjualan' ? 'Nama Sistem (Hasil Clean)' : 'Penerima'}</th>
+                      <th className="p-3 border-b font-semibold">Jenis</th>
                       <th className="p-3 border-b font-semibold">Produk</th>
                       <th className="p-3 border-b font-semibold text-right">Qty</th>
-                      <th className="p-3 border-b font-semibold text-right">Total</th>
+                      {importType === 'penjualan' && <th className="p-3 border-b font-semibold text-right">Total</th>}
                     </tr>
                   </thead>
                   <tbody>
@@ -836,16 +1089,18 @@ export default function ImportPenjualan() {
                       const rawCust = row.pelanggan || '';
                       const cleanCust = cleanCustomerName(rawCust);
                       const normCust = normalizeCustomer(rawCust);
-                      const isNewPel = !mappings.pelanggan[normCust]?.existing;
+                      const isNewPel = importType === 'penjualan' 
+                        ? !mappings.pelanggan[normCust]?.existing
+                        : !mappings.penerima[row.penerima?.toLowerCase() || '']?.existing;
                       const isNewProd = !mappings.produk[row.produk?.toLowerCase() || '']?.existing;
 
                       return (
                         <tr key={i} className="hover:bg-muted/50 transition-colors">
                           <td className="p-3 border-b whitespace-nowrap">{row.tanggal}</td>
-                          <td className="p-3 border-b text-muted-foreground">{rawCust}</td>
+                          <td className="p-3 border-b text-muted-foreground">{importType === 'penjualan' ? rawCust : row.cabang_asal}</td>
                           <td className="p-3 border-b">
                             <div className="flex flex-col min-w-[150px]">
-                              <span className="font-semibold text-blue-900">{cleanCust}</span>
+                              <span className="font-semibold text-blue-900">{importType === 'penjualan' ? cleanCust : row.penerima}</span>
                               {isNewPel ? (
                                 <span className="text-[10px] text-amber-600 font-bold uppercase tracking-tight flex items-center gap-1">
                                   <div className="w-1.5 h-1.5 rounded-full bg-amber-600" /> + Baru (Belum Terdaftar)
@@ -857,6 +1112,7 @@ export default function ImportPenjualan() {
                               )}
                             </div>
                           </td>
+                          <td className="p-3 border-b text-muted-foreground uppercase text-[10px] font-mono">{row.jenis}</td>
                           <td className="p-3 border-b">
                             <div className="flex flex-col min-w-[120px]">
                               <span className="line-clamp-1">{row.produk}</span>
@@ -868,9 +1124,11 @@ export default function ImportPenjualan() {
                             </div>
                           </td>
                           <td className="p-3 border-b text-right font-mono font-semibold">{row.qty}</td>
-                          <td className="p-3 border-b text-right font-bold text-blue-700">
-                            Rp {row.total?.toLocaleString('id-ID')}
-                          </td>
+                          {importType === 'penjualan' && (
+                            <td className="p-3 border-b text-right font-bold text-blue-700">
+                              Rp {row.total?.toLocaleString('id-ID')}
+                            </td>
+                          )}
                         </tr>
                       );
                     })}
@@ -878,15 +1136,15 @@ export default function ImportPenjualan() {
                 </table>
               </div>
 
-              {mappingSummary.pelanggan.new > 0 && (
+              {(importType === 'penjualan' ? mappingSummary.pelanggan.new > 0 : mappingSummary.penerima.new > 0) && (
                 <div className="space-y-3">
                   <h4 className="text-sm font-semibold flex items-center gap-2">
                     <Users className="w-4 h-4" />
-                    Review Pelanggan Baru (Sampling 10 dari {mappingSummary.pelanggan.new})
+                    Review {importType === 'penjualan' ? 'Pelanggan' : 'Penerima'} Baru (Sampling 10 dari {importType === 'penjualan' ? mappingSummary.pelanggan.new : mappingSummary.penerima.new})
                   </h4>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-2 p-3 bg-muted/20 rounded-xl border border-dashed">
-                    {Object.keys(mappings.pelanggan)
-                      .filter(key => !mappings.pelanggan[key].existing)
+                    {Object.keys(importType === 'penjualan' ? mappings.pelanggan : mappings.penerima)
+                      .filter(key => !(importType === 'penjualan' ? mappings.pelanggan : mappings.penerima)[key].existing)
                       .slice(0, 10)
                       .map((key, idx) => (
                         <div key={idx} className="flex items-center gap-2 text-xs bg-white p-2 rounded-lg border shadow-sm">
@@ -894,7 +1152,7 @@ export default function ImportPenjualan() {
                             {idx + 1}
                           </div>
                           <div className="flex flex-col">
-                            <span className="font-semibold">{mappings.pelanggan[key].name}</span>
+                            <span className="font-semibold">{(importType === 'penjualan' ? mappings.pelanggan : mappings.penerima)[key].name}</span>
                             <span className="text-[9px] text-muted-foreground uppercase">Key: {key}</span>
                           </div>
                         </div>
@@ -912,8 +1170,9 @@ export default function ImportPenjualan() {
                       Terdapat data master baru yang akan dibuat otomatis. Mohon pastikan tidak ada duplikasi nama:
                       <ul className="list-disc ml-4 mt-1 space-y-0.5">
                         {mappingSummary.cabang.new > 0 && <li><strong>{mappingSummary.cabang.new}</strong> Cabang Baru</li>}
-                        {mappingSummary.salesman.new > 0 && <li><strong>{mappingSummary.salesman.new}</strong> Salesman Baru</li>}
-                        {mappingSummary.pelanggan.new > 0 && <li><strong>{mappingSummary.pelanggan.new}</strong> Pelanggan Baru (Gunakan tabel review di atas)</li>}
+                        {mappingSummary.salesman.new > 0 && <li><strong>{mappingSummary.salesman.new}</strong> {importType === 'penjualan' ? 'Salesman' : 'Operator'} Baru</li>}
+                        {importType === 'penjualan' && mappingSummary.pelanggan.new > 0 && <li><strong>{mappingSummary.pelanggan.new}</strong> Pelanggan Baru</li>}
+                        {importType === 'mutasi' && mappingSummary.penerima.new > 0 && <li><strong>{mappingSummary.penerima.new}</strong> Penerima Baru</li>}
                         {mappingSummary.produk.new > 0 && <li><strong>{mappingSummary.produk.new}</strong> Produk Baru</li>}
                       </ul>
                     </p>
@@ -926,7 +1185,7 @@ export default function ImportPenjualan() {
                 <div className="space-y-1">
                   <p className="text-sm font-semibold text-primary">Konfirmasi Import</p>
                   <p className="text-xs text-primary/80">
-                    Sebanyak <span className="font-bold">{data.length.toLocaleString()}</span> transaksi penjualan siap untuk diimport.
+                    Sebanyak <span className="font-bold">{data.length.toLocaleString()}</span> data {importType} siap untuk diimport.
                     Pastikan kolom <span className="font-bold">Tanggal</span> pada pratinjau di atas sudah terlihat benar.
                   </p>
                 </div>
@@ -938,7 +1197,11 @@ export default function ImportPenjualan() {
             <Button variant="outline" onClick={() => setStep(1)} disabled={isProcessing}>
               Kembali
             </Button>
-            <Button onClick={executeImport} disabled={isProcessing} className="px-10">
+            <Button 
+              onClick={importType === 'penjualan' ? executeImport : executeImportMutasi} 
+              disabled={isProcessing} 
+              className="px-10"
+            >
               Mulai Import <ArrowRight className="w-4 h-4 ml-2" />
             </Button>
           </div>
@@ -970,8 +1233,11 @@ export default function ImportPenjualan() {
             </div>
 
             {progress === 100 ? (
-              <Button onClick={() => window.location.href = '/penjualan'} className="rounded-xl">
-                Lihat Transaksi Penjualan
+              <Button 
+                onClick={() => window.location.href = importType === 'penjualan' ? '/penjualan' : '/barang/mutasi'} 
+                className="rounded-xl"
+              >
+                Lihat Data {importType === 'penjualan' ? 'Penjualan' : 'Mutasi'}
               </Button>
             ) : (
               <p className="text-sm text-muted-foreground animate-pulse">
