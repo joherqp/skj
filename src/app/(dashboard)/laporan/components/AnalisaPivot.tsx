@@ -25,7 +25,12 @@ import {
     SortDesc,
     Tag,
     Package,
-    Users
+    Users,
+    Filter,
+    Settings2,
+    Database,
+    Trophy,
+    Target
 } from 'lucide-react';
 import { ScopeFilters } from '@/components/shared/ScopeFilters';
 import { 
@@ -42,6 +47,8 @@ import { Button } from '@/components/ui/button';
 import { format } from 'date-fns';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import { cn } from '@/lib/utils';
+import { motion, AnimatePresence } from 'framer-motion';
 
 type PivotField = 'tanggal' | 'bulan' | 'tahun' | 'kategori' | 'produk' | 'pelanggan' | 'sales' | 'cabang' | 'kategoriPelanggan';
 type AggregationType = 'sum_total' | 'sum_qty' | 'count_trx';
@@ -387,7 +394,7 @@ export default function AnalisaPivot() {
             });
             Object.values(node.children).forEach(c => processNodeForDisplay(c));
         };
-        processNodeForDisplay(root);
+        Object.values(root.children).forEach(c => processNodeForDisplay(c));
 
         // Process grand totals for display
         const displayGrandTotal: Record<string, Record<string, number>> = {};
@@ -444,44 +451,100 @@ export default function AnalisaPivot() {
 
         return (
             <>
-                <TableRow className={`hover:bg-muted/30 group transition-colors ${node.level === 0 ? 'bg-slate-50/50' : ''}`}>
-                    <TableCell className="border-r py-2 relative" style={{ paddingLeft: `${node.level * (isMobile ? 12 : 20) + 16}px` }}>
-                        <div className="flex items-center gap-2">
+                <motion.tr 
+                    initial={{ opacity: 0, y: 4 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className={cn(
+                        "group transition-all duration-300 border-b border-slate-100/40",
+                        node.level === 0 
+                            ? "bg-white hover:bg-indigo-100/80 hover:shadow-[inset_12px_0_0_0_#4f46e5]" 
+                            : "bg-white/40 hover:bg-indigo-100/70 hover:shadow-[inset_10px_0_0_0_#6366f1]",
+                        isExpanded && "bg-indigo-50/10 shadow-[inset_4px_0_0_0_#4f46e5]"
+                    )}
+                >
+                    <TableCell 
+                        className="border-r border-slate-100/50 py-3.5 relative" 
+                        style={{ paddingLeft: `${node.level * (isMobile ? 12 : 24) + 32}px` }}
+                    >
+                        {/* Level Indicator Line */}
+                        {node.level > 0 && (
+                            <div 
+                                className="absolute top-0 bottom-0 w-px bg-slate-200/40" 
+                                style={{ left: `${(node.level - 1) * (isMobile ? 12 : 24) + 38}px` }}
+                            />
+                        )}
+                        
+                        <div className="flex items-center gap-3 relative z-10">
                             {hasChildren ? (
-                                <button onClick={() => toggleExpand(node.id)} className="p-0.5 hover:bg-slate-200 rounded transition-transform duration-200">
-                                    {isExpanded ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
+                                <button 
+                                    onClick={() => toggleExpand(node.id)} 
+                                    className={cn(
+                                        "flex items-center justify-center w-6 h-6 rounded-lg transition-all duration-500",
+                                        isExpanded 
+                                            ? "bg-indigo-600 text-white shadow-lg shadow-indigo-200 rotate-90 scale-110" 
+                                            : "bg-white text-slate-400 border border-slate-200 hover:border-indigo-400 hover:text-indigo-600 shadow-sm hover:scale-105"
+                                    )}
+                                >
+                                    <ChevronRight className="w-3.5 h-3.5" />
                                 </button>
                             ) : (
-                                <div className="w-4" />
+                                <div className="w-6 flex justify-center">
+                                    <div className="w-1.5 h-1.5 rounded-full bg-slate-300 group-hover:bg-indigo-400 transition-colors" />
+                                </div>
                             )}
-                            <span className={`text-[11px] truncate ${hasChildren ? 'font-bold text-slate-900' : 'text-slate-600'}`}>
-                                {node.label}
-                            </span>
-                            {hasChildren && isExpanded && (
-                                <Badge variant="outline" className="text-[9px] h-4 px-1 ml-1 opacity-50 font-normal">
-                                    Subtotal
-                                </Badge>
-                            )}
+                            <div className="flex flex-col">
+                                <span className={cn(
+                                    "text-[11px] transition-all tracking-tight",
+                                    hasChildren ? "font-bold text-slate-900" : "text-slate-600 font-medium"
+                                )}>
+                                    {node.label}
+                                </span>
+                                {hasChildren && isExpanded && (
+                                    <span className="text-[8px] text-indigo-500 font-black uppercase tracking-[0.2em] mt-0.5 opacity-70">
+                                        Subtotal
+                                    </span>
+                                )}
+                            </div>
                         </div>
                     </TableCell>
                     {cols.map(col => (
                         <React.Fragment key={col}>
                             {metrics.map(m => (
-                                <TableCell key={`${col}-${m}`} className="text-right tabular-nums text-[11px] py-2 border-r last:border-r-0 border-slate-100">
-                                    {node.values[col] && node.values[col][m] ? formatMetricValue(node.values[col][m], m) : '-'}
+                                <TableCell 
+                                    key={`${col}-${m}`} 
+                                    className={cn(
+                                        "text-right tabular-nums text-[11px] py-3.5 px-4 border-r border-slate-100/30 last:border-r-0 text-slate-700",
+                                        hasChildren ? "font-bold" : "font-normal"
+                                    )}
+                                >
+                                    {node.values[col] && node.values[col][m] ? (
+                                        <motion.span initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
+                                            {formatMetricValue(node.values[col][m], m)}
+                                        </motion.span>
+                                    ) : (
+                                        <span className="text-slate-300">-</span>
+                                    )}
                                 </TableCell>
                             ))}
                         </React.Fragment>
                     ))}
                     {metrics.map(m => (
-                        <TableCell key={`total-${m}`} className="text-right font-bold tabular-nums text-[11px] py-2 bg-primary/5 border-l border-primary/10">
+                        <TableCell 
+                            key={`total-${m}`} 
+                            className={cn(
+                                "text-right tabular-nums text-[11px] py-3.5 px-6 bg-indigo-50/20 text-indigo-700 border-l border-indigo-100/30",
+                                hasChildren ? "font-black" : "font-medium"
+                            )}
+                        >
                             {formatMetricValue(node.rowTotals[m] || 0, m)}
                         </TableCell>
                     ))}
-                </TableRow>
-                {hasChildren && isExpanded && node.children.map((child: any) => (
-                    <RenderPivotRow key={child.id} node={child} cols={cols} metrics={metrics} />
-                ))}
+                </motion.tr>
+                <AnimatePresence mode="popLayout">
+                    {hasChildren && isExpanded && node.children.map((child: any) => (
+                        <RenderPivotRow key={child.id} node={child} cols={cols} metrics={metrics} />
+                    ))}
+                </AnimatePresence>
             </>
         );
     };
@@ -656,482 +719,530 @@ export default function AnalisaPivot() {
     };
 
     return (
-        <div className="space-y-6 animate-in fade-in duration-700 p-2 sm:p-0">
-            {/* Improved Filter Section */}
-            <Card className="border-none shadow-md bg-white/80 backdrop-blur-md rounded-2xl overflow-visible ring-1 ring-slate-200/50">
-                <CardContent className="p-4 sm:p-6">
-                    <div className="flex flex-col gap-6">
-                        {/* Top Row: Basic Selection */}
-                        <div className="flex flex-col xl:flex-row xl:items-end gap-4 sm:gap-6 pb-6 border-b border-slate-100">
-                            {/* Left: Scope */}
-                            <div className="flex flex-col gap-2">
-                                <div className="flex items-center justify-between gap-2 text-primary font-bold ml-1">
-                                    <div className="flex items-center gap-2">
-                                        <Building className="w-4 h-4" />
-                                        <span className="text-xs uppercase tracking-wider">Cakupan Data</span>
+        <div className="space-y-6 pb-20 p-1 sm:p-0">
+            <motion.div 
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.6 }}
+                className="space-y-6"
+            >
+                {/* Header & Main Filters Card */}
+                <Card className="border-none shadow-2xl bg-white/70 backdrop-blur-2xl rounded-[2.5rem] overflow-visible ring-1 ring-slate-200/50">
+                    <CardContent className="p-6 sm:p-10">
+                        <div className="flex flex-col gap-10">
+                            {/* Top row: Identity & Main Actions */}
+                            <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-8 pb-10 border-b border-slate-100/80">
+                                <div className="flex items-center gap-5">
+                                    <div className="relative">
+                                        <div className="absolute inset-0 bg-indigo-500 blur-2xl opacity-20 rounded-full animate-pulse"></div>
+                                        <div className="relative bg-gradient-to-tr from-indigo-600 to-violet-600 p-4 rounded-3xl shadow-xl shadow-indigo-100 rotate-3">
+                                            <Settings2 className="w-7 h-7 text-white -rotate-3" />
+                                        </div>
                                     </div>
-                                    <button onClick={clearAllFilters} className="text-[10px] text-slate-400 hover:text-primary transition-colors flex items-center gap-1 font-normal">
-                                        <X className="w-3 h-3" /> RESET FILTER
-                                    </button>
+                                    <div className="flex flex-col">
+                                        <div className="flex items-center gap-2 mb-1">
+                                            <span className="text-[10px] font-black uppercase tracking-[0.25em] text-indigo-600 bg-indigo-50 px-3 py-1 rounded-full border border-indigo-100/50">
+                                                Advanced Analytics
+                                            </span>
+                                            <span className="text-[10px] font-black uppercase tracking-[0.25em] text-emerald-600 bg-emerald-50 px-3 py-1 rounded-full border border-emerald-100/50">
+                                                Live Data
+                                            </span>
+                                        </div>
+                                        <h1 className="text-3xl font-black tracking-tight text-slate-900">
+                                            Pivot <span className="text-transparent bg-clip-text bg-gradient-to-r from-indigo-600 to-violet-600">Engine</span>
+                                        </h1>
+                                        <p className="text-slate-400 text-sm font-medium tracking-wide">Analisa data penjualan multidimensi secara dinamis</p>
+                                    </div>
                                 </div>
-                                <div className="grid grid-cols-1 sm:flex sm:flex-wrap items-center gap-2">
-                                    <ScopeFilters
-                                        selectedCabangIds={selectedCabangIds}
-                                        setSelectedCabangIds={setSelectedCabangIds}
-                                        selectedUserIds={selectedUserIds}
-                                        setSelectedUserIds={setSelectedUserIds}
-                                        availableCabangIds={availableCabangIds}
-                                        availableUserIds={availableUserIds}
-                                        className="!space-y-0 grid grid-cols-1 sm:flex sm:flex-row items-center gap-2"
-                                    />
 
+                                <div className="flex flex-wrap items-center gap-4">
+                                    <div className="flex items-center gap-2 bg-slate-50/80 p-1.5 rounded-2xl border border-slate-100 shadow-sm">
+                                        <Button
+                                            variant="ghost"
+                                            size="sm"
+                                            onClick={handleExportCSV}
+                                            className="h-10 px-6 rounded-xl text-slate-600 hover:text-indigo-600 hover:bg-white transition-all font-bold text-xs gap-2.5"
+                                        >
+                                            <Download className="w-4 h-4" /> EXPORT CSV
+                                        </Button>
+                                        <div className="w-px h-6 bg-slate-200"></div>
+                                        <Button
+                                            variant="ghost"
+                                            size="sm"
+                                            onClick={handleExportPDF}
+                                            className="h-10 px-6 rounded-xl text-slate-600 hover:text-red-600 hover:bg-white transition-all font-bold text-xs gap-2.5"
+                                        >
+                                            <Download className="w-4 h-4" /> EXPORT PDF
+                                        </Button>
+                                    </div>
+                                    <Button 
+                                        variant="ghost"
+                                        size="sm"
+                                        onClick={clearAllFilters} 
+                                        className="h-11 px-6 text-xs text-slate-400 hover:text-red-500 hover:bg-red-50/50 transition-all font-black rounded-2xl gap-2 border border-transparent hover:border-red-100"
+                                    >
+                                        <X className="w-4 h-4" /> RESET ENGINE
+                                    </Button>
+                                </div>
+                            </div>
 
-                                    {/* Kategori Filter */}
-                                    <DropdownMenu>
-                                        <DropdownMenuTrigger asChild>
-                                            <Button variant="outline" className="h-9 text-xs justify-between bg-background font-medium px-3 border-muted-foreground/20 hover:border-primary/50 transition-all rounded-xl shadow-sm w-full sm:min-w-[140px] sm:w-auto">
-                                                <div className="flex items-center gap-2 truncate">
-                                                    <div className="p-1.5 rounded-lg bg-purple-500/10 text-purple-600">
-                                                        <Tag className="w-3.5 h-3.5 shrink-0" />
+                            {/* Second row: Data Scope & Date Range */}
+                            <div className="grid grid-cols-1 xl:grid-cols-12 gap-10">
+                                <div className="xl:col-span-7 space-y-6">
+                                    <div className="flex items-center gap-3">
+                                        <div className="p-2.5 rounded-2xl bg-slate-100 text-slate-500 ring-1 ring-slate-200/50">
+                                            <Database className="w-4 h-4" />
+                                        </div>
+                                        <div>
+                                            <h3 className="text-sm font-black text-slate-800 uppercase tracking-widest">Cakupan Data</h3>
+                                            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-0.5">FILTER SUMBER DATA UTAMA</p>
+                                        </div>
+                                    </div>
+                                    
+                                    <div className="flex flex-wrap items-center gap-4">
+                                        <ScopeFilters
+                                            selectedCabangIds={selectedCabangIds}
+                                            setSelectedCabangIds={setSelectedCabangIds}
+                                            selectedUserIds={selectedUserIds}
+                                            setSelectedUserIds={setSelectedUserIds}
+                                            availableCabangIds={availableCabangIds}
+                                            availableUserIds={availableUserIds}
+                                            className="!space-y-0 flex flex-wrap items-center gap-4"
+                                        />
+
+                                        <DropdownMenu>
+                                            <DropdownMenuTrigger asChild>
+                                                <Button variant="outline" className="h-12 text-xs justify-between bg-white/50 backdrop-blur-sm font-bold px-5 border-slate-200 hover:border-indigo-400 hover:ring-4 hover:ring-indigo-50 transition-all rounded-2xl shadow-sm min-w-[180px]">
+                                                    <div className="flex items-center gap-3 truncate">
+                                                        <Tag className="w-4 h-4 text-purple-500" />
+                                                        <span className="truncate">
+                                                            {selectedKategoriIds.length === 0 ? "Semua Kategori" : `${selectedKategoriIds.length} Kategori`}
+                                                        </span>
                                                     </div>
-                                                    <span className="truncate">
-                                                        {selectedKategoriIds.length === 0
-                                                            ? "Semua Kategori"
-                                                            : `${selectedKategoriIds.length} Kategori`}
-                                                    </span>
-                                                </div>
-                                                <ChevronDown className="w-4 h-4 opacity-50 shrink-0" />
-                                            </Button>
-                                        </DropdownMenuTrigger>
-                                        <DropdownMenuContent className="w-[240px] max-h-[300px] overflow-y-auto rounded-xl shadow-xl border-muted-foreground/10">
-                                            <DropdownMenuLabel className="text-xs">Daftar Kategori Produk</DropdownMenuLabel>
-                                            <DropdownMenuSeparator />
-                                            <DropdownMenuCheckboxItem
-                                                checked={selectedKategoriIds.length === 0}
-                                                onCheckedChange={() => setSelectedKategoriIds([])}
-                                                className="text-xs"
-                                            >
-                                                Semua Kategori
-                                            </DropdownMenuCheckboxItem>
-                                            <DropdownMenuSeparator />
-                                            {kategoriList.map(cat => (
-                                                <DropdownMenuCheckboxItem
-                                                    key={cat.id}
-                                                    checked={selectedKategoriIds.includes(cat.id)}
-                                                    onCheckedChange={(checked) => {
-                                                        if (checked) {
-                                                            setSelectedKategoriIds([...selectedKategoriIds, cat.id]);
-                                                        } else {
-                                                            setSelectedKategoriIds(selectedKategoriIds.filter(id => id !== cat.id));
-                                                        }
-                                                    }}
-                                                    className="text-xs"
-                                                >
-                                                    {cat.nama}
+                                                    <ChevronDown className="w-4 h-4 text-slate-400 ml-2" />
+                                                </Button>
+                                            </DropdownMenuTrigger>
+                                            <DropdownMenuContent className="w-[280px] max-h-[400px] overflow-y-auto rounded-[1.5rem] shadow-2xl border-slate-100 p-3 bg-white/95 backdrop-blur-xl">
+                                                <DropdownMenuLabel className="text-[10px] font-black uppercase tracking-widest text-slate-400 px-4 py-3">Produk Kategori</DropdownMenuLabel>
+                                                <DropdownMenuSeparator className="my-2 bg-slate-100" />
+                                                <DropdownMenuCheckboxItem checked={selectedKategoriIds.length === 0} onCheckedChange={() => setSelectedKategoriIds([])} className="text-xs rounded-xl py-3 px-4 font-medium">
+                                                    Semua Kategori
                                                 </DropdownMenuCheckboxItem>
-                                            ))}
-                                        </DropdownMenuContent>
-                                    </DropdownMenu>
-
-                                    {/* Kategori Pelanggan Filter */}
-                                    <DropdownMenu>
-                                        <DropdownMenuTrigger asChild>
-                                            <Button variant="outline" className="h-9 text-xs justify-between bg-background font-medium px-3 border-muted-foreground/20 hover:border-primary/50 transition-all rounded-xl shadow-sm w-full sm:min-w-[140px] sm:w-auto">
-                                                <div className="flex items-center gap-2 truncate">
-                                                    <div className="p-1.5 rounded-lg bg-orange-500/10 text-orange-600">
-                                                        <Users className="w-3.5 h-3.5 shrink-0" />
-                                                    </div>
-                                                    <span className="truncate">
-                                                        {selectedKategoriPelangganIds.length === 0
-                                                            ? "Semua Tipe Toko"
-                                                            : `${selectedKategoriPelangganIds.length} Tipe`}
-                                                    </span>
-                                                </div>
-                                                <ChevronDown className="w-4 h-4 opacity-50 shrink-0" />
-                                            </Button>
-                                        </DropdownMenuTrigger>
-                                        <DropdownMenuContent className="w-[240px] max-h-[300px] overflow-y-auto rounded-xl shadow-xl border-muted-foreground/10">
-                                            <DropdownMenuLabel className="text-xs">Tipe Toko/Pelanggan</DropdownMenuLabel>
-                                            <DropdownMenuSeparator />
-                                            <DropdownMenuCheckboxItem
-                                                checked={selectedKategoriPelangganIds.length === 0}
-                                                onCheckedChange={() => setSelectedKategoriPelangganIds([])}
-                                                className="text-xs"
-                                            >
-                                                Semua Tipe
-                                            </DropdownMenuCheckboxItem>
-                                            <DropdownMenuSeparator />
-                                            {kategoriPelangganList.map(cat => (
-                                                <DropdownMenuCheckboxItem
-                                                    key={cat.id}
-                                                    checked={selectedKategoriPelangganIds.includes(cat.id)}
-                                                    onCheckedChange={(checked) => {
-                                                        if (checked) {
-                                                            setSelectedKategoriPelangganIds([...selectedKategoriPelangganIds, cat.id]);
-                                                        } else {
-                                                            setSelectedKategoriPelangganIds(selectedKategoriPelangganIds.filter(id => id !== cat.id));
-                                                        }
-                                                    }}
-                                                    className="text-xs"
-                                                >
-                                                    {cat.nama}
-                                                </DropdownMenuCheckboxItem>
-                                            ))}
-                                        </DropdownMenuContent>
-                                    </DropdownMenu>
-
-                                    {/* Produk Filter */}
-                                    <DropdownMenu>
-                                        <DropdownMenuTrigger asChild>
-                                            <Button variant="outline" className="h-9 text-xs justify-between bg-background font-medium px-3 border-muted-foreground/20 hover:border-primary/50 transition-all rounded-xl shadow-sm w-full sm:min-w-[140px] sm:w-auto">
-                                                <div className="flex items-center gap-2 truncate">
-                                                    <div className="p-1.5 rounded-lg bg-blue-500/10 text-blue-600">
-                                                        <Package className="w-3.5 h-3.5 shrink-0" />
-                                                    </div>
-                                                    <span className="truncate">
-                                                        {selectedBarangIds.length === 0
-                                                            ? "Semua Produk"
-                                                            : `${selectedBarangIds.length} Produk`}
-                                                    </span>
-                                                </div>
-                                                <ChevronDown className="w-4 h-4 opacity-50 shrink-0" />
-                                            </Button>
-                                        </DropdownMenuTrigger>
-                                        <DropdownMenuContent className="w-[280px] max-h-[400px] overflow-y-auto rounded-xl shadow-xl border-muted-foreground/10">
-                                            <DropdownMenuLabel className="text-xs">Daftar Produk</DropdownMenuLabel>
-                                            <DropdownMenuSeparator />
-                                            <DropdownMenuCheckboxItem
-                                                checked={selectedBarangIds.length === 0}
-                                                onCheckedChange={() => setSelectedBarangIds([])}
-                                                className="text-xs"
-                                            >
-                                                Semua Produk
-                                            </DropdownMenuCheckboxItem>
-                                            <DropdownMenuSeparator />
-                                            {barang
-                                                .filter(b => selectedKategoriIds.length === 0 || selectedKategoriIds.includes(b.kategoriId || ''))
-                                                .map(b => (
-                                                    <DropdownMenuCheckboxItem
-                                                        key={b.id}
-                                                        checked={selectedBarangIds.includes(b.id)}
-                                                        onCheckedChange={(checked) => {
-                                                            if (checked) {
-                                                                setSelectedBarangIds([...selectedBarangIds, b.id]);
-                                                            } else {
-                                                                setSelectedBarangIds(selectedBarangIds.filter(id => id !== b.id));
-                                                            }
-                                                        }}
-                                                        className="text-xs"
-                                                    >
-                                                        {b.nama}
+                                                {kategoriList.map(cat => (
+                                                    <DropdownMenuCheckboxItem key={cat.id} checked={selectedKategoriIds.includes(cat.id)} onCheckedChange={(checked) => checked ? setSelectedKategoriIds([...selectedKategoriIds, cat.id]) : setSelectedKategoriIds(selectedKategoriIds.filter(id => id !== cat.id))} className="text-xs rounded-xl py-3 px-4 font-medium">
+                                                        {cat.nama}
                                                     </DropdownMenuCheckboxItem>
                                                 ))}
-                                        </DropdownMenuContent>
-                                    </DropdownMenu>
-                                </div>
-                            </div>
+                                            </DropdownMenuContent>
+                                        </DropdownMenu>
 
-                            {/* Middle: Date Filter */}
-                            <div className="flex flex-col gap-2 flex-1 w-full xl:max-w-sm">
-                                <div className="flex items-center justify-between gap-2 ml-1">
-                                    <div className="flex items-center gap-2 text-primary font-bold">
-                                        <Calendar className="w-4 h-4" />
-                                        <span className="text-xs uppercase tracking-wider">Periode</span>
+                                        <DropdownMenu>
+                                            <DropdownMenuTrigger asChild>
+                                                <Button variant="outline" className="h-12 text-xs justify-between bg-white/50 backdrop-blur-sm font-bold px-5 border-slate-200 hover:border-indigo-400 hover:ring-4 hover:ring-indigo-50 transition-all rounded-2xl shadow-sm min-w-[180px]">
+                                                    <div className="flex items-center gap-3 truncate">
+                                                        <Users className="w-4 h-4 text-orange-500" />
+                                                        <span className="truncate">
+                                                            {selectedKategoriPelangganIds.length === 0 ? "Semua Tipe Toko" : `${selectedKategoriPelangganIds.length} Tipe Toko`}
+                                                        </span>
+                                                    </div>
+                                                    <ChevronDown className="w-4 h-4 text-slate-400 ml-2" />
+                                                </Button>
+                                            </DropdownMenuTrigger>
+                                            <DropdownMenuContent className="w-[280px] max-h-[400px] overflow-y-auto rounded-[1.5rem] shadow-2xl border-slate-100 p-3 bg-white/95 backdrop-blur-xl">
+                                                <DropdownMenuLabel className="text-[10px] font-black uppercase tracking-widest text-slate-400 px-4 py-3">Kategori Pelanggan</DropdownMenuLabel>
+                                                <DropdownMenuSeparator className="my-2 bg-slate-100" />
+                                                <DropdownMenuCheckboxItem checked={selectedKategoriPelangganIds.length === 0} onCheckedChange={() => setSelectedKategoriPelangganIds([])} className="text-xs rounded-xl py-3 px-4 font-medium">
+                                                    Semua Tipe Toko
+                                                </DropdownMenuCheckboxItem>
+                                                {kategoriPelangganList.map(cat => (
+                                                    <DropdownMenuCheckboxItem key={cat.id} checked={selectedKategoriPelangganIds.includes(cat.id)} onCheckedChange={(checked) => checked ? setSelectedKategoriPelangganIds([...selectedKategoriPelangganIds, cat.id]) : setSelectedKategoriPelangganIds(selectedKategoriPelangganIds.filter(id => id !== cat.id))} className="text-xs rounded-xl py-3 px-4 font-medium">
+                                                        {cat.nama}
+                                                    </DropdownMenuCheckboxItem>
+                                                ))}
+                                            </DropdownMenuContent>
+                                        </DropdownMenu>
                                     </div>
-                                    <button
-                                        type="button"
-                                        className="text-[10px] text-primary hover:underline cursor-pointer font-bold px-2 py-0.5 bg-primary/5 rounded-full"
-                                        onClick={() => setIsSingleDate(!isSingleDate)}
-                                    >
-                                        {isSingleDate ? 'RENTANG TANGGAL' : 'PILIH 1 HARI'}
-                                    </button>
                                 </div>
 
-                                <div className="flex items-center gap-2">
-                                    {isSingleDate ? (
-                                        <Input
-                                            type="date"
-                                            value={singleDate}
-                                            onChange={e => setSingleDate(e.target.value)}
-                                            className="h-10 text-xs w-full bg-white cursor-pointer rounded-xl border-slate-200 shadow-sm focus:ring-primary/20"
-                                        />
-                                    ) : (
-                                        <>
+                                <div className="xl:col-span-5 space-y-6">
+                                    <div className="flex items-center justify-between gap-4">
+                                        <div className="flex items-center gap-3">
+                                            <div className="p-2.5 rounded-2xl bg-indigo-50 text-indigo-600 ring-1 ring-indigo-100/50">
+                                                <Calendar className="w-4 h-4" />
+                                            </div>
+                                            <div>
+                                                <h3 className="text-sm font-black text-slate-800 uppercase tracking-widest">Periode Analisa</h3>
+                                                <p className="text-[10px] font-bold text-indigo-400 uppercase tracking-widest mt-0.5">RENTANG WAKTU DATA</p>
+                                            </div>
+                                        </div>
+                                        <button
+                                            type="button"
+                                            className="text-[10px] text-indigo-600 hover:text-white font-black px-4 py-2 bg-indigo-50 hover:bg-indigo-600 rounded-xl transition-all border border-indigo-100/50 uppercase tracking-widest"
+                                            onClick={() => setIsSingleDate(!isSingleDate)}
+                                        >
+                                            {isSingleDate ? 'Range Mode' : 'Single Mode'}
+                                        </button>
+                                    </div>
+
+                                    <div className="flex items-center gap-3">
+                                        {isSingleDate ? (
                                             <Input
                                                 type="date"
-                                                value={startDate}
-                                                onChange={e => setStartDate(e.target.value)}
-                                                className="h-10 text-xs bg-white cursor-pointer rounded-xl border-slate-200 shadow-sm flex-1 focus:ring-primary/20"
+                                                value={singleDate}
+                                                onChange={e => setSingleDate(e.target.value)}
+                                                className="h-12 text-sm w-full bg-white/50 backdrop-blur-sm cursor-pointer rounded-2xl border-slate-200 shadow-sm focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 transition-all font-bold px-5"
                                             />
-                                            <span className="text-slate-400 text-[10px] font-bold px-1">s/d</span>
-                                            <Input
-                                                type="date"
-                                                value={endDate}
-                                                onChange={e => setEndDate(e.target.value)}
-                                                className="h-10 text-xs bg-white cursor-pointer rounded-xl border-slate-200 shadow-sm flex-1 focus:ring-primary/20"
-                                            />
-                                        </>
-                                    )}
+                                        ) : (
+                                            <div className="flex items-center gap-3 bg-slate-50/50 p-2 rounded-[1.25rem] border border-slate-100 w-full shadow-inner">
+                                                <Input
+                                                    type="date"
+                                                    value={startDate}
+                                                    onChange={e => setStartDate(e.target.value)}
+                                                    className="h-10 text-[11px] flex-1 bg-white cursor-pointer rounded-xl border-slate-200 shadow-sm focus:ring-2 focus:ring-indigo-500/20 font-bold px-3"
+                                                />
+                                                <span className="text-slate-400 text-[10px] font-black">TO</span>
+                                                <Input
+                                                    type="date"
+                                                    value={endDate}
+                                                    onChange={e => setEndDate(e.target.value)}
+                                                    className="h-10 text-[11px] flex-1 bg-white cursor-pointer rounded-xl border-slate-200 shadow-sm focus:ring-2 focus:ring-indigo-500/20 font-bold px-3"
+                                                />
+                                            </div>
+                                        )}
+                                    </div>
                                 </div>
                             </div>
 
-                            {/* Right: Actions */}
-                            <div className="flex items-center gap-2 w-full xl:w-auto xl:self-end">
-                                <Button
-                                    variant="outline"
-                                    size="sm"
-                                    onClick={handleExportCSV}
-                                    className="h-10 flex-1 xl:flex-none xl:px-4 rounded-xl border-slate-200 hover:bg-slate-50 gap-2"
-                                >
-                                    <Download className="w-4 h-4 text-slate-500" />
-                                    <span className="text-xs font-semibold uppercase tracking-wider">CSV</span>
-                                </Button>
-                                <Button
-                                    variant="default"
-                                    size="sm"
-                                    onClick={handleExportPDF}
-                                    className="h-10 flex-1 xl:flex-none xl:px-4 rounded-xl shadow-sm gap-2"
-                                >
-                                    <Download className="w-4 h-4" />
-                                    <span className="text-xs font-semibold uppercase tracking-wider">PDF</span>
-                                </Button>
-                            </div>
-                        </div>
-
-                        {/* Bottom Row: Pivot Configuration */}
-                        <div className="grid grid-cols-1 md:grid-cols-12 gap-6 pt-2">
-                            {/* Baris */}
-                            <div className="md:col-span-4 space-y-3">
-                                <div className="flex items-center gap-2 text-slate-500 font-bold ml-1">
-                                    <ListFilter className="w-3.5 h-3.5" />
-                                    <span className="text-[10px] uppercase tracking-wider">Baris (Hierarki)</span>
-                                </div>
-                                <div className="flex flex-wrap gap-1.5 p-2 bg-slate-50/50 rounded-xl min-h-[44px] border border-slate-100 shadow-inner">
-                                    {rowFields.map((f, i) => (
-                                        <Badge key={i} variant="secondary" className="pl-2 pr-1 py-1 gap-1 text-[10px] bg-white border-slate-200 shadow-sm">
-                                            {FIELD_LABELS[f]}
-                                            <button onClick={() => removeField('row', i)} className="p-0.5 hover:bg-red-50 hover:text-red-500 rounded-full transition-colors">
-                                                <X className="w-2.5 h-2.5" />
-                                            </button>
-                                        </Badge>
-                                    ))}
-                                    <Select onValueChange={(v) => addField('row', v as PivotField)}>
-                                        <SelectTrigger className="w-fit min-w-[80px] h-6 px-2 text-[9px] bg-primary/5 border-primary/20 rounded-md text-primary font-bold hover:bg-primary/10 transition-colors">
-                                            <Plus className="w-2.5 h-2.5 mr-1" /> TAMBAH
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                            {Object.entries(FIELD_LABELS).map(([k, v]) => (
-                                                <SelectItem key={k} value={k} disabled={rowFields.includes(k as PivotField)}>{v}</SelectItem>
+                            {/* Third row: Pivot Schema Config */}
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-10 pt-4">
+                                {/* Baris Configuration */}
+                                <div className="space-y-5 group">
+                                    <div className="flex items-center gap-3">
+                                        <div className="p-2.5 rounded-2xl bg-slate-100 text-slate-500 group-hover:bg-indigo-50 group-hover:text-indigo-600 transition-colors ring-1 ring-slate-200/50">
+                                            <ListFilter className="w-4 h-4" />
+                                        </div>
+                                        <div>
+                                            <h3 className="text-sm font-black text-slate-800 uppercase tracking-widest">Baris (Rows)</h3>
+                                            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-0.5">HIERARKI DIMENSI</p>
+                                        </div>
+                                    </div>
+                                    <div className="flex flex-wrap gap-2.5 p-4 bg-slate-50/50 rounded-3xl min-h-[72px] border border-slate-100/50 shadow-inner group-hover:border-indigo-100 transition-colors">
+                                        <AnimatePresence mode="popLayout">
+                                            {rowFields.map((f, i) => (
+                                                <motion.div
+                                                    key={`row-${f}`}
+                                                    initial={{ opacity: 0, scale: 0.8 }}
+                                                    animate={{ opacity: 1, scale: 1 }}
+                                                    exit={{ opacity: 0, scale: 0.8 }}
+                                                    layout
+                                                >
+                                                    <Badge variant="secondary" className="pl-4 pr-2 py-2 gap-2 text-[10px] font-black bg-white border-slate-200 text-slate-700 shadow-sm rounded-xl hover:border-indigo-300 transition-all group/badge">
+                                                        {FIELD_LABELS[f]}
+                                                        <button onClick={() => removeField('row', i)} className="p-1 hover:bg-red-50 text-slate-300 group-hover/badge:text-red-400 rounded-lg transition-colors">
+                                                            <X className="w-3 h-3" />
+                                                        </button>
+                                                    </Badge>
+                                                </motion.div>
                                             ))}
-                                        </SelectContent>
-                                    </Select>
+                                        </AnimatePresence>
+                                        <Select onValueChange={(v) => addField('row', v as PivotField)}>
+                                            <SelectTrigger className="w-fit min-w-[110px] h-9 px-4 text-[10px] bg-indigo-600 text-white rounded-xl font-black hover:bg-indigo-700 transition-all border-none shadow-lg shadow-indigo-100">
+                                                <Plus className="w-3.5 h-3.5 mr-2" /> ADD
+                                            </SelectTrigger>
+                                            <SelectContent className="rounded-2xl border-slate-100 shadow-2xl p-2 bg-white/95 backdrop-blur-xl">
+                                                {Object.entries(FIELD_LABELS).map(([k, v]) => (
+                                                    <SelectItem key={k} value={k} disabled={rowFields.includes(k as PivotField)} className="text-xs rounded-xl py-3 font-bold">
+                                                        {v}
+                                                    </SelectItem>
+                                                ))}
+                                            </SelectContent>
+                                        </Select>
+                                    </div>
                                 </div>
-                            </div>
 
-                            {/* Kolom */}
-                            <div className="md:col-span-4 space-y-3">
-                                <div className="flex items-center gap-2 text-slate-500 font-bold ml-1">
-                                    <ArrowRightLeft className="w-3.5 h-3.5" />
-                                    <span className="text-[10px] uppercase tracking-wider">Kolom</span>
-                                </div>
-                                <div className="flex flex-wrap gap-1.5 p-2 bg-slate-50/50 rounded-xl min-h-[44px] border border-slate-100 shadow-inner">
-                                    {colFields.map((f, i) => (
-                                        <Badge key={i} variant="secondary" className="pl-2 pr-1 py-1 gap-1 text-[10px] bg-white border-slate-200 shadow-sm">
-                                            {FIELD_LABELS[f]}
-                                            <button onClick={() => removeField('col', i)} className="p-0.5 hover:bg-red-50 hover:text-red-500 rounded-full transition-colors">
-                                                <X className="w-2.5 h-2.5" />
-                                            </button>
-                                        </Badge>
-                                    ))}
-                                    {colFields.length === 0 && <span className="text-[9px] text-slate-400 font-medium py-1.5 ml-1">Hanya Total</span>}
-                                    <Select onValueChange={(v) => addField('col', v as PivotField)}>
-                                        <SelectTrigger className="w-fit min-w-[80px] h-6 px-2 text-[9px] bg-primary/5 border-primary/20 rounded-md text-primary font-bold hover:bg-primary/10 transition-colors">
-                                            <Plus className="w-2.5 h-2.5 mr-1" /> TAMBAH
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                            {Object.entries(FIELD_LABELS).map(([k, v]) => (
-                                                <SelectItem key={k} value={k} disabled={colFields.includes(k as PivotField)}>{v}</SelectItem>
+                                {/* Kolom Configuration */}
+                                <div className="space-y-5 group">
+                                    <div className="flex items-center gap-3">
+                                        <div className="p-2.5 rounded-2xl bg-slate-100 text-slate-500 group-hover:bg-violet-50 group-hover:text-violet-600 transition-colors ring-1 ring-slate-200/50">
+                                            <ArrowRightLeft className="w-4 h-4" />
+                                        </div>
+                                        <div>
+                                            <h3 className="text-sm font-black text-slate-800 uppercase tracking-widest">Kolom (Cols)</h3>
+                                            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-0.5">GRUP DATA HORIZONTAL</p>
+                                        </div>
+                                    </div>
+                                    <div className="flex flex-wrap gap-2.5 p-4 bg-slate-50/50 rounded-3xl min-h-[72px] border border-slate-100/50 shadow-inner group-hover:border-violet-100 transition-colors">
+                                        <AnimatePresence mode="popLayout">
+                                            {colFields.map((f, i) => (
+                                                <motion.div
+                                                    key={`col-${f}`}
+                                                    initial={{ opacity: 0, scale: 0.8 }}
+                                                    animate={{ opacity: 1, scale: 1 }}
+                                                    exit={{ opacity: 0, scale: 0.8 }}
+                                                    layout
+                                                >
+                                                    <Badge variant="secondary" className="pl-4 pr-2 py-2 gap-2 text-[10px] font-black bg-white border-slate-200 text-slate-700 shadow-sm rounded-xl hover:border-violet-300 transition-all group/badge">
+                                                        {FIELD_LABELS[f]}
+                                                        <button onClick={() => removeField('col', i)} className="p-1 hover:bg-red-50 text-slate-300 group-hover/badge:text-red-400 rounded-lg transition-colors">
+                                                            <X className="w-3 h-3" />
+                                                        </button>
+                                                    </Badge>
+                                                </motion.div>
                                             ))}
-                                        </SelectContent>
-                                    </Select>
+                                        </AnimatePresence>
+                                        <Select onValueChange={(v) => addField('col', v as PivotField)}>
+                                            <SelectTrigger className="w-fit min-w-[110px] h-9 px-4 text-[10px] bg-violet-600 text-white rounded-xl font-black hover:bg-violet-700 transition-all border-none shadow-lg shadow-violet-100">
+                                                <Plus className="w-3.5 h-3.5 mr-2" /> ADD
+                                            </SelectTrigger>
+                                            <SelectContent className="rounded-2xl border-slate-100 shadow-2xl p-2 bg-white/95 backdrop-blur-xl">
+                                                {Object.entries(FIELD_LABELS).map(([k, v]) => (
+                                                    <SelectItem key={k} value={k} disabled={colFields.includes(k as PivotField)} className="text-xs rounded-xl py-3 font-bold">
+                                                        {v}
+                                                    </SelectItem>
+                                                ))}
+                                            </SelectContent>
+                                        </Select>
+                                    </div>
+                                </div>
+
+                                {/* Metrics & Sorting */}
+                                <div className="grid grid-cols-2 gap-6">
+                                    <div className="space-y-5">
+                                        <div className="flex items-center gap-3">
+                                            <div className="p-2.5 rounded-2xl bg-slate-100 text-slate-500 ring-1 ring-slate-200/50">
+                                                <BarChart3 className="w-4 h-4" />
+                                            </div>
+                                            <h3 className="text-sm font-black text-slate-800 uppercase tracking-widest">Value</h3>
+                                        </div>
+                                        <div className="flex flex-col gap-2 p-2.5 bg-slate-50/50 rounded-[1.5rem] border border-slate-100">
+                                            {(['sum_qty', 'sum_total', 'count_trx'] as AggregationType[]).map(m => (
+                                                <Button
+                                                    key={m}
+                                                    variant={metrics.includes(m) ? 'default' : 'ghost'}
+                                                    size="sm"
+                                                    className={cn(
+                                                        "h-10 text-[10px] px-4 rounded-xl uppercase font-black tracking-widest transition-all justify-start gap-3",
+                                                        metrics.includes(m) 
+                                                            ? "bg-white text-indigo-600 shadow-md ring-1 ring-indigo-100" 
+                                                            : "text-slate-400 hover:text-indigo-600 hover:bg-white"
+                                                    )}
+                                                    onClick={() => {
+                                                        if (metrics.includes(m)) {
+                                                            if (metrics.length > 1) setMetrics(metrics.filter(x => x !== m));
+                                                        } else {
+                                                            setMetrics([...metrics, m]);
+                                                        }
+                                                    }}
+                                                >
+                                                    <div className={cn("w-2 h-2 rounded-full", metrics.includes(m) ? "bg-indigo-500 animate-pulse" : "bg-slate-200")} />
+                                                    {m === 'sum_total' ? 'RP' : m === 'sum_qty' ? 'QUANTITY' : 'TRANSAKSI'}
+                                                </Button>
+                                            ))}
+                                        </div>
+                                    </div>
+
+                                    <div className="space-y-5">
+                                        <div className="flex items-center gap-3">
+                                            <div className="p-2.5 rounded-2xl bg-slate-100 text-slate-500 ring-1 ring-slate-200/50">
+                                                <SortAsc className="w-4 h-4" />
+                                            </div>
+                                            <h3 className="text-sm font-black text-slate-800 uppercase tracking-widest">Urutan (Sort)</h3>
+                                        </div>
+                                        <div className="flex flex-col gap-4 p-4 bg-slate-50/50 rounded-[1.5rem] border border-slate-100">
+                                            {/* Sort Basis */}
+                                            <div className="grid grid-cols-2 gap-2 p-1.5 bg-white/50 rounded-2xl ring-1 ring-slate-200/30">
+                                                <Button
+                                                    variant={sortBy === 'label' ? 'default' : 'ghost'}
+                                                    size="sm"
+                                                    className={cn(
+                                                        "h-9 rounded-xl transition-all font-black text-[9px] tracking-widest gap-2",
+                                                        sortBy === 'label' ? "bg-white text-indigo-600 shadow-md ring-1 ring-indigo-100" : "text-slate-400 hover:text-indigo-600 hover:bg-white"
+                                                    )}
+                                                    onClick={() => setSortBy('label')}
+                                                >
+                                                    <Tag className="w-3 h-3" /> LABEL
+                                                </Button>
+                                                <Button
+                                                    variant={sortBy === 'value' ? 'default' : 'ghost'}
+                                                    size="sm"
+                                                    className={cn(
+                                                        "h-9 rounded-xl transition-all font-black text-[9px] tracking-widest gap-2",
+                                                        sortBy === 'value' ? "bg-white text-indigo-600 shadow-md ring-1 ring-indigo-100" : "text-slate-400 hover:text-indigo-600 hover:bg-white"
+                                                    )}
+                                                    onClick={() => setSortBy('value')}
+                                                >
+                                                    <BarChart3 className="w-3 h-3" /> VALUE
+                                                </Button>
+                                            </div>
+
+                                            {/* Sort Direction */}
+                                            <div className="grid grid-cols-2 gap-2">
+                                                <Button
+                                                    variant={sortOrder === 'asc' ? 'default' : 'ghost'}
+                                                    size="sm"
+                                                    className={cn(
+                                                        "h-9 rounded-xl transition-all font-black text-[9px] tracking-widest gap-2",
+                                                        sortOrder === 'asc' ? "bg-white text-emerald-600 shadow-md ring-1 ring-emerald-100" : "text-slate-400 hover:text-emerald-600 hover:bg-white"
+                                                    )}
+                                                    onClick={() => setSortOrder('asc')}
+                                                >
+                                                    <SortAsc className="w-3.5 h-3.5" /> ASC
+                                                </Button>
+                                                <Button
+                                                    variant={sortOrder === 'desc' ? 'default' : 'ghost'}
+                                                    size="sm"
+                                                    className={cn(
+                                                        "h-9 rounded-xl transition-all font-black text-[9px] tracking-widest gap-2",
+                                                        sortOrder === 'desc' ? "bg-white text-orange-600 shadow-md ring-1 ring-orange-100" : "text-slate-400 hover:text-orange-600 hover:bg-white"
+                                                    )}
+                                                    onClick={() => setSortOrder('desc')}
+                                                >
+                                                    <SortDesc className="w-3.5 h-3.5" /> DESC
+                                                </Button>
+                                            </div>
+                                        </div>
+                                    </div>
                                 </div>
                             </div>
+                        </div>
+                    </CardContent>
+                </Card>
 
-                            {/* Metrik & Sorting */}
-                            <div className="md:col-span-4 grid grid-cols-1 sm:grid-cols-2 gap-4">
-                                <div className="space-y-3">
-                                    <div className="flex items-center gap-2 text-slate-500 font-bold ml-1">
-                                        <BarChart3 className="w-3.5 h-3.5" />
-                                        <span className="text-[10px] uppercase tracking-wider">Metrik</span>
-                                    </div>
-                                    <div className="flex flex-wrap gap-1 p-1 bg-slate-50 rounded-xl border border-slate-100 h-10">
-                                        {(['sum_qty', 'sum_total', 'count_trx'] as AggregationType[]).map(m => (
-                                            <Button
-                                                key={m}
-                                                variant={metrics.includes(m) ? 'default' : 'ghost'}
-                                                size="sm"
-                                                className="flex-1 h-full text-[9px] px-1 rounded-lg uppercase font-bold"
-                                                onClick={() => {
-                                                    if (metrics.includes(m)) {
-                                                        if (metrics.length > 1) setMetrics(metrics.filter(x => x !== m));
-                                                    } else {
-                                                        setMetrics([...metrics, m]);
-                                                    }
-                                                }}
-                                            >
-                                                {m === 'sum_total' ? 'Rp' : m === 'sum_qty' ? 'Qty' : 'Trx'}
-                                            </Button>
-                                        ))}
-                                    </div>
-                                </div>
-                                <div className="space-y-3">
-                                    <div className="flex items-center gap-2 text-slate-500 font-bold ml-1">
-                                        <SortAsc className="w-3.5 h-3.5" />
-                                        <span className="text-[10px] uppercase tracking-wider">Urutan</span>
-                                    </div>
-                                    <div className="flex gap-1 h-10 p-1 bg-slate-50 rounded-xl border border-slate-100">
-                                        <Button
-                                            variant={sortOrder === 'asc' ? 'default' : 'ghost'}
-                                            size="icon"
-                                            className="flex-1 h-full rounded-lg"
-                                            onClick={() => setSortOrder('asc')}
-                                        >
-                                            <SortAsc className="w-3.5 h-3.5" />
-                                        </Button>
-                                        <Button
-                                            variant={sortOrder === 'desc' ? 'default' : 'ghost'}
-                                            size="icon"
-                                            className="flex-1 h-full rounded-lg"
-                                            onClick={() => setSortOrder('desc')}
-                                        >
-                                            <SortDesc className="w-3.5 h-3.5" />
-                                        </Button>
-                                    </div>
+                {/* Main Results Table Card */}
+                <Card className="border-none shadow-[0_32px_64px_-12px_rgba(0,0,0,0.12)] rounded-[3rem] bg-white/80 backdrop-blur-2xl ring-1 ring-slate-200/50">
+                    <CardHeader className="py-10 px-10 bg-slate-50/30 border-b border-slate-100/80 flex flex-col md:flex-row items-start md:items-center justify-between gap-8">
+                        <div className="flex items-center gap-6">
+                            <div className="relative group">
+                                <div className="absolute inset-0 bg-indigo-500 blur-xl opacity-40 rounded-full group-hover:opacity-60 transition-opacity"></div>
+                                <div className="relative bg-slate-900 p-5 rounded-[1.75rem] shadow-2xl shadow-indigo-100 rotate-6 group-hover:rotate-0 transition-transform duration-500">
+                                    <LayoutGrid className="w-6 h-6 text-indigo-400" />
                                 </div>
                             </div>
+                            <div className="flex flex-col gap-1.5">
+                                <div className="flex items-center gap-3">
+                                    <h2 className="text-2xl font-black tracking-tighter text-slate-900 uppercase">Pivot Analysis Results</h2>
+                                    <Badge className="bg-indigo-600 text-[10px] font-black px-3 py-1 rounded-lg shadow-lg shadow-indigo-100">
+                                        {flatData.length} RECORDS
+                                    </Badge>
+                                </div>
+                                <p className="text-slate-400 text-xs font-bold uppercase tracking-[0.2em]">Generated dynamic report based on current schema</p>
+                            </div>
                         </div>
-                    </div>
-                </CardContent>
-            </Card>
-
-            {/* Table Area with Controls */}
-            <Card className="border-none shadow-xl rounded-2xl overflow-hidden bg-white/90 backdrop-blur-md ring-1 ring-slate-200/50">
-                <CardHeader className="py-4 px-4 sm:px-6 bg-slate-50/50 border-b border-slate-100 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 sm:space-y-0">
-                    <CardTitle className="text-sm font-bold flex items-center gap-3 text-slate-800">
-                        <div className="bg-primary/10 p-2 rounded-xl">
-                            <LayoutGrid className="w-4 h-4 text-primary" />
+                        <div className="flex items-center gap-4 bg-white/50 backdrop-blur-sm p-2 rounded-[1.5rem] border border-slate-100 shadow-sm">
+                            <Button 
+                                variant="ghost" 
+                                size="sm" 
+                                className="h-11 px-6 text-[10px] font-black rounded-2xl gap-3 text-slate-600 hover:text-indigo-600 hover:bg-white transition-all shadow-none hover:shadow-lg hover:shadow-indigo-50"
+                                onClick={() => expandAll(Object.values(pivotTable.root))}
+                            >
+                                <Maximize2 className="w-4 h-4" /> EXPAND ALL
+                            </Button>
+                            <div className="w-px h-6 bg-slate-200"></div>
+                            <Button 
+                                variant="ghost" 
+                                size="sm" 
+                                className="h-11 px-6 text-[10px] font-black rounded-2xl gap-3 text-slate-600 hover:text-indigo-600 hover:bg-white transition-all shadow-none hover:shadow-lg hover:shadow-indigo-50"
+                                onClick={collapseAll}
+                            >
+                                <Minimize2 className="w-4 h-4" /> COLLAPSE ALL
+                            </Button>
                         </div>
-                        <div>
-                            <p>Hasil Analisa Pivot</p>
-                            <p className="text-[10px] font-normal text-slate-500 uppercase tracking-widest mt-0.5">
-                                {flatData.length} Data Diproses
-                            </p>
-                        </div>
-                    </CardTitle>
-                    <div className="flex items-center gap-2 w-full sm:w-auto">
-                        <Button 
-                            variant="outline" 
-                            size="sm" 
-                            className="h-8 flex-1 sm:flex-none text-[10px] font-bold rounded-lg gap-1.5"
-                            onClick={() => expandAll(Object.values(pivotTable.root))}
-                        >
-                            <Maximize2 className="w-3 h-3" /> <span className="hidden xs:inline">EKSPAND SEMUA</span><span className="xs:hidden">EKSPAND</span>
-                        </Button>
-                        <Button 
-                            variant="outline" 
-                            size="sm" 
-                            className="h-8 flex-1 sm:flex-none text-[10px] font-bold rounded-lg gap-1.5"
-                            onClick={collapseAll}
-                        >
-                            <Minimize2 className="w-3 h-3" /> <span className="hidden xs:inline">CIUTKAN SEMUA</span><span className="xs:hidden">CIUTKAN</span>
-                        </Button>
-                    </div>
-                </CardHeader>
-                <CardContent className="p-0">
-                    <ScrollArea className="h-[600px] w-full">
-                        <div className="min-w-max">
-                            <Table>
-                            <TableHeader className="sticky top-0 bg-white z-30 shadow-md">
-                                <TableRow className="hover:bg-transparent border-b-2 border-slate-100">
-                                    <TableHead rowSpan={metrics.length > 1 ? 2 : 1} className="min-w-[280px] pl-6 py-4 font-black text-[10px] uppercase tracking-tighter text-slate-900 border-r bg-slate-50/80">
-                                        STRUKTUR HIERARKI BARIS
-                                    </TableHead>
-                                    {pivotTable.cols.map(col => (
-                                        <TableHead key={col} colSpan={metrics.length} className="text-center min-w-[130px] px-4 py-2 font-black text-[10px] uppercase tracking-tighter text-slate-900 bg-white border-r last:border-r-0 border-slate-50">
-                                            {col}
-                                        </TableHead>
-                                    ))}
-                                    <TableHead colSpan={metrics.length} className="text-center min-w-[150px] px-6 py-2 font-black text-[10px] uppercase tracking-tighter text-primary bg-primary/5 border-l-2 border-primary/10">
-                                        TOTAL KESELURUHAN
-                                    </TableHead>
-                                </TableRow>
-                                {metrics.length > 1 && (
-                                    <TableRow className="hover:bg-transparent border-b-2 border-slate-100">
-                                        {pivotTable.cols.map(col => (
-                                            <React.Fragment key={col}>
+                    </CardHeader>
+                    <CardContent className="p-0">
+                        <div className="w-full overflow-x-auto custom-scrollbar">
+                            <div className="min-w-max pb-12">
+                                <Table>
+                                    <TableHeader className="sticky top-0 bg-white/95 backdrop-blur-xl z-40 shadow-sm">
+                                        <TableRow className="hover:bg-transparent border-b-2 border-slate-100/50">
+                                            <TableHead rowSpan={metrics.length > 1 ? 2 : 1} className="min-w-[380px] pl-10 py-8 font-black text-[10px] uppercase tracking-[0.3em] text-slate-400 border-r border-slate-100/50 bg-slate-50/20">
+                                                Hierarchy Structure
+                                            </TableHead>
+                                            {pivotTable.cols.map(col => (
+                                                <TableHead key={col} colSpan={metrics.length} className="text-center min-w-[160px] px-8 py-5 font-black text-xs uppercase tracking-widest text-slate-900 bg-white border-r last:border-r-0 border-slate-100/50">
+                                                    {col}
+                                                </TableHead>
+                                            ))}
+                                            <TableHead colSpan={metrics.length} className="text-center min-w-[200px] px-10 py-5 font-black text-xs uppercase tracking-[0.2em] text-indigo-700 bg-indigo-50/30 border-l-2 border-indigo-100/50">
+                                                Grand Summary
+                                            </TableHead>
+                                        </TableRow>
+                                        {metrics.length > 1 && (
+                                            <TableRow className="hover:bg-transparent border-b-2 border-slate-100/50 bg-white/50">
+                                                {pivotTable.cols.map(col => (
+                                                    <React.Fragment key={col}>
+                                                        {metrics.map(m => (
+                                                            <TableHead key={`${col}-${m}`} className="text-right px-6 py-4 font-black text-[9px] uppercase tracking-widest text-slate-400 border-r border-slate-100/30">
+                                                                {m === 'sum_total' ? 'RP' : m === 'sum_qty' ? 'QTY' : 'TRX'}
+                                                            </TableHead>
+                                                        ))}
+                                                    </React.Fragment>
+                                                ))}
                                                 {metrics.map(m => (
-                                                    <TableHead key={`${col}-${m}`} className="text-right px-2 py-2 font-bold text-[9px] uppercase text-slate-500 border-r border-slate-50">
-                                                        {m === 'sum_total' ? 'Rp' : m === 'sum_qty' ? 'Qty' : 'Trx'}
+                                                    <TableHead key={`total-head-${m}`} className="text-right px-8 py-4 font-black text-[9px] uppercase tracking-widest text-indigo-500/60 border-r border-indigo-100/20 last:border-r-0">
+                                                        {m === 'sum_total' ? 'RP' : m === 'sum_qty' ? 'QTY' : 'TRX'}
                                                     </TableHead>
                                                 ))}
-                                            </React.Fragment>
-                                        ))}
-                                        {metrics.map(m => (
-                                            <TableHead key={`total-head-${m}`} className="text-right px-2 py-2 font-bold text-[9px] uppercase text-primary border-r border-primary/5 last:border-r-0">
-                                                {m === 'sum_total' ? 'Rp' : m === 'sum_qty' ? 'Qty' : 'Trx'}
-                                            </TableHead>
-                                        ))}
-                                    </TableRow>
-                                )}
-                            </TableHeader>
-                            <TableBody>
-                                {Object.values(pivotTable.root).length === 0 ? (
-                                    <TableRow>
-                                        <TableCell colSpan={1 + (pivotTable.cols.length + 1) * metrics.length} className="h-60 text-center">
-                                            <div className="flex flex-col items-center justify-center gap-2 text-slate-400">
-                                                <div className="w-12 h-12 bg-slate-50 rounded-full flex items-center justify-center border border-slate-100">
-                                                    <ListFilter className="w-6 h-6 opacity-20" />
-                                                </div>
-                                                <p className="text-sm font-medium">Tidak ada data ditemukan</p>
-                                                <p className="text-[10px] uppercase tracking-widest">Coba atur filter atau periode</p>
-                                            </div>
-                                        </TableCell>
-                                    </TableRow>
-                                ) : (
-                                    <>
-                                        {Object.values(pivotTable.root).map((node: any) => (
-                                            <RenderPivotRow key={node.id} node={node} cols={pivotTable.cols} metrics={metrics} />
-                                        ))}
-                                        {/* Grand Total Row */}
-                                        <TableRow className="bg-primary/10 hover:bg-primary/15 border-t-4 border-white sticky bottom-0 z-20 backdrop-blur-sm">
-                                            <TableCell className="font-black text-primary pl-6 py-4 border-r border-primary/10 text-xs tracking-wider">GRAND TOTAL</TableCell>
-                                            {pivotTable.cols.map(col => (
-                                                <React.Fragment key={col}>
-                                                    {metrics.map(m => (
-                                                        <TableCell key={`${col}-${m}`} className="text-right font-black tabular-nums text-primary px-4 py-4 text-xs border-r border-primary/5 last:border-r-0">
-                                                            {pivotTable.grandTotal[col] && pivotTable.grandTotal[col][m] ? formatMetricValue(pivotTable.grandTotal[col][m], m) : '-'}
-                                                        </TableCell>
-                                                    ))}
-                                                </React.Fragment>
-                                            ))}
-                                            {metrics.map(m => {
-                                                const totalValue = pivotTable.overallTotal[m] || 0;
-                                                return (
-                                                    <TableCell key={`grand-total-${m}`} className="text-right font-black text-primary border-l-2 border-primary/20 tabular-nums px-6 py-4 text-sm bg-primary/10">
-                                                        {formatMetricValue(totalValue, m)}
+                                            </TableRow>
+                                        )}
+                                    </TableHeader>
+                                    <TableBody>
+                                        {Object.values(pivotTable.root).length === 0 ? (
+                                            <TableRow>
+                                                <TableCell colSpan={1 + (pivotTable.cols.length + 1) * metrics.length} className="h-[500px] text-center">
+                                                    <div className="flex flex-col items-center justify-center gap-6">
+                                                        <div className="relative">
+                                                            <div className="absolute inset-0 bg-slate-100 blur-3xl opacity-50 rounded-full scale-150"></div>
+                                                            <div className="relative w-32 h-32 bg-white rounded-[3rem] shadow-2xl flex items-center justify-center border border-slate-100">
+                                                                <Filter className="w-12 h-12 text-slate-200 animate-pulse" />
+                                                            </div>
+                                                        </div>
+                                                        <div className="flex flex-col gap-2">
+                                                            <p className="text-xl font-black text-slate-800 tracking-tight">No analytics found</p>
+                                                            <p className="text-xs uppercase tracking-[0.3em] font-bold text-slate-400">Adjust your engine filters or date range</p>
+                                                        </div>
+                                                    </div>
+                                                </TableCell>
+                                            </TableRow>
+                                        ) : (
+                                            <>
+                                                {Object.values(pivotTable.root).map((node: any) => (
+                                                    <RenderPivotRow key={node.id} node={node} cols={pivotTable.cols} metrics={metrics} />
+                                                ))}
+                                                {/* Sticky Grand Total Row */}
+                                                <TableRow className="bg-slate-900 border-t-8 border-white sticky bottom-0 z-30 transition-all shadow-[0_-10px_40px_rgba(0,0,0,0.1)] hover:bg-slate-900">
+                                                    <TableCell className="font-black text-white pl-10 py-8 border-r border-slate-800 text-[12px] uppercase tracking-[0.4em]">
+                                                        <div className="flex items-center gap-4">
+                                                            <Trophy className="w-5 h-5 text-indigo-400" />
+                                                            TOTAL ENGINE SUMMARY
+                                                        </div>
                                                     </TableCell>
-                                                );
-                                            })}
-                                        </TableRow>
-                                    </>
-                                )}
-                            </TableBody>
-                        </Table>
-                    </div>
-                    <ScrollBar orientation="horizontal" />
-                </ScrollArea>
-                </CardContent>
-            </Card>
+                                                    {pivotTable.cols.map(col => (
+                                                        <React.Fragment key={col}>
+                                                            {metrics.map(m => (
+                                                                <TableCell key={`${col}-${m}`} className="text-right font-black tabular-nums text-indigo-100 px-8 py-8 text-xs border-r border-slate-800 last:border-r-0 opacity-90">
+                                                                    {pivotTable.grandTotal[col] && pivotTable.grandTotal[col][m] ? formatMetricValue(pivotTable.grandTotal[col][m], m) : '-'}
+                                                                </TableCell>
+                                                            ))}
+                                                        </React.Fragment>
+                                                    ))}
+                                                    {metrics.map(m => {
+                                                        const totalValue = pivotTable.overallTotal[m] || 0;
+                                                        return (
+                                                            <TableCell key={`grand-total-${m}`} className="text-right font-black text-white border-l-2 border-indigo-500/50 tabular-nums px-10 py-8 text-sm bg-indigo-900/40 backdrop-blur-md">
+                                                                {formatMetricValue(totalValue, m)}
+                                                            </TableCell>
+                                                        );
+                                                    })}
+                                                </TableRow>
+                                            </>
+                                        )}
+                                    </TableBody>
+                                </Table>
+                            </div>
+                        </div>
+                    </CardContent>
+                </Card>
+            </motion.div>
         </div>
     );
 }

@@ -208,12 +208,13 @@ export default function ImportPenjualan() {
   };
 
   const analyzeMappings = (rows: ImportRow[]) => {
-    const isSimilar = (a: string, b: string) => {
+    const isSimilar = (a: string, b: string, strict = false) => {
       if (!a || !b) return false;
       const cleanA = a.toLowerCase().replace(/[^a-z0-9]/g, '');
       const cleanB = b.toLowerCase().replace(/[^a-z0-9]/g, '');
       if (cleanA === cleanB) return true;
-      if (cleanA.length > 3 && cleanB.length > 3) {
+      
+      if (!strict && cleanA.length > 3 && cleanB.length > 3) {
         return cleanA.includes(cleanB) || cleanB.includes(cleanA);
       }
       return false;
@@ -286,7 +287,7 @@ export default function ImportPenjualan() {
         }
       }
 
-      // Produk
+      // Produk - Stricter matching to avoid merging variants like "VANBOLD" and "VANBOLD SKT"
       const produkName = row.produk?.trim();
       if (produkName) {
         const lowerProd = produkName.toLowerCase();
@@ -294,7 +295,7 @@ export default function ImportPenjualan() {
           const found = dbBarang.find(b =>
             b.nama.toLowerCase() === lowerProd ||
             b.kode?.toLowerCase() === lowerProd
-          ) || dbBarang.find(b => isSimilar(b.nama, lowerProd) || (b.kode && isSimilar(b.kode, lowerProd)));
+          ) || dbBarang.find(b => isSimilar(b.nama, lowerProd, true)); // Use strict matching for products
 
           newMappings.produk[lowerProd] = {
             existing: !!found,
@@ -327,10 +328,22 @@ export default function ImportPenjualan() {
       const firstRowPerPelanggan: Record<string, any> = {};
 
       data.forEach(row => {
-        if (row.cabang && !firstRowPerCabang[row.cabang]) firstRowPerCabang[row.cabang] = row;
-        if (row.salesman && !firstRowPerSales[row.salesman]) firstRowPerSales[row.salesman] = row;
-        if (row.produk && !firstRowPerProduk[row.produk]) firstRowPerProduk[row.produk] = row;
-        if (row.pelanggan && !firstRowPerPelanggan[row.pelanggan]) firstRowPerPelanggan[row.pelanggan] = row;
+        if (row.cabang) {
+          const key = row.cabang.toLowerCase();
+          if (!firstRowPerCabang[key]) firstRowPerCabang[key] = row;
+        }
+        if (row.salesman) {
+          const key = row.salesman.toLowerCase();
+          if (!firstRowPerSales[key]) firstRowPerSales[key] = row;
+        }
+        if (row.produk) {
+          const key = row.produk.toLowerCase();
+          if (!firstRowPerProduk[key]) firstRowPerProduk[key] = row;
+        }
+        if (row.pelanggan) {
+          const key = normalizeCustomer(row.pelanggan);
+          if (!firstRowPerPelanggan[key]) firstRowPerPelanggan[key] = row;
+        }
       });
 
       // Get defaults
@@ -379,7 +392,7 @@ export default function ImportPenjualan() {
 
       if (newSalesList.length > 0) {
         const salesData = newSalesList.map(name => {
-          const salesmanRow = firstRowPerSales[finalMappings.salesman[name].name];
+          const salesmanRow = firstRowPerSales[name];
           const cabangId = finalMappings.cabang[salesmanRow?.cabang?.toLowerCase() || '']?.id || defaultCabangId;
           const username = name.toLowerCase().replace(/\s+/g, '_') + '_' + Math.random().toString(36).substring(2, 5);
           return {
@@ -407,13 +420,13 @@ export default function ImportPenjualan() {
 
       if (newProdList.length > 0) {
         const prodData = newProdList.map(name => ({
-          nama: name,
+          nama: finalMappings.produk[name].name,
           kode: name.substring(0, 10).toUpperCase() + Math.random().toString(36).substring(2, 5).toUpperCase(),
           kategori_id: defaultKategoriId,
           satuan_id: defaultSatuanId,
           harga_beli: 0,
           harga_jual: firstRowPerProduk[name]?.harga || 0,
-          is_active: false
+          is_active: true
         }));
         const { data: res, error } = await supabase.from('barang').insert(prodData).select();
         if (error) throw error;
@@ -437,8 +450,8 @@ export default function ImportPenjualan() {
         for (let i = 0; i < newPelList.length; i += chunkSize) {
           const chunk = newPelList.slice(i, i + chunkSize);
           const pelData = chunk.map(name => {
+            const row = firstRowPerPelanggan[name];
             const originalName = finalMappings.pelanggan[name].name;
-            const row = firstRowPerPelanggan[originalName];
             const cabangId = finalMappings.cabang[row?.cabang?.toLowerCase() || '']?.id || defaultCabangId;
             const salesId = finalMappings.salesman[row?.salesman?.toLowerCase() || '']?.id || defaultSalesId;
 
