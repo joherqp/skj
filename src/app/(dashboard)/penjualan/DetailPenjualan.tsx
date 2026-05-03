@@ -7,7 +7,7 @@ import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { PembayaranPenjualan, Penjualan, PenjualanItem } from '@/types';
-import { formatRupiah, formatTanggal, formatWaktu, cn, formatWhatsAppNumber } from '@/lib/utils';
+import { formatRupiah, formatTanggal, formatWaktu, cn, formatWhatsAppNumber, formatNumber } from '@/lib/utils';
 import { supabase } from '@/lib/supabase';
 import { Share2, Printer, ArrowLeft, Calendar, Loader2, DollarSign, History, CreditCard, MapPin, User, ShoppingBag, Receipt, MessageCircle, Phone, Gift } from 'lucide-react';
 import { toast } from 'sonner';
@@ -234,7 +234,7 @@ export default function DetailPenjualan() {
         const items = trx.items.map(item => {
             const product = barang.find(b => b.id === item.barangId);
             const unit = satuan.find(s => s.id === item.satuanId);
-            let text = `• ${product?.nama || 'Item'} (${item.jumlah} ${unit?.simbol || 'pcs'}) - ${formatRupiah(item.subtotal)}`;
+            let text = `• ${product?.nama || 'Item'} (${formatNumber(item.jumlah)} ${unit?.simbol || 'pcs'}) - ${formatRupiah(item.subtotal)}`;
             if (item.earnedReward) {
                 text += `\n  🎁 Hadiah: ${item.earnedReward.hadiah} (${item.earnedReward.qty}x)`;
             }
@@ -346,7 +346,7 @@ ${profilPerusahaan.nama}`;
                                         <td colSpan={2} className="py-1">
                                             <div className="font-bold uppercase">{product?.nama || item.barangId}</div>
                                             <div className="flex justify-between pl-2">
-                                                <span>{item.jumlah} {unit?.simbol} x {formatRupiah(item.harga).replace('Rp', '')}</span>
+                                                <span>{formatNumber(item.jumlah)} {unit?.simbol} x {formatRupiah(item.harga).replace('Rp', '')}</span>
                                                 <span className="font-bold">{formatRupiah(item.subtotal).replace('Rp', '')}</span>
                                             </div>
                                             {item.isBonus && <div className="text-[9px] font-bold italic pl-2">*** ITEM BONUS ***</div>}
@@ -486,7 +486,7 @@ ${profilPerusahaan.nama}`;
                                                 </div>
                                             )}
                                         </td>
-                                        <td className="py-3 text-center">{item.jumlah} {unit?.simbol}</td>
+                                        <td className="py-3 text-center">{formatNumber(item.jumlah)} {unit?.simbol}</td>
                                         <td className="py-3 text-right">{formatRupiah(item.harga)}</td>
                                         <td className="py-3 text-right font-bold">{formatRupiah(item.subtotal)}</td>
                                     </tr>
@@ -706,7 +706,7 @@ ${profilPerusahaan.nama}`;
                                     </div>
                                     <div className="flex justify-between text-sm">
                                         <span className="text-muted-foreground">Qty Keseluruhan</span>
-                                        <span className="font-bold">{trx.items.reduce((s, i) => s + i.jumlah, 0)}</span>
+                                        <span className="font-bold">{formatNumber(trx.items.reduce((s, i) => s + i.jumlah, 0))}</span>
                                     </div>
                                 </div>
                             </div>
@@ -735,7 +735,7 @@ ${profilPerusahaan.nama}`;
                                         <div className="flex justify-between items-center text-xs">
                                             <div className="flex items-center gap-1.5">
                                                 <Badge variant="outline" className="h-5 px-1.5 font-bold">
-                                                    {item.jumlah} {unit?.simbol}
+                                                    {formatNumber(item.jumlah)} {unit?.simbol}
                                                 </Badge>
                                                 <span className="text-muted-foreground">@ {formatRupiah(item.harga)}</span>
                                             </div>
@@ -801,7 +801,7 @@ ${profilPerusahaan.nama}`;
                                                     </div>
                                                 </TableCell>
                                                 <TableCell className="text-center">
-                                                    <span className="font-bold">{item.jumlah}</span>
+                                                    <span className="font-bold">{formatNumber(item.jumlah)}</span>
                                                     <span className="text-xs text-muted-foreground ml-1">{unit?.simbol}</span>
                                                 </TableCell>
                                                 <TableCell className="text-right font-mono text-xs">{formatRupiah(item.harga)}</TableCell>

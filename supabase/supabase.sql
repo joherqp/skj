@@ -30,7 +30,9 @@ CREATE TABLE IF NOT EXISTS public.users (
   kode_unik text,
   avatar_url text,
   is_active boolean,
+  email_verified boolean,
   created_at timestamp with time zone,
+  updated_at timestamp with time zone,
   start_date timestamp with time zone,
   end_date timestamp with time zone
 );

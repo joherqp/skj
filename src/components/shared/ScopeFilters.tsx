@@ -21,6 +21,7 @@ interface ScopeFiltersProps {
     setSelectedCabangIds: (ids: string[]) => void;
     selectedUserIds: string[];
     setSelectedUserIds: (ids: string[]) => void;
+    showBranchFilter?: boolean;
     showUserFilter?: boolean;
     availableCabangIds?: string[];
     availableUserIds?: string[];
@@ -32,6 +33,7 @@ export function ScopeFilters({
     setSelectedCabangIds,
     selectedUserIds,
     setSelectedUserIds,
+    showBranchFilter = true,
     showUserFilter = true,
     availableCabangIds,
     availableUserIds,
@@ -42,7 +44,7 @@ export function ScopeFilters({
     const [cabangSearch, setCabangSearch] = useState('');
     const [userSearch, setUserSearch] = useState('');
 
-    const isAdminOrOwner = currentUser?.roles.some(r => ['admin', 'owner'].includes(r));
+    const isAdminOrOwner = currentUser?.roles.some(r => ['admin', 'owner', 'manager', 'finance'].includes(r));
     const isLeader = currentUser?.roles.includes('leader');
     const isFinance = currentUser?.roles.includes('finance');
 
@@ -77,7 +79,7 @@ export function ScopeFilters({
 
             const matchesSearch = u.nama.toLowerCase().includes(userSearch.toLowerCase());
             const isAvailable = !availableUserIds || availableUserIds.includes(u.id);
-            
+
             return matchesSearch && isAvailable;
         })
         .sort((a, b) => a.nama.localeCompare(b.nama));
@@ -85,11 +87,11 @@ export function ScopeFilters({
     return (
         <div className={`space-y-4 ${className}`}>
             {/* Branch Filter (Admin/Owner only) */}
-            {isAdminOrOwner && (
+            {isAdminOrOwner && showBranchFilter && (
                 <HydrationBoundary>
                     <DropdownMenu>
                         <DropdownMenuTrigger asChild>
-                            <Button variant="outline" className="h-12 text-xs justify-between bg-white/50 backdrop-blur-sm font-bold px-4 sm:px-5 border-slate-200 hover:border-indigo-400 hover:ring-4 hover:ring-indigo-50 transition-all rounded-2xl shadow-sm w-full sm:min-w-[160px] sm:w-auto">
+                            <Button variant="outline" className="h-9 text-xs justify-between bg-white/50 backdrop-blur-sm font-bold px-3 border-slate-200 hover:border-indigo-400 hover:ring-2 hover:ring-indigo-50 transition-all rounded-xl shadow-sm w-full sm:min-w-[140px] sm:w-auto">
                                 <div className="flex items-center gap-2 sm:gap-3 truncate">
                                     <div className="p-1.5 rounded-lg bg-indigo-500/10 text-indigo-600">
                                         <Building className="w-4 h-4 shrink-0" />
@@ -120,25 +122,20 @@ export function ScopeFilters({
                                     />
                                 </div>
                             </div>
-                            <div className="flex items-center justify-between px-3 py-2 border-b bg-muted/20">
-                                <Button 
-                                    variant="ghost" 
-                                    size="sm" 
-                                    className="h-7 text-[10px] text-primary hover:text-primary hover:bg-primary/5 text-xs font-semibold"
-                                    onClick={() => setSelectedCabangIds([])}
+                            <div className="flex items-center justify-center px-3 py-2 border-b bg-muted/20">
+                                <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    className={`h-7 w-full text-[10px] font-bold transition-all ${selectedCabangIds.length === 0
+                                        ? "text-rose-600 hover:bg-rose-50 hover:text-rose-700"
+                                        : "text-indigo-600 hover:bg-indigo-50 hover:text-indigo-700"
+                                        }`}
+                                    onClick={() => setSelectedCabangIds(selectedCabangIds.length === 0 ? ['__none__'] : [])}
                                 >
-                                    PILIH SEMUA
-                                </Button>
-                                <Button 
-                                    variant="ghost" 
-                                    size="sm" 
-                                    className="h-7 text-[10px] text-muted-foreground hover:bg-muted text-xs font-semibold"
-                                    onClick={() => setSelectedCabangIds(['__none__'])}
-                                >
-                                    BATAL SEMUA
+                                    {selectedCabangIds.length === 0 ? "BATAL SEMUA" : "PILIH SEMUA"}
                                 </Button>
                             </div>
-                            <div className="flex-1 overflow-y-auto p-1 space-y-1.5">
+                            <div className="flex-1 overflow-y-auto p-1 space-y-0.25">
                                 {branchOptions.length === 0 && (
                                     <div className="p-4 text-center text-muted-foreground text-[10px]">
                                         Tidak ada data
@@ -147,7 +144,7 @@ export function ScopeFilters({
                                 {branchOptions.map(c => {
                                     const isAllSelected = selectedCabangIds.length === 0;
                                     const isChecked = !selectedCabangIds.includes('__none__') && (isAllSelected || selectedCabangIds.includes(c.id));
-                                    
+
                                     return (
                                         <DropdownMenuCheckboxItem
                                             key={c.id}
@@ -182,7 +179,8 @@ export function ScopeFilters({
                                                     }
                                                 }
                                             }}
-                                            className="rounded-xl text-xs py-3.5 pl-10 pr-5 font-medium"
+                                            onSelect={(e) => e.preventDefault()}
+                                            className="rounded-lg text-xs py-2 pl-8 pr-5 font-medium"
                                         >
                                             {c.nama}
                                         </DropdownMenuCheckboxItem>
@@ -198,7 +196,7 @@ export function ScopeFilters({
                 <HydrationBoundary>
                     <DropdownMenu>
                         <DropdownMenuTrigger asChild>
-                            <Button variant="outline" className="h-12 text-xs justify-between bg-white/50 backdrop-blur-sm font-bold px-4 sm:px-5 border-slate-200 hover:border-orange-400 hover:ring-4 hover:ring-orange-50 transition-all rounded-2xl shadow-sm w-full sm:min-w-[160px] sm:w-auto">
+                            <Button variant="outline" className="h-9 text-xs justify-between bg-white/50 backdrop-blur-sm font-bold px-3 border-slate-200 hover:border-orange-400 hover:ring-2 hover:ring-orange-50 transition-all rounded-xl shadow-sm w-full sm:min-w-[140px] sm:w-auto">
                                 <div className="flex items-center gap-2 sm:gap-3 truncate">
                                     <div className="p-1.5 rounded-lg bg-orange-500/10 text-orange-600">
                                         <Users className="w-4 h-4 shrink-0" />
@@ -229,25 +227,20 @@ export function ScopeFilters({
                                     />
                                 </div>
                             </div>
-                            <div className="flex items-center justify-between px-3 py-2 border-b bg-muted/20">
-                                <Button 
-                                    variant="ghost" 
-                                    size="sm" 
-                                    className="h-7 text-[10px] text-primary hover:text-primary hover:bg-primary/5 text-xs font-semibold"
-                                    onClick={() => setSelectedUserIds([])}
+                            <div className="flex items-center justify-center px-3 py-2 border-b bg-muted/20">
+                                <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    className={`h-7 w-full text-[10px] font-bold transition-all ${selectedUserIds.length === 0
+                                        ? "text-rose-600 hover:bg-rose-50 hover:text-rose-700"
+                                        : "text-orange-600 hover:bg-orange-50 hover:text-orange-700"
+                                        }`}
+                                    onClick={() => setSelectedUserIds(selectedUserIds.length === 0 ? ['__none__'] : [])}
                                 >
-                                    PILIH SEMUA
-                                </Button>
-                                <Button 
-                                    variant="ghost" 
-                                    size="sm" 
-                                    className="h-7 text-[10px] text-muted-foreground hover:bg-muted text-xs font-semibold"
-                                    onClick={() => setSelectedUserIds(['__none__'])}
-                                >
-                                    BATAL SEMUA
+                                    {selectedUserIds.length === 0 ? "BATAL SEMUA" : "PILIH SEMUA"}
                                 </Button>
                             </div>
-                            <div className="flex-1 overflow-y-auto p-1 space-y-1.5">
+                            <div className="flex-1 overflow-y-auto p-1 space-y-0.5">
                                 {userOptions.length === 0 && (
                                     <div className="p-4 text-center text-muted-foreground text-[10px]">
                                         Tidak ada data
@@ -286,7 +279,8 @@ export function ScopeFilters({
                                                     }
                                                 }
                                             }}
-                                            className="rounded-xl text-xs py-3.5 pl-10 pr-5 font-medium"
+                                            onSelect={(e) => e.preventDefault()}
+                                            className="rounded-lg text-xs py-2 pl-8 pr-5 font-medium"
                                         >
                                             {u.nama.toUpperCase()}
                                         </DropdownMenuCheckboxItem>

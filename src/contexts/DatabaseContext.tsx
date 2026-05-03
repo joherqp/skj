@@ -561,6 +561,13 @@ export function DatabaseProvider({ children }: { children: ReactNode }) {
       const arrayColumns = ['cabang_ids', 'target_produk_ids', 'bonus_produk_ids', 'kategori_pelanggan_ids'];
 
       const numericColumns = ['nilai', 'syarat_jumlah', 'min_qty', 'max_apply', 'jumlah', 'nominal', 'biaya'];
+      
+      // Handle known missing columns for specific tables
+      if (tableName === 'users') {
+        delete dbItem.email_verified;
+        delete dbItem.updated_at;
+      }
+
       Object.keys(dbItem).forEach(key => {
         if ((uuidColumns.includes(key) || key.endsWith('_id')) && dbItem[key] === '') {
           dbItem[key] = null;
@@ -628,6 +635,13 @@ export function DatabaseProvider({ children }: { children: ReactNode }) {
       const arrayColumns = ['cabang_ids', 'target_produk_ids', 'bonus_produk_ids', 'kategori_pelanggan_ids'];
 
       const numericColumns = ['nilai', 'syarat_jumlah', 'min_qty', 'max_apply', 'jumlah', 'nominal', 'biaya'];
+      
+      // Handle known missing columns for specific tables
+      if (tableName === 'users') {
+        delete dbItem.email_verified;
+        delete dbItem.updated_at;
+      }
+
       Object.keys(dbItem).forEach(key => {
         if ((uuidColumns.includes(key) || key.endsWith('_id')) && dbItem[key] === '') {
           dbItem[key] = null;

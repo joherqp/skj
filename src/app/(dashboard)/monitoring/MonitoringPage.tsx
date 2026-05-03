@@ -4,16 +4,15 @@ import { useSearchParams, useRouter } from 'next/navigation';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Input } from '@/components/ui/input';
 import { useDatabase } from '@/contexts/DatabaseContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
-import { MapPin, Clock, User, Activity, Users, ShoppingCart, Crosshair, Wallet, LogIn, LogOut, Map as MapIcon, Package, Store, PlusCircle, Home, TrendingUp, Coins, Target, CheckCircle, CheckCircle2, ListFilter, Building, Navigation, RotateCcw, Search, AlertTriangle } from 'lucide-react';
+import { MapPin, Clock, User, Activity, Users, ShoppingCart, Crosshair, Wallet, LogIn, LogOut, Map as MapIcon, Package, Store, PlusCircle, Home, TrendingUp, Coins, Target, CheckCircle, CheckCircle2, ListFilter, Building, Navigation, RotateCcw, Search, AlertTriangle, Calendar, X, ALargeSmall, Settings2 } from 'lucide-react';
 import { formatTanggal, formatWaktu, formatRupiah } from '@/lib/utils';
 import { differenceInMinutes } from 'date-fns';
 import { SalesRouteMap } from '@/components/features/components/SalesRouteMap';
-import { DatePickerWithRange } from '@/components/ui/date-range-picker';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { DateRange } from "react-day-picker";
 import { startOfDay, endOfDay } from "date-fns";
 import { Absensi, Pelanggan, Penjualan } from '@/types';
 
@@ -37,6 +36,7 @@ import {
     DropdownMenuSeparator,
     DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { ScopeFilters } from '@/components/shared/ScopeFilters';
 
 
 
@@ -52,8 +52,36 @@ export default function Monitoring() {
     const [selectedMarker, setSelectedMarker] = useState<MapMarker | null>(null);
     const [mapCenter, setMapCenter] = useState<{ lat: number; lng: number }>({ lat: -6.2088, lng: 106.8456 });
     const [selectedCabang, setSelectedCabang] = useState<string[]>([]);
+    const isLeader = useMemo(() => currentUser?.roles.includes('leader'), [currentUser]);
+
+    // Force branch selection for leaders
+    useEffect(() => {
+        if (isLeader && currentUser?.cabangId) {
+            setSelectedCabang([currentUser.cabangId]);
+        }
+    }, [isLeader, currentUser]);
+
     const [selectedUser, setSelectedUser] = useState<string[]>([]);
-    const [dateRange, setDateRange] = useState<DateRange | undefined>({ from: new Date(), to: new Date() });
+    const [isSingleDate, setIsSingleDate] = useState(true);
+    const [singleDate, setSingleDate] = useState(() => {
+        return new Date().toLocaleDateString('sv').split('T')[0];
+    });
+
+    const [startDate, setStartDate] = useState(() => {
+        const d = new Date();
+        d.setDate(1); // First day of the month
+        return d.toLocaleDateString('sv').split('T')[0];
+    });
+    const [endDate, setEndDate] = useState(() => {
+        return new Date().toLocaleDateString('sv').split('T')[0];
+    });
+
+    const filterDateRange = useMemo(() => {
+        const from = isSingleDate ? startOfDay(new Date(singleDate)) : startOfDay(new Date(startDate));
+        const to = isSingleDate ? endOfDay(new Date(singleDate)) : endOfDay(new Date(endDate));
+        return { from, to };
+    }, [isSingleDate, singleDate, startDate, endDate]);
+
     const [colorIndicator, setColorIndicator] = useState<'pengguna' | 'cabang' | 'kategori'>('kategori');
     const [duplicateThreshold, setDuplicateThreshold] = useState(15); // Default 15 meters
     const [duplicateSearch, setDuplicateSearch] = useState('');
@@ -70,10 +98,22 @@ export default function Monitoring() {
 
     // Tab State Management
     const searchParams = useSearchParams();
-    const activeTab = searchParams.get('tab') || 'explore';
+    const rawActiveTab = searchParams.get('tab') || 'explore';
+
+    // Validate active tab based on role
+    const activeTab = useMemo(() => {
+        if (isLeader && !['explore', 'double-toko'].includes(rawActiveTab)) {
+            return 'explore';
+        }
+        return rawActiveTab;
+    }, [isLeader, rawActiveTab]);
+
 
     // Search input states maintained for UI only
     const [mapSearchInput, setMapSearchInput] = useState('');
+    const [isMapSearchExpanded, setIsMapSearchExpanded] = useState(false);
+    const [isMapToolsExpanded, setIsMapToolsExpanded] = useState(false);
+    const [activeLegendFilters, setActiveLegendFilters] = useState<string[]>([]);
     const mapSearchRef = useRef<HTMLInputElement>(null);
 
     // Provide a search mechanism via marker titles or OpenStreetMap Nominatim
@@ -82,8 +122,8 @@ export default function Monitoring() {
 
         // First, search in current markers
         const searchLower = mapSearchInput.toLowerCase().trim();
-        const localMatch = markers.find(m => 
-            m.title.toLowerCase().includes(searchLower) || 
+        const localMatch = markers.find(m =>
+            m.title.toLowerCase().includes(searchLower) ||
             (m.userName && m.userName.toLowerCase().includes(searchLower)) ||
             (m.detail && m.detail.toLowerCase().includes(searchLower))
         );
@@ -150,11 +190,8 @@ export default function Monitoring() {
     // Calculate Team Markers
     const teamMarkers = useMemo(() => {
         const filteredAbsensi = absensi.filter(a => {
-            if (!dateRange?.from) return true;
             const d = new Date(a.tanggal);
-            const start = startOfDay(dateRange.from);
-            const end = endOfDay(dateRange.to || dateRange.from);
-            return d >= start && d <= end;
+            return d >= filterDateRange.from && d <= filterDateRange.to;
         });
 
         const userLatestAbsensi = new Map<string, Absensi>();
@@ -193,19 +230,15 @@ export default function Monitoring() {
                 userName
             };
         }).filter(Boolean) as MapMarker[];
-    }, [dateRange, absensi, users, filterByViewMode, selectedCabang, selectedUser, colorIndicator, listCabang]);
+    }, [filterDateRange, absensi, users, filterByViewMode, selectedCabang, selectedUser, colorIndicator, listCabang]);
 
     // Calculate Customer Markers
     const customerMarkers = useMemo(() => {
         return filterByViewMode<Pelanggan>(listPelanggan).filter(p => { // Apply viewMode filter here
-            if (dateRange?.from) {
-                const start = startOfDay(dateRange.from);
-                const end = endOfDay(dateRange.to || dateRange.from);
-                const created = new Date(p.createdAt || new Date());
-                const updated = new Date(p.updatedAt || new Date());
-                const inRange = (created >= start && created <= end) || (updated >= start && updated <= end);
-                if (!inRange) return false;
-            }
+            const created = new Date(p.createdAt || new Date());
+            const updated = new Date(p.updatedAt || new Date());
+            const inRange = (created >= filterDateRange.from && created <= filterDateRange.to) || (updated >= filterDateRange.from && updated <= filterDateRange.to);
+            if (!inRange) return false;
 
             if (selectedCabang.length > 0 && (!p.cabangId || !selectedCabang.includes(p.cabangId))) return false;
             if (selectedUser.length > 0 && (!p.salesId || !selectedUser.includes(p.salesId))) return false;
@@ -248,23 +281,23 @@ export default function Monitoring() {
                 userName
             };
         }) as MapMarker[];
-    }, [dateRange, listPelanggan, users, filterByViewMode, selectedCabang, selectedUser, colorIndicator, listCabang, kategoriPelanggan]);
+    }, [filterDateRange, listPelanggan, users, filterByViewMode, selectedCabang, selectedUser, colorIndicator, listCabang, kategoriPelanggan]);
 
     // Calculate Transaction Markers
     const transactionMarkers = useMemo(() => {
         return filterByViewMode<Penjualan>(penjualan).filter(p => { // Apply viewMode filter here
-            if (dateRange?.from) {
-                const start = startOfDay(dateRange.from);
-                const end = endOfDay(dateRange.to || dateRange.from);
-                const d = new Date(p.tanggal);
-                if (d < start || d > end) return false;
-            }
+            const d = new Date(p.tanggal);
+            if (d < filterDateRange.from || d > filterDateRange.to) return false;
 
             const saleUser = users.find(u => u.id === p.salesId);
+            const cust = listPelanggan.find(c => c.id === p.pelangganId);
+            const itemCabangId = saleUser?.cabangId || cust?.cabangId;
+
             if (selectedCabang.length > 0) {
-                if (!saleUser?.cabangId || !selectedCabang.includes(saleUser.cabangId)) return false;
+                if (!itemCabangId || !selectedCabang.includes(itemCabangId)) return false;
             }
             if (selectedUser.length > 0 && (!p.salesId || !selectedUser.includes(p.salesId))) return false;
+
             return p.lokasi?.latitude && p.lokasi?.longitude;
         }).map(p => {
             const cust = listPelanggan.find(c => c.id === p.pelangganId);
@@ -295,7 +328,7 @@ export default function Monitoring() {
                 userName
             };
         }) as MapMarker[];
-    }, [dateRange, penjualan, listPelanggan, users, filterByViewMode, selectedCabang, selectedUser, colorIndicator, listCabang, kategoriPelanggan]);
+    }, [filterDateRange, penjualan, listPelanggan, users, filterByViewMode, selectedCabang, selectedUser, colorIndicator, listCabang, kategoriPelanggan]);
 
     // --- HELPER FOR STRING SIMILARITY ---
     const calculateSimilarity = (str1: string, str2: string): number => {
@@ -400,7 +433,7 @@ export default function Monitoring() {
     }, [duplicateGroups, duplicateSearch]);
 
     // Combine Markers based on Map Mode and View Mode
-    const markers = useMemo(() => {
+    const baseMarkers = useMemo(() => {
         let result: MapMarker[] = [];
 
         if (mapMode === 'team') result = teamMarkers;
@@ -417,6 +450,17 @@ export default function Monitoring() {
 
         return result;
     }, [mapMode, teamMarkers, customerMarkers, transactionMarkers, duplicateMarkerIds]);
+
+    // Final markers for the map, filtered by legend selection
+    const markers = useMemo(() => {
+        if (activeLegendFilters.length === 0) return baseMarkers;
+        return baseMarkers.filter(m => activeLegendFilters.includes(m.userName || ''));
+    }, [baseMarkers, activeLegendFilters]);
+
+    // Reset legend filters when map mode changes
+    useEffect(() => {
+        setActiveLegendFilters([]);
+    }, [mapMode]);
 
 
     // --- EXISTING LOGIC FOR OTHER TABS ---
@@ -472,11 +516,9 @@ export default function Monitoring() {
                 .limit(100); // Batasi query untuk mencegah performa lemot di tab Tracking
 
             // Filter Date (Same as global dateRange)
-            if (dateRange?.from) {
-                const start = startOfDay(dateRange.from).toISOString();
-                const end = endOfDay(dateRange.to || dateRange.from).toISOString();
-                query = query.gte('timestamp', start).lte('timestamp', end);
-            }
+            const start = filterDateRange.from.toISOString();
+            const end = filterDateRange.to.toISOString();
+            query = query.gte('timestamp', start).lte('timestamp', end);
 
             // Apply viewMode filter for session locations
             if (viewMode === 'me') {
@@ -512,7 +554,7 @@ export default function Monitoring() {
 
         if (activeTab !== 'tracking') return;
         fetchLocations();
-    }, [dateRange, selectedSessionUsers, currentUser, viewMode, activeTab]); // Re-fetch on filters change
+    }, [filterDateRange, selectedSessionUsers, currentUser, viewMode, activeTab]); // Re-fetch on filters change
 
     const sessionMarkers = useMemo(() => {
         return sessionLocations.map(loc => ({
@@ -529,9 +571,9 @@ export default function Monitoring() {
 
     // COMBINED TIMELINE LOGIC
     const combinedActivities = useMemo(() => {
-        if (!dateRange?.from || activeTab !== 'tracking') return [];
-        const start = startOfDay(dateRange.from);
-        const end = endOfDay(dateRange.to || dateRange.from);
+        if (activeTab !== 'tracking') return [];
+        const start = filterDateRange.from;
+        const end = filterDateRange.to;
 
         // 1. Collect all raw activities with common structure
 
@@ -785,14 +827,14 @@ export default function Monitoring() {
         // Filter out very short stays (pings) if they are just single pings but keep them if they are meaningful
         // Or just return everything sorted
         return processed.sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime());
-    }, [sessionLocations, absensi, penjualan, setoran, mutasiBarang, dateRange, selectedSessionUsers, users, listPelanggan, listCabang, currentUser?.roles, currentUser?.cabangId, activeTab]);
+    }, [sessionLocations, absensi, penjualan, setoran, mutasiBarang, filterDateRange, selectedSessionUsers, users, listPelanggan, listCabang, currentUser?.roles, currentUser?.cabangId, activeTab]);
 
 
     return (
         <div className="animate-in fade-in duration-500">
             <div className="p-4 space-y-4">
                 <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full">
-                    <TabsList className="w-full grid grid-cols-5 h-auto p-1">
+                    <TabsList className={`w-full grid ${isLeader ? 'grid-cols-2' : currentUser?.roles.some(r => (['admin', 'owner'] as string[]).includes(r)) ? 'grid-cols-5' : 'grid-cols-4'} h-auto p-1`}>
                         <TabsTrigger value="explore" className="text-xs md:text-sm py-2">
                             <MapPin className="w-3 h-3 md:w-4 md:h-4 mr-1 md:mr-2" />
                             Jelajahi
@@ -813,14 +855,18 @@ export default function Monitoring() {
                                 Tracking
                             </TabsTrigger>
                         )}
-                        <TabsTrigger value="history" className="text-xs md:text-sm py-2">
-                            <Clock className="w-3 h-3 md:w-4 md:h-4 mr-1 md:mr-2" />
-                            Riwayat
-                        </TabsTrigger>
-                        <TabsTrigger value="route" className="text-xs md:text-sm py-2">
-                            <Navigation className="w-3 h-3 md:w-4 md:h-4 mr-1 md:mr-2" />
-                            Rute Sales
-                        </TabsTrigger>
+                        {!isLeader && (
+                            <>
+                                <TabsTrigger value="history" className="text-xs md:text-sm py-2">
+                                    <Clock className="w-3 h-3 md:w-4 md:h-4 mr-1 md:mr-2" />
+                                    Riwayat
+                                </TabsTrigger>
+                                <TabsTrigger value="route" className="text-xs md:text-sm py-2">
+                                    <Navigation className="w-3 h-3 md:w-4 md:h-4 mr-1 md:mr-2" />
+                                    Rute Sales
+                                </TabsTrigger>
+                            </>
+                        )}
                     </TabsList>
 
                     <TabsContent value="explore" className="mt-4 space-y-4">
@@ -954,96 +1000,14 @@ export default function Monitoring() {
                         )}
 
                         {/* Map Controls */}
-                        <div className="flex flex-col md:flex-row gap-2 p-2 bg-muted/40 rounded-xl border">
-                            {(currentUser?.roles.includes('admin') || currentUser?.roles.includes('owner') || currentUser?.roles.includes('finance')) && (
-                                <>
-                                    <DropdownMenu>
-                                        <DropdownMenuTrigger asChild>
-                                            <Button variant="outline" className="w-full md:w-[200px] h-9 text-xs justify-between bg-background font-normal px-3">
-                                                <div className="flex items-center gap-2 truncate">
-                                                    <Building className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
-                                                    <span className="truncate">
-                                                        {selectedCabang.length === 0
-                                                            ? "Semua Cabang"
-                                                            : `${selectedCabang.length} Cabang`}
-                                                    </span>
-                                                </div>
-                                                <ChevronDown className="w-4 h-4 opacity-50 shrink-0" />
-                                            </Button>
-                                        </DropdownMenuTrigger>
-                                        <DropdownMenuContent className="w-[200px] max-h-[300px] overflow-y-auto">
-                                            <DropdownMenuLabel>Pilih Cabang</DropdownMenuLabel>
-                                            <DropdownMenuSeparator />
-                                            <DropdownMenuCheckboxItem
-                                                checked={selectedCabang.length === 0}
-                                                onCheckedChange={() => setSelectedCabang([])}
-                                            >
-                                                Semua Cabang
-                                            </DropdownMenuCheckboxItem>
-                                            <DropdownMenuSeparator />
-                                            {listCabang.map(cabang => (
-                                                <DropdownMenuCheckboxItem
-                                                    key={cabang.id}
-                                                    checked={selectedCabang.includes(cabang.id)}
-                                                    onCheckedChange={(checked) => {
-                                                        if (checked) {
-                                                            setSelectedCabang([...selectedCabang, cabang.id]);
-                                                        } else {
-                                                            setSelectedCabang(selectedCabang.filter(id => id !== cabang.id));
-                                                        }
-                                                    }}
-                                                >
-                                                    {cabang.nama}
-                                                </DropdownMenuCheckboxItem>
-                                            ))}
-                                        </DropdownMenuContent>
-                                    </DropdownMenu>
-
-                                    <DropdownMenu>
-                                        <DropdownMenuTrigger asChild>
-                                            <Button variant="outline" className="w-full md:w-[200px] h-9 text-xs justify-between bg-background font-normal px-3">
-                                                <div className="flex items-center gap-2 truncate">
-                                                    <Users className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
-                                                    <span className="truncate">
-                                                        {selectedUser.length === 0
-                                                            ? "Semua Tim"
-                                                            : `${selectedUser.length} Tim`}
-                                                    </span>
-                                                </div>
-                                                <ChevronDown className="w-4 h-4 opacity-50 shrink-0" />
-                                            </Button>
-                                        </DropdownMenuTrigger>
-                                        <DropdownMenuContent className="w-[200px] max-h-[300px] overflow-y-auto">
-                                            <DropdownMenuLabel>Pilih Tim</DropdownMenuLabel>
-                                            <DropdownMenuSeparator />
-                                            <DropdownMenuCheckboxItem
-                                                checked={selectedUser.length === 0}
-                                                onCheckedChange={() => setSelectedUser([])}
-                                            >
-                                                Semua Tim
-                                            </DropdownMenuCheckboxItem>
-                                            <DropdownMenuSeparator />
-                                            {users
-                                                .filter(u => selectedCabang.length === 0 || (u.cabangId && selectedCabang.includes(u.cabangId)))
-                                                .map(user => (
-                                                    <DropdownMenuCheckboxItem
-                                                        key={user.id}
-                                                        checked={selectedUser.includes(user.id)}
-                                                        onCheckedChange={(checked) => {
-                                                            if (checked) {
-                                                                setSelectedUser([...selectedUser, user.id]);
-                                                            } else {
-                                                                setSelectedUser(selectedUser.filter(id => id !== user.id));
-                                                            }
-                                                        }}
-                                                    >
-                                                        {user.nama}
-                                                    </DropdownMenuCheckboxItem>
-                                                ))}
-                                        </DropdownMenuContent>
-                                    </DropdownMenu>
-                                </>
-                            )}
+                        <div className="flex flex-col md:flex-row items-center gap-3 p-2 bg-muted/40 rounded-xl border">
+                            <ScopeFilters
+                                selectedCabangIds={selectedCabang}
+                                setSelectedCabangIds={setSelectedCabang}
+                                selectedUserIds={selectedUser}
+                                setSelectedUserIds={setSelectedUser}
+                                className="!space-y-0 flex flex-col md:flex-row gap-2"
+                            />
 
                             <Select value={mapMode} onValueChange={(v) => setMapMode(v as MapMode)}>
                                 <SelectTrigger className="w-full md:w-[160px] h-9 text-xs bg-background">
@@ -1095,12 +1059,47 @@ export default function Monitoring() {
                                 </SelectContent>
                             </Select>
 
-                            <div className="flex-1 min-w-0">
-                                <DatePickerWithRange
-                                    date={dateRange}
-                                    setDate={setDateRange}
-                                    className="w-full [&>button]:h-9 [&>button]:text-xs [&>button]:bg-background"
-                                />
+                            <div className="flex flex-col gap-1 md:border-l md:pl-4 min-w-[280px]">
+                                <div className="flex items-center justify-between gap-4 px-1">
+                                    <div className="flex items-center gap-1.5 text-primary/80 font-bold uppercase tracking-tight text-[10px]">
+                                        <Calendar className="w-3 h-3" />
+                                        <span>Pilih Tanggal</span>
+                                    </div>
+                                    <button
+                                        type="button"
+                                        className="text-[10px] font-bold text-primary hover:text-primary/70 transition-colors cursor-pointer outline-none focus:outline-none"
+                                        onClick={() => setIsSingleDate(!isSingleDate)}
+                                    >
+                                        {isSingleDate ? 'Pilih Rentang' : 'Pilih 1 Hari'}
+                                    </button>
+                                </div>
+
+                                {isSingleDate ? (
+                                    <div className="w-full">
+                                        <Input
+                                            type="date"
+                                            value={singleDate}
+                                            onChange={e => setSingleDate(e.target.value)}
+                                            className="h-9 text-xs w-full sm:w-[180px] bg-background cursor-pointer rounded-xl border-muted-foreground/20 shadow-sm"
+                                        />
+                                    </div>
+                                ) : (
+                                    <div className="flex items-center gap-2">
+                                        <Input
+                                            type="date"
+                                            value={startDate}
+                                            onChange={e => setStartDate(e.target.value)}
+                                            className="h-9 text-xs bg-background cursor-pointer rounded-xl border-muted-foreground/20 shadow-sm flex-1"
+                                        />
+                                        <span className="text-muted-foreground text-xs font-bold">s/d</span>
+                                        <Input
+                                            type="date"
+                                            value={endDate}
+                                            onChange={e => setEndDate(e.target.value)}
+                                            className="h-9 text-xs bg-background cursor-pointer rounded-xl border-muted-foreground/20 shadow-sm flex-1"
+                                        />
+                                    </div>
+                                )}
                             </div>
                         </div>
 
@@ -1108,77 +1107,136 @@ export default function Monitoring() {
                         <Card elevated className="overflow-hidden">
                             <CardContent className="p-0 relative h-[400px] md:h-[600px] z-0">
                                 <div className="absolute inset-0 z-0 h-full w-full">
-                                        <MonitoringMapWrapper
-                                            markers={markers}
-                                            mapCenter={mapCenter}
-                                            setMapCenter={setMapCenter}
-                                            selectedMarker={selectedMarker}
-                                            setSelectedMarker={setSelectedMarker}
-                                            customerMarkers={customerMarkers}
-                                            radiusKunjungan={profilPerusahaan.config?.radiusKunjungan || 100}
-                                            duplicateThreshold={duplicateThreshold}
-                                            duplicateGroups={duplicateGroups}
-                                            showNames={showNames}
-                                        >
+                                    <MonitoringMapWrapper
+                                        markers={markers}
+                                        baseMarkers={baseMarkers}
+                                        mapCenter={mapCenter}
+                                        setMapCenter={setMapCenter}
+                                        selectedMarker={selectedMarker}
+                                        setSelectedMarker={setSelectedMarker}
+                                        customerMarkers={customerMarkers}
+                                        radiusKunjungan={profilPerusahaan.config?.radiusKunjungan || 100}
+                                        duplicateThreshold={duplicateThreshold}
+                                        duplicateGroups={duplicateGroups}
+                                        showNames={showNames}
+                                    >
                                         {/* Map Search Bar Overlay */}
-                                        <div className="absolute top-4 left-1/2 -translate-x-1/2 w-[95%] sm:w-[350px] md:w-[400px] z-[1000] flex gap-1.5">
-                                            <div className="relative flex-1 shadow-lg group">
-                                                <input
-                                                    ref={mapSearchRef}
-                                                    type="text"
-                                                    placeholder="Cari nama/tempat..."
-                                                    value={mapSearchInput}
-                                                    onChange={(e) => setMapSearchInput(e.target.value)}
-                                                    onKeyDown={(e) => {
-                                                        if (e.key === 'Enter') {
-                                                            handleSearchMap();
-                                                        }
-                                                    }}
-                                                    className="w-full h-9 pl-9 pr-3 rounded-lg border bg-white/95 backdrop-blur-sm focus:outline-none focus:ring-2 focus:ring-primary text-[13px] shadow-inner transition-all duration-200"
-                                                />
-                                                <Search className="absolute left-3 top-2.5 w-3.5 h-3.5 text-muted-foreground group-focus-within:text-primary transition-colors" />
-                                            </div>
-                                            <div className="flex gap-1.5">
-                                                <Button
-                                                    variant={showNames ? "default" : "secondary"}
-                                                    size="icon"
-                                                    className={`h-9 w-9 shrink-0 shadow-lg backdrop-blur-sm border-0 ${showNames ? 'bg-primary text-white' : 'bg-white/95 text-slate-600'}`}
-                                                    onClick={() => setShowNames(!showNames)}
-                                                    title={showNames ? "Sembunyikan Nama" : "Tampilkan Nama"}
-                                                >
-                                                    <span className="text-[10px] font-bold">Aa</span>
-                                                </Button>
+                                        <div className="absolute top-4 left-1/2 -translate-x-1/2 z-[1000] flex gap-1.5 items-center">
+                                            {isMapSearchExpanded ? (
+                                                <div className="relative flex shadow-lg group animate-in slide-in-from-right-2 fade-in duration-300">
+                                                    <input
+                                                        ref={mapSearchRef}
+                                                        type="text"
+                                                        placeholder="Cari lokasi/toko..."
+                                                        value={mapSearchInput}
+                                                        onChange={(e) => setMapSearchInput(e.target.value)}
+                                                        onKeyDown={(e) => {
+                                                            if (e.key === 'Enter') handleSearchMap();
+                                                            if (e.key === 'Escape') setIsMapSearchExpanded(false);
+                                                        }}
+                                                        className="w-[180px] sm:w-[250px] h-9 pl-9 pr-3 rounded-l-lg border-y border-l bg-white/95 backdrop-blur-sm focus:outline-none focus:ring-1 focus:ring-primary text-[13px] shadow-inner"
+                                                        autoFocus
+                                                    />
+                                                    <Search className="absolute left-3 top-2.5 w-3.5 h-3.5 text-muted-foreground group-focus-within:text-primary transition-colors" />
+                                                    <Button
+                                                        variant="ghost"
+                                                        className="h-9 w-8 rounded-none rounded-r-lg border bg-white/95 text-muted-foreground hover:text-red-500 p-0"
+                                                        onClick={() => setIsMapSearchExpanded(false)}
+                                                    >
+                                                        <X className="w-3.5 h-3.5" />
+                                                    </Button>
+                                                </div>
+                                            ) : (
                                                 <Button
                                                     variant="secondary"
                                                     size="icon"
-                                                    className="h-9 w-9 shrink-0 shadow-lg bg-white/95 backdrop-blur-sm text-slate-600 border-0"
-                                                    onClick={handleCenterOnMe}
-                                                    title="Lokasi Saya"
+                                                    className="h-9 w-9 shadow-lg bg-white/95 text-primary border-0 hover:bg-white"
+                                                    onClick={() => setIsMapSearchExpanded(true)}
+                                                    title="Cari di Peta"
                                                 >
-                                                    <Navigation className="w-4 h-4" />
+                                                    <Search className="w-4 h-4" />
+                                                </Button>
+                                            )}
+                                            <div className="flex gap-1.5 items-center">
+                                                {isMapToolsExpanded && (
+                                                    <div className="flex gap-1.5 animate-in slide-in-from-right-2 duration-300">
+                                                        <Button
+                                                            variant={showNames ? "default" : "secondary"}
+                                                            size="icon"
+                                                            className={`h-9 w-9 shrink-0 shadow-lg backdrop-blur-sm border-0 ${showNames ? 'bg-primary text-white' : 'bg-white/95 text-slate-600'}`}
+                                                            onClick={() => setShowNames(!showNames)}
+                                                            title={showNames ? "Sembunyikan Nama" : "Tampilkan Nama"}
+                                                        >
+                                                            <ALargeSmall className="w-4 h-4" />
+                                                        </Button>
+                                                        <Button
+                                                            variant="secondary"
+                                                            size="icon"
+                                                            className="h-9 w-9 shrink-0 shadow-lg bg-white/95 backdrop-blur-sm text-slate-600 border-0"
+                                                            onClick={handleCenterOnMe}
+                                                            title="Lokasi Saya"
+                                                        >
+                                                            <Navigation className="w-4 h-4" />
+                                                        </Button>
+                                                    </div>
+                                                )}
+                                                <Button
+                                                    variant={isMapToolsExpanded ? "default" : "secondary"}
+                                                    size="icon"
+                                                    className={`h-9 w-9 shadow-lg backdrop-blur-sm border-0 transition-all ${isMapToolsExpanded ? 'bg-primary text-white' : 'bg-white/95 text-primary'}`}
+                                                    onClick={() => setIsMapToolsExpanded(!isMapToolsExpanded)}
+                                                    title="Alat Peta"
+                                                >
+                                                  {isMapToolsExpanded ? <X className="w-4 h-4" /> : <Settings2 className="w-4 h-4" />}
                                                 </Button>
                                             </div>
                                         </div>
 
                                         {/* Dynamic Legend Overlay */}
                                         <div className="absolute bottom-4 right-4 bg-white/95 backdrop-blur-sm p-3 rounded-lg shadow-lg border border-border max-w-[200px] max-h-[300px] overflow-y-auto z-[1000]">
-                                            <p className="text-[10px] font-bold uppercase text-muted-foreground mb-2 tracking-wider">
-                                                Legenda ({mapMode === 'team' ? 'Tim' : (mapMode === 'pelanggan' ? 'Pelanggan' : 'Transaksi')})
-                                            </p>
+                                            <div className="flex items-center justify-between mb-2">
+                                                <p className="text-[10px] font-bold uppercase text-muted-foreground tracking-wider">
+                                                    Legenda ({mapMode === 'team' ? 'Tim' : (mapMode === 'pelanggan' ? 'Pelanggan' : 'Transaksi')})
+                                                </p>
+                                                {activeLegendFilters.length > 0 && (
+                                                    <button 
+                                                        onClick={() => setActiveLegendFilters([])}
+                                                        className="text-[9px] font-bold text-primary hover:underline"
+                                                    >
+                                                        Reset
+                                                    </button>
+                                                )}
+                                            </div>
                                             <div className="space-y-1.5">
-                                                {Array.from(new Set(markers.map((m: any) => m.userName).filter(Boolean))).map(userName => {
-                                                    const marker = markers.find((m: any) => m.userName === userName);
+                                                {Array.from(new Set(baseMarkers.map((m: any) => m.userName).filter(Boolean))).map(userName => {
+                                                    const marker = baseMarkers.find((m: any) => m.userName === userName);
+                                                    const isSelected = activeLegendFilters.length === 0 || activeLegendFilters.includes(userName as string);
+                                                    
                                                     return (
-                                                        <div key={userName as string} className="flex items-center gap-2">
+                                                        <button
+                                                            key={userName as string}
+                                                            onClick={() => {
+                                                                setActiveLegendFilters(prev => {
+                                                                    if (prev.includes(userName as string)) {
+                                                                        const next = prev.filter(f => f !== userName);
+                                                                        return next.length === 0 ? [] : next;
+                                                                    }
+                                                                    return [...prev, userName as string];
+                                                                });
+                                                            }}
+                                                            className={`w-full flex items-center gap-2 p-1 rounded-md transition-all text-left ${isSelected ? 'bg-primary/5' : 'opacity-40 grayscale hover:opacity-70'}`}
+                                                        >
                                                             <div
-                                                                className="w-2.5 h-2.5 rounded-full shrink-0"
+                                                                className={`w-2.5 h-2.5 rounded-full shrink-0 ${isSelected ? 'ring-2 ring-primary/20' : ''}`}
                                                                 style={{ backgroundColor: marker?.color || '#94a3b8' }}
                                                             />
-                                                            <span className="text-xs truncate font-medium text-slate-700 capitalize">{userName as string}</span>
-                                                        </div>
+                                                            <span className={`text-xs truncate capitalize ${isSelected ? 'font-bold text-slate-900' : 'font-medium text-slate-500'}`}>
+                                                                {userName as string}
+                                                            </span>
+                                                        </button>
                                                     );
                                                 })}
-                                                {markers.length === 0 && <span className="text-[10px] text-muted-foreground italic">Tidak ada data</span>}
+                                                {baseMarkers.length === 0 && <span className="text-[10px] text-muted-foreground italic">Tidak ada data</span>}
                                                 {mapMode === 'pelanggan' && duplicateGroups.length > 0 && (
                                                     <div className="pt-2 mt-2 border-t border-dashed">
                                                         <div className="flex items-center gap-2">
@@ -1662,355 +1720,365 @@ export default function Monitoring() {
                         </div>
                     </TabsContent>
 
-                    <TabsContent value="history" className="mt-4 space-y-3">
-                        <h3 className="text-sm font-semibold text-muted-foreground px-1">Riwayat Absensi Terkini</h3>
+                    {!isLeader && (
+                        <TabsContent value="history" className="mt-4 space-y-3">
+                            <h3 className="text-sm font-semibold text-muted-foreground px-1">Riwayat Absensi Terkini</h3>
 
-                        {/* Show recent check-ins instead of generic users list */}
-                        {absensi
-                            .sort((a, b) => new Date(b.tanggal).getTime() - new Date(a.tanggal).getTime())
-                            .slice(0, historyLimit)
-                            .filter(a => {
-                                // Same filtering logic as explore
-                                const u = users.find(user => user.id === a.userId);
-                                if (!u) return false;
-                                if (currentUser?.roles.includes('admin') || currentUser?.roles.includes('owner') || currentUser?.roles.includes('finance')) return true;
-                                if (currentUser?.roles.includes('leader')) return u.cabangId === currentUser.cabangId;
-                                return u.id === currentUser?.id;
-                            })
-                            .map((record, index) => {
-                                const user = users.find(u => u.id === record.userId);
-                                const cabang = listCabang.find(c => c.id === user?.cabangId);
+                            {/* Show recent check-ins instead of generic users list */}
+                            {absensi
+                                .sort((a, b) => new Date(b.tanggal).getTime() - new Date(a.tanggal).getTime())
+                                .slice(0, historyLimit)
+                                .filter(a => {
+                                    // Same filtering logic as explore
+                                    const u = users.find(user => user.id === a.userId);
+                                    if (!u) return false;
+                                    if (currentUser?.roles.includes('admin') || currentUser?.roles.includes('owner') || currentUser?.roles.includes('finance')) return true;
+                                    if (currentUser?.roles.includes('leader')) return u.cabangId === currentUser.cabangId;
+                                    return u.id === currentUser?.id;
+                                })
+                                .map((record, index) => {
+                                    const user = users.find(u => u.id === record.userId);
+                                    const cabang = listCabang.find(c => c.id === user?.cabangId);
 
-                                if (!user) return null;
+                                    if (!user) return null;
 
-                                return (
-                                    <Card
-                                        key={record.id}
-                                        className="animate-slide-up"
-                                        style={{ animationDelay: `${index * 30}ms` }}
-                                    >
-                                        <CardContent className="p-4 flex items-center gap-3">
-                                            <div className="p-2 rounded-lg bg-muted">
-                                                <Activity className="w-4 h-4 text-muted-foreground" />
+                                    return (
+                                        <Card
+                                            key={record.id}
+                                            className="animate-slide-up"
+                                            style={{ animationDelay: `${index * 30}ms` }}
+                                        >
+                                            <CardContent className="p-4 flex items-center gap-3">
+                                                <div className="p-2 rounded-lg bg-muted">
+                                                    <Activity className="w-4 h-4 text-muted-foreground" />
+                                                </div>
+                                                <div className="flex-1">
+                                                    <p className="font-medium text-sm">{user.nama}</p>
+                                                    <p className="text-xs text-muted-foreground">
+                                                        {record.status === 'hadir' ? 'Check-In' : record.status} • {cabang?.nama}
+                                                    </p>
+                                                </div>
+                                                <div className="text-right">
+                                                    <p className="text-xs text-muted-foreground">
+                                                        {formatTanggal(new Date(record.tanggal))}
+                                                    </p>
+                                                    <p className="text-xs text-muted-foreground">
+                                                        {record.checkIn ? formatWaktu(new Date(record.checkIn)) : '-'}
+                                                    </p>
+                                                </div>
+                                            </CardContent>
+                                        </Card>
+                                    );
+                                })}
+                            {absensi.length > historyLimit && (
+                                <Button
+                                    variant="ghost"
+                                    className="w-full mt-4 border-dashed text-muted-foreground"
+                                    onClick={() => setHistoryLimit(prev => prev + 10)}
+                                >
+                                    Lihat Lainnya
+                                </Button>
+                            )}
+                        </TabsContent>
+                    )}
+
+                    {/* TRACKING TAB CONTENT */}
+                    {currentUser?.roles.some(r => (['admin', 'owner'] as string[]).includes(r)) && (
+                        <TabsContent value="tracking" className="mt-4 space-y-4">
+
+                            {/* Session Controls */}
+                            <div className="flex flex-col md:flex-row gap-3 p-3 bg-card rounded-xl border shadow-sm">
+                                <ScopeFilters
+                                    selectedCabangIds={[]}
+                                    setSelectedCabangIds={() => { }}
+                                    selectedUserIds={selectedSessionUsers}
+                                    setSelectedUserIds={setSelectedSessionUsers}
+                                    showBranchFilter={false}
+                                    className="w-full md:w-[250px] !space-y-0"
+                                />
+
+                                <div className="flex flex-col gap-1 md:border-l md:pl-4 min-w-[280px]">
+                                    <div className="flex items-center justify-between gap-4 px-1">
+                                        <div className="flex items-center gap-1.5 text-primary/80 font-bold uppercase tracking-tight text-[10px]">
+                                            <Calendar className="w-3 h-3" />
+                                            <span>Periode Laporan</span>
+                                        </div>
+                                        <button
+                                            type="button"
+                                            className="text-[10px] font-bold text-primary hover:text-primary/70 transition-colors cursor-pointer outline-none focus:outline-none"
+                                            onClick={() => setIsSingleDate(!isSingleDate)}
+                                        >
+                                            {isSingleDate ? 'Pilih Rentang' : 'Pilih 1 Hari'}
+                                        </button>
+                                    </div>
+
+                                    {isSingleDate ? (
+                                        <div className="w-full">
+                                            <Input
+                                                type="date"
+                                                value={singleDate}
+                                                onChange={e => setSingleDate(e.target.value)}
+                                                className="h-9 text-xs w-full sm:w-[180px] bg-background cursor-pointer rounded-xl border-muted-foreground/20 shadow-sm"
+                                            />
+                                        </div>
+                                    ) : (
+                                        <div className="flex items-center gap-2">
+                                            <Input
+                                                type="date"
+                                                value={startDate}
+                                                onChange={e => setStartDate(e.target.value)}
+                                                className="h-9 text-xs bg-background cursor-pointer rounded-xl border-muted-foreground/20 shadow-sm flex-1"
+                                            />
+                                            <span className="text-muted-foreground text-xs font-bold">s/d</span>
+                                            <Input
+                                                type="date"
+                                                value={endDate}
+                                                onChange={e => setEndDate(e.target.value)}
+                                                className="h-9 text-xs bg-background cursor-pointer rounded-xl border-muted-foreground/20 shadow-sm flex-1"
+                                            />
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+
+                            {/* Session Map */}
+                            <Card elevated className="overflow-hidden">
+                                <CardContent className="p-0 relative h-[300px] md:h-[450px] z-0">
+                                    <div className="absolute inset-0 z-0 h-full w-full">
+                                        <MonitoringMapWrapper
+                                            markers={sessionMarkers}
+                                            mapCenter={sessionMarkers.length > 0 ? sessionMarkers[0].position : { lat: -6.2088, lng: 106.8456 }}
+                                            setMapCenter={setMapCenter}
+                                            selectedMarker={selectedMarker}
+                                            setSelectedMarker={setSelectedMarker}
+                                            customerMarkers={customerMarkers}
+                                            radiusKunjungan={profilPerusahaan.config?.radiusKunjungan || 100}
+                                        >
+                                            <div className="absolute bottom-4 right-4 bg-white/90 p-2 rounded-lg shadow-md text-xs z-[1000] border">
+                                                <p className="font-semibold mb-1">Total Logs: {sessionMarkers.length}</p>
                                             </div>
-                                            <div className="flex-1">
-                                                <p className="font-medium text-sm">{user.nama}</p>
-                                                <p className="text-xs text-muted-foreground">
-                                                    {record.status === 'hadir' ? 'Check-In' : record.status} • {cabang?.nama}
-                                                </p>
-                                            </div>
-                                            <div className="text-right">
-                                                <p className="text-xs text-muted-foreground">
-                                                    {formatTanggal(new Date(record.tanggal))}
-                                                </p>
-                                                <p className="text-xs text-muted-foreground">
-                                                    {record.checkIn ? formatWaktu(new Date(record.checkIn)) : '-'}
-                                                </p>
+                                            {/* Map Legend Overlay for Duplicate Detection */}
+                                            {mapMode === 'pelanggan' && (
+                                                <div className="absolute bottom-12 right-4 z-[1000] bg-white/95 backdrop-blur-sm p-3 rounded-xl shadow-xl border border-red-100 flex flex-col gap-2 min-w-[150px]">
+                                                    <div className="flex items-center gap-2">
+                                                        <AlertTriangle className="w-4 h-4 text-red-600" />
+                                                        <span className="text-[11px] font-bold text-red-800">Legenda Double Toko</span>
+                                                    </div>
+                                                    <div className="space-y-1.5 mt-1">
+                                                        <div className="flex items-center gap-2">
+                                                            <div className="w-3 h-3 rounded-full bg-red-600 marker-pulse-mini relative">
+                                                                <div className="absolute inset-0 bg-red-600 rounded-full animate-pulse"></div>
+                                                            </div>
+                                                            <span className="text-[10px] text-slate-600">Terindikasi Double</span>
+                                                        </div>
+                                                        <div className="flex items-center gap-2">
+                                                            <div className="w-3 h-3 border border-red-400 border-dashed rounded-full bg-red-100/50"></div>
+                                                            <span className="text-[10px] text-slate-600">Radius {duplicateThreshold}m</span>
+                                                        </div>
+                                                    </div>
+                                                    {duplicateGroups.length > 0 && (
+                                                        <div className="mt-2 pt-2 border-t border-red-100">
+                                                            <p className="text-[10px] font-bold text-red-600">{duplicateGroups.length} Grup Terdeteksi</p>
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            )}
+                                        </MonitoringMapWrapper>
+                                    </div>
+                                </CardContent>
+                            </Card>
+
+                            {/* Timeline */}
+                            <div className="space-y-4">
+                                <h3 className="text-sm font-semibold text-muted-foreground px-1 flex items-center gap-2 mt-6">
+                                    <Activity className="w-4 h-4" /> Aktivitas
+                                </h3>
+
+                                {combinedActivities.length === 0 ? (
+                                    <div className="text-center p-8 text-muted-foreground bg-muted/20 rounded-xl border border-dashed">
+                                        Pilih user dan tanggal untuk melihat linimasa
+                                    </div>
+                                ) : (
+                                    <Card className="border shadow-sm p-4">
+                                        <div className="relative space-y-0 pl-1 before:absolute before:left-[11px] before:top-2 before:bottom-2 before:w-[2px] before:bg-muted-foreground/20">
+                                            {combinedActivities.slice(0, sessionLimit).map((activity) => {
+                                                let Icon = Activity;
+                                                let colorClass = 'bg-primary';
+
+                                                if (activity.type === 'sales') { Icon = ShoppingCart; colorClass = 'bg-red-500'; }
+                                                if (activity.type === 'deposit') { Icon = Wallet; colorClass = 'bg-green-600'; }
+                                                if (activity.type === 'checkin') { Icon = LogIn; colorClass = 'bg-success'; }
+                                                if (activity.type === 'checkout') { Icon = LogOut; colorClass = 'bg-orange-500'; }
+                                                if (activity.type === 'stay') { Icon = MapIcon; colorClass = activity.color ? '' : 'bg-blue-500'; }
+                                                if (activity.type === 'noo') { Icon = PlusCircle; colorClass = 'bg-purple-600'; }
+                                                if (activity.type === 'receive') { Icon = Package; colorClass = 'bg-yellow-600'; }
+                                                if (activity.type === 'visit') {
+                                                    Icon = Store;
+                                                    colorClass = 'bg-cyan-600';
+                                                    if ((activity.data as DynamicActivityData)?.isHome) {
+                                                        Icon = Home;
+                                                        colorClass = 'bg-blue-600';
+                                                    } else if (activity.title.startsWith('Basecamp')) {
+                                                        Icon = MapPin;
+                                                        colorClass = 'bg-indigo-600';
+                                                    }
+                                                }
+
+                                                return (
+                                                    <div key={activity.id} className="relative pl-8 pb-8 last:pb-2">
+                                                        {/* Timeline dot */}
+                                                        <div
+                                                            className={`absolute left-[5px] top-1.5 w-3.5 h-3.5 rounded-full border-2 border-background z-10 shadow-sm flex items-center justify-center ${colorClass}`}
+                                                            style={activity.color ? { backgroundColor: activity.color } : {}}
+                                                        >
+                                                            <Icon className="w-2 h-2 text-white" />
+                                                        </div>
+
+                                                        <div className="flex flex-col gap-1.5">
+                                                            <div className="flex items-center justify-between gap-4">
+                                                                <div className="flex flex-col">
+                                                                    <p className="text-[10px] text-muted-foreground font-semibold uppercase tracking-wider">{activity.userName}</p>
+                                                                    <p className="text-sm font-bold tracking-tight">{activity.title}</p>
+                                                                </div>
+                                                                <Badge variant="secondary" className="text-[10px] font-mono font-medium shrink-0">
+                                                                    {formatWaktu(activity.timestamp)}
+                                                                </Badge>
+                                                            </div>
+
+                                                            <div className="flex flex-col gap-2">
+                                                                <p className="text-[11px] text-muted-foreground flex items-center gap-1.5 leading-tight">
+                                                                    {activity.type === 'stay' ? (
+                                                                        <>
+                                                                            <Clock className="w-3 h-3 shrink-0" />
+                                                                            {activity.duration && activity.duration > 0 ? `Menetap selama ${activity.duration} menit` : 'Singgah sebentar'}
+                                                                        </>
+                                                                    ) : (
+                                                                        activity.description
+                                                                    )}
+                                                                </p>
+
+                                                                {(activity.lat && activity.lng) && (
+                                                                    <div className="flex items-center gap-3 mt-1">
+                                                                        <a
+                                                                            href={`https://www.google.com/maps/dir/?api=1&destination=${activity.lat},${activity.lng}`}
+                                                                            target="_blank"
+                                                                            rel="noopener noreferrer"
+                                                                            className="text-[10px] text-blue-600 hover:text-blue-700 font-medium flex items-center gap-1.5 hover:underline transition-colors"
+                                                                        >
+                                                                            <ExternalLink className="w-3.5 h-3.5" />
+                                                                            Lihat Lokasi
+                                                                        </a>
+
+                                                                        <span className="text-[9px] text-muted-foreground italic bg-muted px-1.5 py-0.5 rounded">
+                                                                            {activity.lat.toFixed(4)}, {activity.lng.toFixed(4)}
+                                                                        </span>
+                                                                    </div>
+                                                                )}
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                );
+                                            })}
+                                            {combinedActivities.length > sessionLimit && (
+                                                <Button
+                                                    variant="ghost"
+                                                    className="w-full mt-4 border-dashed text-muted-foreground"
+                                                    onClick={() => setSessionLimit(prev => prev + 10)}
+                                                >
+                                                    Lihat Lainnya
+                                                </Button>
+                                            )}
+                                        </div>
+                                    </Card>
+                                )}
+                            </div>
+                        </TabsContent>
+                    )}
+
+
+                    {!isLeader && (
+                        <TabsContent value="route" className="mt-4 space-y-4">
+                            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                                {/* Customer Selection Sidebar */}
+                                <div className="lg:col-span-1 space-y-4">
+                                    <Card>
+                                        <CardHeader className="p-4">
+                                            <CardTitle className="text-sm">Pilih Pelanggan</CardTitle>
+                                        </CardHeader>
+                                        <CardContent className="p-0">
+                                            <div className="max-h-[600px] overflow-y-auto">
+                                                {listPelanggan
+                                                    .filter(p => (selectedCabang.length === 0 || (p.cabangId && selectedCabang.includes(p.cabangId))) && (selectedUser.length === 0 || (p.salesId && selectedUser.includes(p.salesId))))
+                                                    .filter(p => p.lokasi?.latitude && p.lokasi?.longitude)
+                                                    .map(p => (
+                                                        <div
+                                                            key={p.id}
+                                                            onClick={() => toggleCustomerForRoute(p)}
+                                                            className={`p-3 border-b cursor-pointer transition-colors hover:bg-muted/50 flex items-start gap-3 ${selectedRouteCustomers.find(c => c.id === p.id) ? 'bg-primary/5 border-l-4 border-l-primary' : ''}`}
+                                                        >
+                                                            <div className={`mt-0.5 w-4 h-4 rounded border flex items-center justify-center shrink-0 ${selectedRouteCustomers.find(c => c.id === p.id) ? 'bg-primary border-primary text-white' : 'bg-background'}`}>
+                                                                {selectedRouteCustomers.find(c => c.id === p.id) && <CheckCircle2 className="w-3 h-3" />}
+                                                            </div>
+                                                            <div className="space-y-1">
+                                                                <p className="text-xs font-bold leading-none">{p.nama}</p>
+                                                                <p className="text-[10px] text-muted-foreground line-clamp-1">{p.alamat}</p>
+                                                            </div>
+                                                        </div>
+                                                    ))}
                                             </div>
                                         </CardContent>
                                     </Card>
-                                );
-                            })}
-                        {absensi.length > historyLimit && (
-                            <Button
-                                variant="ghost"
-                                className="w-full mt-4 border-dashed text-muted-foreground"
-                                onClick={() => setHistoryLimit(prev => prev + 10)}
-                            >
-                                Lihat Lainnya
-                            </Button>
-                        )}
-                    </TabsContent>
-
-                    {/* TRACKING TAB CONTENT */}
-                    <TabsContent value="tracking" className="mt-4 space-y-4">
-                        {/* Session Controls */}
-                        <div className="flex flex-col md:flex-row gap-3 p-3 bg-card rounded-xl border shadow-sm">
-                            <DropdownMenu>
-                                <DropdownMenuTrigger asChild>
-                                    <Button variant="outline" className="w-full md:w-[250px] justify-between">
-                                        <div className="flex items-center gap-2 truncate">
-                                            <Filter className="w-4 h-4 text-muted-foreground" />
-                                            <span>
-                                                {selectedSessionUsers.length === 0
-                                                    ? "Semua User"
-                                                    : `${selectedSessionUsers.length} User terpilih`}
-                                            </span>
-                                        </div>
-                                        <ChevronDown className="w-4 h-4 opacity-50" />
-                                    </Button>
-                                </DropdownMenuTrigger>
-                                <DropdownMenuContent className="w-[250px] max-h-[300px] overflow-y-auto">
-                                    <DropdownMenuLabel>Pilih User</DropdownMenuLabel>
-                                    <DropdownMenuSeparator />
-                                    <DropdownMenuCheckboxItem
-                                        checked={selectedSessionUsers.length === 0}
-                                        onCheckedChange={() => setSelectedSessionUsers([])}
-                                    >
-                                        Semua User
-                                    </DropdownMenuCheckboxItem>
-                                    <DropdownMenuSeparator />
-                                    {users.filter(u => u.isActive).map(u => (
-                                        <DropdownMenuCheckboxItem
-                                            key={u.id}
-                                            checked={selectedSessionUsers.includes(u.id)}
-                                            onCheckedChange={(checked) => {
-                                                if (checked) {
-                                                    setSelectedSessionUsers([...selectedSessionUsers, u.id]);
-                                                } else {
-                                                    setSelectedSessionUsers(selectedSessionUsers.filter(id => id !== u.id));
-                                                }
-                                            }}
+                                    {selectedRouteCustomers.length > 0 && (
+                                        <Button
+                                            variant="outline"
+                                            size="sm"
+                                            className="w-full text-xs gap-2"
+                                            onClick={() => setSelectedRouteCustomers([])}
                                         >
-                                            {u.nama}
-                                        </DropdownMenuCheckboxItem>
-                                    ))}
-                                </DropdownMenuContent>
-                            </DropdownMenu>
-
-                            <div className="flex-1">
-                                <DatePickerWithRange
-                                    date={dateRange}
-                                    setDate={setDateRange}
-                                    className="w-full"
-                                />
-                            </div>
-                        </div>
-
-                        {/* Session Map */}
-                        <Card elevated className="overflow-hidden">
-                            <CardContent className="p-0 relative h-[300px] md:h-[450px] z-0">
-                                <div className="absolute inset-0 z-0 h-full w-full">
-                                    <MonitoringMapWrapper
-                                        markers={sessionMarkers}
-                                        mapCenter={sessionMarkers.length > 0 ? sessionMarkers[0].position : { lat: -6.2088, lng: 106.8456 }}
-                                        setMapCenter={setMapCenter}
-                                        selectedMarker={selectedMarker}
-                                        setSelectedMarker={setSelectedMarker}
-                                        customerMarkers={customerMarkers}
-                                        radiusKunjungan={profilPerusahaan.config?.radiusKunjungan || 100}
-                                    >
-                                        <div className="absolute bottom-4 right-4 bg-white/90 p-2 rounded-lg shadow-md text-xs z-[1000] border">
-                                            <p className="font-semibold mb-1">Total Logs: {sessionMarkers.length}</p>
-                                        </div>
-                                        {/* Map Legend Overlay for Duplicate Detection */}
-                                        {mapMode === 'pelanggan' && (
-                                            <div className="absolute bottom-12 right-4 z-[1000] bg-white/95 backdrop-blur-sm p-3 rounded-xl shadow-xl border border-red-100 flex flex-col gap-2 min-w-[150px]">
-                                                <div className="flex items-center gap-2">
-                                                    <AlertTriangle className="w-4 h-4 text-red-600" />
-                                                    <span className="text-[11px] font-bold text-red-800">Legenda Double Toko</span>
-                                                </div>
-                                                <div className="space-y-1.5 mt-1">
-                                                    <div className="flex items-center gap-2">
-                                                        <div className="w-3 h-3 rounded-full bg-red-600 marker-pulse-mini relative">
-                                                            <div className="absolute inset-0 bg-red-600 rounded-full animate-pulse"></div>
-                                                        </div>
-                                                        <span className="text-[10px] text-slate-600">Terindikasi Double</span>
-                                                    </div>
-                                                    <div className="flex items-center gap-2">
-                                                        <div className="w-3 h-3 border border-red-400 border-dashed rounded-full bg-red-100/50"></div>
-                                                        <span className="text-[10px] text-slate-600">Radius {duplicateThreshold}m</span>
-                                                    </div>
-                                                </div>
-                                                {duplicateGroups.length > 0 && (
-                                                    <div className="mt-2 pt-2 border-t border-red-100">
-                                                        <p className="text-[10px] font-bold text-red-600">{duplicateGroups.length} Grup Terdeteksi</p>
-                                                    </div>
-                                                )}
-                                            </div>
-                                        )}
-                                    </MonitoringMapWrapper>
+                                            <RotateCcw className="w-3 h-3" />
+                                            Reset Pilihan ({selectedRouteCustomers.length})
+                                        </Button>
+                                    )}
                                 </div>
-                            </CardContent>
-                        </Card>
 
-                        {/* Timeline */}
-                        <div className="space-y-4">
-                            <h3 className="text-sm font-semibold text-muted-foreground px-1 flex items-center gap-2 mt-6">
-                                <Activity className="w-4 h-4" /> Aktivitas
-                            </h3>
-
-                            {combinedActivities.length === 0 ? (
-                                <div className="text-center p-8 text-muted-foreground bg-muted/20 rounded-xl border border-dashed">
-                                    Pilih user dan tanggal untuk melihat linimasa
-                                </div>
-                            ) : (
-                                <Card className="border shadow-sm p-4">
-                                    <div className="relative space-y-0 pl-1 before:absolute before:left-[11px] before:top-2 before:bottom-2 before:w-[2px] before:bg-muted-foreground/20">
-                                        {combinedActivities.slice(0, sessionLimit).map((activity) => {
-                                            let Icon = Activity;
-                                            let colorClass = 'bg-primary';
-
-                                            if (activity.type === 'sales') { Icon = ShoppingCart; colorClass = 'bg-red-500'; }
-                                            if (activity.type === 'deposit') { Icon = Wallet; colorClass = 'bg-green-600'; }
-                                            if (activity.type === 'checkin') { Icon = LogIn; colorClass = 'bg-success'; }
-                                            if (activity.type === 'checkout') { Icon = LogOut; colorClass = 'bg-orange-500'; }
-                                            if (activity.type === 'stay') { Icon = MapIcon; colorClass = activity.color ? '' : 'bg-blue-500'; }
-                                            if (activity.type === 'noo') { Icon = PlusCircle; colorClass = 'bg-purple-600'; }
-                                            if (activity.type === 'receive') { Icon = Package; colorClass = 'bg-yellow-600'; }
-                                            if (activity.type === 'visit') {
-                                                Icon = Store;
-                                                colorClass = 'bg-cyan-600';
-                                                if ((activity.data as DynamicActivityData)?.isHome) {
-                                                    Icon = Home;
-                                                    colorClass = 'bg-blue-600';
-                                                } else if (activity.title.startsWith('Basecamp')) {
-                                                    Icon = MapPin;
-                                                    colorClass = 'bg-indigo-600';
-                                                }
-                                            }
-
-                                            return (
-                                                <div key={activity.id} className="relative pl-8 pb-8 last:pb-2">
-                                                    {/* Timeline dot */}
-                                                    <div
-                                                        className={`absolute left-[5px] top-1.5 w-3.5 h-3.5 rounded-full border-2 border-background z-10 shadow-sm flex items-center justify-center ${colorClass}`}
-                                                        style={activity.color ? { backgroundColor: activity.color } : {}}
-                                                    >
-                                                        <Icon className="w-2 h-2 text-white" />
+                                {/* Route Map Component */}
+                                <div className="lg:col-span-2 space-y-4">
+                                    <Card>
+                                        <CardContent className="p-4">
+                                            {selectedRouteCustomers.length === 0 ? (
+                                                <div className="h-[400px] flex flex-col items-center justify-center text-center space-y-3 bg-muted/20 rounded-xl border border-dashed p-6">
+                                                    <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center">
+                                                        <Navigation className="w-6 h-6 text-primary" />
                                                     </div>
-
-                                                    <div className="flex flex-col gap-1.5">
-                                                        <div className="flex items-center justify-between gap-4">
-                                                            <div className="flex flex-col">
-                                                                <p className="text-[10px] text-muted-foreground font-semibold uppercase tracking-wider">{activity.userName}</p>
-                                                                <p className="text-sm font-bold tracking-tight">{activity.title}</p>
-                                                            </div>
-                                                            <Badge variant="secondary" className="text-[10px] font-mono font-medium shrink-0">
-                                                                {formatWaktu(activity.timestamp)}
-                                                            </Badge>
-                                                        </div>
-
-                                                        <div className="flex flex-col gap-2">
-                                                            <p className="text-[11px] text-muted-foreground flex items-center gap-1.5 leading-tight">
-                                                                {activity.type === 'stay' ? (
-                                                                    <>
-                                                                        <Clock className="w-3 h-3 shrink-0" />
-                                                                        {activity.duration && activity.duration > 0 ? `Menetap selama ${activity.duration} menit` : 'Singgah sebentar'}
-                                                                    </>
-                                                                ) : (
-                                                                    activity.description
-                                                                )}
-                                                            </p>
-
-                                                            {(activity.lat && activity.lng) && (
-                                                                <div className="flex items-center gap-3 mt-1">
-                                                                    <a
-                                                                        href={`https://www.google.com/maps/dir/?api=1&destination=${activity.lat},${activity.lng}`}
-                                                                        target="_blank"
-                                                                        rel="noopener noreferrer"
-                                                                        className="text-[10px] text-blue-600 hover:text-blue-700 font-medium flex items-center gap-1.5 hover:underline transition-colors"
-                                                                    >
-                                                                        <ExternalLink className="w-3.5 h-3.5" />
-                                                                        Lihat Lokasi
-                                                                    </a>
-
-                                                                    <span className="text-[9px] text-muted-foreground italic bg-muted px-1.5 py-0.5 rounded">
-                                                                        {activity.lat.toFixed(4)}, {activity.lng.toFixed(4)}
-                                                                    </span>
-                                                                </div>
-                                                            )}
-                                                        </div>
+                                                    <div className="space-y-1">
+                                                        <h3 className="text-sm font-semibold">Siapkan Rute Kunjungan</h3>
+                                                        <p className="text-xs text-muted-foreground max-w-[250px]">
+                                                            Pilih beberapa pelanggan dari daftar di samping untuk membuat rute perjalanan yang optimal.
+                                                        </p>
                                                     </div>
                                                 </div>
-                                            );
-                                        })}
-                                        {combinedActivities.length > sessionLimit && (
-                                            <Button
-                                                variant="ghost"
-                                                className="w-full mt-4 border-dashed text-muted-foreground"
-                                                onClick={() => setSessionLimit(prev => prev + 10)}
-                                            >
-                                                Lihat Lainnya
-                                            </Button>
-                                        )}
+                                            ) : (
+                                                <SalesRouteMap
+                                                    customers={selectedRouteCustomers}
+                                                />
+                                            )}
+                                        </CardContent>
+                                    </Card>
+
+                                    <div className="p-4 bg-blue-50/50 border border-blue-100 rounded-xl">
+                                        <h4 className="text-xs font-bold text-blue-800 flex items-center gap-2 mb-2">
+                                            <Info className="w-3 h-3" /> Tips Optimasi
+                                        </h4>
+                                        <ul className="text-[10px] text-blue-700 space-y-1 list-disc pl-4">
+                                            <li>Urutan rute akan dimulai dari pelanggan pertama yang Anda pilih.</li>
+                                            <li>Sistem akan mengurutkan titik tengah untuk memberikan jarak tempuh minimum.</li>
+                                            <li>Pastikan semua pelanggan yang dipilih memiliki koordinat lokasi yang valid.</li>
+                                        </ul>
                                     </div>
-                                </Card>
-                            )}
-                        </div>
-                    </TabsContent>
-
-                    <TabsContent value="route" className="mt-4 space-y-4">
-                        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                            {/* Customer Selection Sidebar */}
-                            <div className="lg:col-span-1 space-y-4">
-                                <Card>
-                                    <CardHeader className="p-4">
-                                        <CardTitle className="text-sm">Pilih Pelanggan</CardTitle>
-                                    </CardHeader>
-                                    <CardContent className="p-0">
-                                        <div className="max-h-[600px] overflow-y-auto">
-                                            {listPelanggan
-                                                .filter(p => (selectedCabang.length === 0 || (p.cabangId && selectedCabang.includes(p.cabangId))) && (selectedUser.length === 0 || (p.salesId && selectedUser.includes(p.salesId))))
-                                                .filter(p => p.lokasi?.latitude && p.lokasi?.longitude)
-                                                .map(p => (
-                                                    <div
-                                                        key={p.id}
-                                                        onClick={() => toggleCustomerForRoute(p)}
-                                                        className={`p-3 border-b cursor-pointer transition-colors hover:bg-muted/50 flex items-start gap-3 ${selectedRouteCustomers.find(c => c.id === p.id) ? 'bg-primary/5 border-l-4 border-l-primary' : ''}`}
-                                                    >
-                                                        <div className={`mt-0.5 w-4 h-4 rounded border flex items-center justify-center shrink-0 ${selectedRouteCustomers.find(c => c.id === p.id) ? 'bg-primary border-primary text-white' : 'bg-background'}`}>
-                                                            {selectedRouteCustomers.find(c => c.id === p.id) && <CheckCircle2 className="w-3 h-3" />}
-                                                        </div>
-                                                        <div className="space-y-1">
-                                                            <p className="text-xs font-bold leading-none">{p.nama}</p>
-                                                            <p className="text-[10px] text-muted-foreground line-clamp-1">{p.alamat}</p>
-                                                        </div>
-                                                    </div>
-                                                ))}
-                                        </div>
-                                    </CardContent>
-                                </Card>
-                                {selectedRouteCustomers.length > 0 && (
-                                    <Button
-                                        variant="outline"
-                                        size="sm"
-                                        className="w-full text-xs gap-2"
-                                        onClick={() => setSelectedRouteCustomers([])}
-                                    >
-                                        <RotateCcw className="w-3 h-3" />
-                                        Reset Pilihan ({selectedRouteCustomers.length})
-                                    </Button>
-                                )}
-                            </div>
-
-                            {/* Route Map Component */}
-                            <div className="lg:col-span-2 space-y-4">
-                                <Card>
-                                    <CardContent className="p-4">
-                                        {selectedRouteCustomers.length === 0 ? (
-                                            <div className="h-[400px] flex flex-col items-center justify-center text-center space-y-3 bg-muted/20 rounded-xl border border-dashed p-6">
-                                                <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center">
-                                                    <Navigation className="w-6 h-6 text-primary" />
-                                                </div>
-                                                <div className="space-y-1">
-                                                    <h3 className="text-sm font-semibold">Siapkan Rute Kunjungan</h3>
-                                                    <p className="text-xs text-muted-foreground max-w-[250px]">
-                                                        Pilih beberapa pelanggan dari daftar di samping untuk membuat rute perjalanan yang optimal.
-                                                    </p>
-                                                </div>
-                                            </div>
-                                        ) : (
-                                            <SalesRouteMap
-                                                customers={selectedRouteCustomers}
-                                            />
-                                        )}
-                                    </CardContent>
-                                </Card>
-
-                                <div className="p-4 bg-blue-50/50 border border-blue-100 rounded-xl">
-                                    <h4 className="text-xs font-bold text-blue-800 flex items-center gap-2 mb-2">
-                                        <Info className="w-3 h-3" /> Tips Optimasi
-                                    </h4>
-                                    <ul className="text-[10px] text-blue-700 space-y-1 list-disc pl-4">
-                                        <li>Urutan rute akan dimulai dari pelanggan pertama yang Anda pilih.</li>
-                                        <li>Sistem akan mengurutkan titik tengah untuk memberikan jarak tempuh minimum.</li>
-                                        <li>Pastikan semua pelanggan yang dipilih memiliki koordinat lokasi yang valid.</li>
-                                    </ul>
                                 </div>
                             </div>
-                        </div>
-                    </TabsContent>
+                        </TabsContent>
+                    )}
                 </Tabs>
 
             </div>

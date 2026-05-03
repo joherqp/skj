@@ -20,9 +20,9 @@ export const auth = betterAuth({
         fields: {
             // Map Better Auth standard fields → actual DB column names (snake_case)
             name: "nama",
-            emailVerified: "emailVerified",
+            emailVerified: "email_verified",
             createdAt: "created_at",
-            updatedAt: "updatedAt",
+            updatedAt: "updated_at",
             image: "avatar_url",
         },
         additionalFields: {

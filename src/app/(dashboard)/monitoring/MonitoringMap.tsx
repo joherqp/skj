@@ -83,6 +83,7 @@ export function MonitoringMapWrapper({
   const [flyTrigger, setFlyTrigger] = useState(0);
   const prevCenterRef = useRef(mapCenter);
   const [mapInstance, setMapInstance] = useState<L.Map | null>(null);
+  const [isControlsExpanded, setIsControlsExpanded] = useState(false);
 
   useEffect(() => {
     const prev = prevCenterRef.current;
@@ -229,53 +230,69 @@ export function MonitoringMapWrapper({
         })}
       </MapContainer>
 
-      {/* Fullscreen Button */}
-      <button
-        onClick={toggleFullscreen}
-        style={{ position: 'absolute', top: 12, right: 12, zIndex: 1000 }}
-        className="p-2 bg-white/95 backdrop-blur-sm rounded-lg shadow-lg border hover:bg-gray-100 transition-colors"
-        title="Toggle Fullscreen"
-      >
-        {isFullscreen ? <Minimize className="w-4 h-4 text-slate-700" /> : <Maximize className="w-4 h-4 text-slate-700" />}
-      </button>
+      {/* Expandable Map Utilities Container */}
+      <div className="absolute bottom-4 left-4 z-[1000] flex flex-col items-start gap-2">
+        {isControlsExpanded && (
+          <div className="flex flex-col gap-2 animate-in slide-in-from-bottom-2 duration-300">
+            {/* Fullscreen Button */}
+            <button
+              onClick={toggleFullscreen}
+              className="p-2.5 bg-white/95 backdrop-blur-sm rounded-xl shadow-lg border hover:bg-gray-50 transition-all text-slate-600 active:scale-95"
+              title="Toggle Fullscreen"
+            >
+              {isFullscreen ? <Minimize className="w-5 h-5" /> : <Maximize className="w-5 h-5" />}
+            </button>
 
-      {/* Manual Pan Controls (D-Pad) */}
-      <div 
-        style={{ position: 'absolute', bottom: 32, left: 12, zIndex: 1000 }}
-        className="flex flex-col items-center bg-white/95 backdrop-blur-sm rounded-xl shadow-xl border p-1.5 gap-1"
-      >
-        <button 
-          onClick={(e) => { e.stopPropagation(); panMap(0, -200); }} 
-          className="p-1.5 hover:bg-blue-50 hover:text-blue-600 rounded-lg text-slate-600 transition-all active:scale-95" 
-          title="Geser Atas"
-        >
-          <ChevronUp size={20} />
-        </button>
-        <div className="flex gap-1">
-          <button 
-            onClick={(e) => { e.stopPropagation(); panMap(-200, 0); }} 
-            className="p-1.5 hover:bg-blue-50 hover:text-blue-600 rounded-lg text-slate-600 transition-all active:scale-95" 
-            title="Geser Kiri"
-          >
-            <ChevronLeft size={20} />
-          </button>
-          <div className="w-8 h-8 flex items-center justify-center">
-             <div className="w-1.5 h-1.5 rounded-full bg-slate-300" />
+            {/* Manual Pan Controls (D-Pad) */}
+            <div className="flex flex-col items-center bg-white/95 backdrop-blur-sm rounded-2xl shadow-xl border p-2 gap-1.5">
+              <button 
+                onClick={(e) => { e.stopPropagation(); panMap(0, -200); }} 
+                className="p-2 hover:bg-blue-50 hover:text-blue-600 rounded-lg text-slate-600 transition-all active:scale-95" 
+                title="Geser Atas"
+              >
+                <ChevronUp size={22} />
+              </button>
+              <div className="flex gap-1.5">
+                <button 
+                  onClick={(e) => { e.stopPropagation(); panMap(-200, 0); }} 
+                  className="p-2 hover:bg-blue-50 hover:text-blue-600 rounded-lg text-slate-600 transition-all active:scale-95" 
+                  title="Geser Kiri"
+                >
+                  <ChevronLeft size={22} />
+                </button>
+                <div className="w-8 h-8 flex items-center justify-center">
+                  <div className="w-1.5 h-1.5 rounded-full bg-slate-300" />
+                </div>
+                <button 
+                  onClick={(e) => { e.stopPropagation(); panMap(200, 0); }} 
+                  className="p-2 hover:bg-blue-50 hover:text-blue-600 rounded-lg text-slate-600 transition-all active:scale-95" 
+                  title="Geser Kanan"
+                >
+                  <ChevronRight size={22} />
+                </button>
+              </div>
+              <button 
+                onClick={(e) => { e.stopPropagation(); panMap(0, 200); }} 
+                className="p-2 hover:bg-blue-50 hover:text-blue-600 rounded-lg text-slate-600 transition-all active:scale-95" 
+                title="Geser Bawah"
+              >
+                <ChevronDown size={22} />
+              </button>
+            </div>
           </div>
-          <button 
-            onClick={(e) => { e.stopPropagation(); panMap(200, 0); }} 
-            className="p-1.5 hover:bg-blue-50 hover:text-blue-600 rounded-lg text-slate-600 transition-all active:scale-95" 
-            title="Geser Kanan"
-          >
-            <ChevronRight size={20} />
-          </button>
-        </div>
-        <button 
-          onClick={(e) => { e.stopPropagation(); panMap(0, 200); }} 
-          className="p-1.5 hover:bg-blue-50 hover:text-blue-600 rounded-lg text-slate-600 transition-all active:scale-95" 
-          title="Geser Bawah"
+        )}
+
+        {/* Trigger Button */}
+        <button
+          onClick={() => setIsControlsExpanded(!isControlsExpanded)}
+          className={`p-3 rounded-2xl shadow-xl border backdrop-blur-sm transition-all active:scale-90 ${
+            isControlsExpanded 
+              ? 'bg-primary text-white border-primary shadow-primary/20' 
+              : 'bg-white/95 text-primary border-slate-200'
+          }`}
+          title="Kontrol Navigasi"
         >
-          <ChevronDown size={20} />
+          {isControlsExpanded ? <X className="w-6 h-6" /> : <Navigation className="w-6 h-6" />}
         </button>
       </div>
 
@@ -470,6 +487,7 @@ export function MonitoringMapWrapper({
           color: #1e293b !important;
           white-space: nowrap !important;
           box-shadow: 0 1px 4px rgba(0,0,0,0.15) !important;
+          z-index: 1000 !important;
         }
       `}</style>
     </div>

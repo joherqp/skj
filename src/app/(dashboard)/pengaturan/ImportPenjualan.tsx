@@ -644,56 +644,83 @@ export default function ImportPenjualan() {
 
       // 2. Import Penjualan in batches
       setStatus('Mengimport transaksi penjualan...');
+
+      // Filter out rows with missing critical data
+      const validRows = data.filter(row => row.pelanggan?.trim() && row.produk?.trim());
+
+      // Grouping: combine multiple rows for the same customer + date + salesman + branch + skema into one invoice
+      const groupedMap = new Map<string, ImportRow[]>();
+      validRows.forEach(row => {
+        const rowDate = parseCSVDate(row.tanggal);
+        const dateKey = rowDate.toISOString().split('T')[0];
+        const custKey = normalizeCustomer(row.pelanggan || '');
+        const salesKey = row.salesman?.trim()?.toLowerCase() || '';
+        const cabKey = row.cabang?.trim()?.toLowerCase() || '';
+        const transKey = row.transaksi?.trim()?.toLowerCase() || '';
+        
+        const key = `${dateKey}|${custKey}|${salesKey}|${cabKey}|${transKey}`;
+        if (!groupedMap.has(key)) {
+          groupedMap.set(key, []);
+        }
+        groupedMap.get(key)!.push(row);
+      });
+
+      const groupedKeys = Array.from(groupedMap.keys());
       const batchSize = 100;
 
-      // Filter out rows with missing critical data to avoid crashes
-      const validData = data.filter(row => row.pelanggan?.trim() && row.produk?.trim());
-
-      for (let i = 0; i < validData.length; i += batchSize) {
-        const batch = validData.slice(i, i + batchSize);
+      for (let i = 0; i < groupedKeys.length; i += batchSize) {
+        const keys = groupedKeys.slice(i, i + batchSize);
         const penjualanBatch: any[] = [];
         const pembayaranBatch: any[] = [];
 
-        batch.forEach((row, idx) => {
-          const pKey = row.produk?.trim()?.toLowerCase();
-          const custKey = row.pelanggan?.trim()?.toLowerCase();
-          const salesmanName = row.salesman?.trim();
-          const cabName = row.cabang?.trim();
+        keys.forEach((key, groupIdx) => {
+          const groupRows = groupedMap.get(key)!;
+          const firstRow = groupRows[0];
+          
+          const items: any[] = [];
+          let totalSubtotal = 0;
+          let totalDiskon = 0;
+          let totalTotal = 0;
+          const notes: string[] = [];
 
-          // Find matching promo for "transaksi" column (Skema)
-          const transaksiClean = row.transaksi?.trim()?.toLowerCase();
-          const matchingPromo = promos?.find(p =>
-            p.nama.toLowerCase() === transaksiClean ||
-            p.kode?.toLowerCase() === transaksiClean
-          );
+          groupRows.forEach(row => {
+            const pKey = row.produk?.trim()?.toLowerCase();
+            const transaksiClean = row.transaksi?.trim()?.toLowerCase();
+            const matchingPromo = promos?.find(p =>
+              p.nama.toLowerCase() === transaksiClean ||
+              p.kode?.toLowerCase() === transaksiClean
+            );
 
-          const items = [{
-            id: crypto.randomUUID(),
-            barangId: finalMappings.produk[pKey]?.id || defaultBarangId,
-            jumlah: row.qty || 0,
-            satuanId: finalMappings.produk[pKey]?.satuanId || defaultSatuanId,
-            harga: row.harga || 0,
-            diskon: row.promo || 0,
-            subtotal: row.total || 0,
-            promoId: matchingPromo?.id || null
-          }];
+            items.push({
+              id: crypto.randomUUID(),
+              barangId: finalMappings.produk[pKey]?.id || defaultBarangId,
+              jumlah: row.qty || 0,
+              satuanId: finalMappings.produk[pKey]?.satuanId || defaultSatuanId,
+              harga: row.harga || 0,
+              diskon: row.promo || 0,
+              subtotal: row.total || 0,
+              promoId: matchingPromo?.id || null
+            });
 
+            totalSubtotal += (row.total || 0) + (row.promo || 0);
+            totalDiskon += row.promo || 0;
+            totalTotal += row.total || 0;
+            if (row.note && !notes.includes(row.note)) notes.push(row.note);
+          });
+
+          const transaksiClean = firstRow.transaksi?.trim()?.toLowerCase();
           const isLunas = transaksiClean !== 'tempo';
-          const normCustKey = normalizeCustomer(row.pelanggan || '');
-          const rowDate = parseCSVDate(row.tanggal);
+          const normCustKey = normalizeCustomer(firstRow.pelanggan || '');
+          const rowDate = parseCSVDate(firstRow.tanggal);
           const dateStr = rowDate.toISOString().split('T')[0].replace(/-/g, '');
 
-          // Use created_at if available and valid, otherwise fallback to rowDate
           let createdAtDate = rowDate;
-          if (row.created_at) {
-            const d = new Date(row.created_at);
-            if (!isNaN(d.getTime())) {
-              createdAtDate = d;
-            }
+          if (firstRow.created_at) {
+            const d = new Date(firstRow.created_at);
+            if (!isNaN(d.getTime())) createdAtDate = d;
           }
 
           const penjualanId = crypto.randomUUID();
-          const total = row.total || 0;
           const metodePembayaran = transaksiClean === 'tunai' ? 'tunai' : (transaksiClean === 'tempo' ? 'tempo' : 'transfer');
 
           penjualanBatch.push({
@@ -701,40 +728,40 @@ export default function ImportPenjualan() {
             tanggal: rowDate.toISOString(),
             created_at: createdAtDate.toISOString(),
             pelanggan_id: finalMappings.pelanggan[normCustKey]?.id || defaultPelangganId,
-            sales_id: finalMappings.salesman[row.salesman?.trim()?.toLowerCase()]?.id || defaultSalesId,
-            cabang_id: finalMappings.cabang[row.cabang?.trim()?.toLowerCase()]?.id || defaultCabangId,
+            sales_id: finalMappings.salesman[firstRow.salesman?.trim()?.toLowerCase()]?.id || defaultSalesId,
+            cabang_id: finalMappings.cabang[firstRow.cabang?.trim()?.toLowerCase()]?.id || defaultCabangId,
             status: isLunas ? 'lunas' : 'tempo',
-            subtotal: (row.total || 0) + (row.promo || 0),
-            diskon: row.promo || 0,
-            total: total,
-            bayar: isLunas ? total : 0,
+            subtotal: totalSubtotal,
+            diskon: totalDiskon,
+            total: totalTotal,
+            bayar: isLunas ? totalTotal : 0,
             kembalian: 0,
             is_lunas: isLunas,
             metode_pembayaran: metodePembayaran,
             items: items,
-            nomor_nota: `INV/${dateStr}-${i + idx + 1}`,
-            catatan: row.note || (matchingPromo ? `Promo: ${matchingPromo.nama}` : 'Import data'),
+            nomor_nota: `INV/${dateStr}-${i + groupIdx + 1}`,
+            catatan: notes.length > 0 ? notes.join('; ') : 'Import data (Grouped)',
             lokasi: {
-              alamat: row.alamat || '-',
-              latitude: Number(row.lat) || 0,
-              longitude: Number(row.long) || 0
+              alamat: firstRow.alamat || '-',
+              latitude: Number(firstRow.lat) || 0,
+              longitude: Number(firstRow.long) || 0
             }
           });
 
-          if (isLunas && total > 0) {
+          if (isLunas && totalTotal > 0) {
             pembayaranBatch.push({
               id: crypto.randomUUID(),
               penjualan_id: penjualanId,
-              jumlah: total,
-              bayar: total,
+              jumlah: totalTotal,
+              bayar: totalTotal,
               kembalian: 0,
               metode_pembayaran: metodePembayaran,
               tanggal: rowDate.toISOString(),
-              catatan: 'Pembayaran otomatis (Import)',
+              catatan: 'Pembayaran otomatis (Import Grouped)',
               lokasi: {
-                alamat: row.alamat || '-',
-                latitude: Number(row.lat) || 0,
-                longitude: Number(row.long) || 0
+                alamat: firstRow.alamat || '-',
+                latitude: Number(firstRow.lat) || 0,
+                longitude: Number(firstRow.long) || 0
               },
               created_at: createdAtDate.toISOString()
             });
@@ -751,9 +778,9 @@ export default function ImportPenjualan() {
           if (errorPembayaran) throw errorPembayaran;
         }
 
-        const currentProgress = Math.min(25 + Math.round(((i + batch.length) / validData.length) * 75), 100);
+        const currentProgress = Math.min(25 + Math.round(((i + keys.length) / groupedKeys.length) * 75), 100);
         setProgress(currentProgress);
-        setStatus(`Mengimport ${Math.min(i + batch.length, validData.length)} dari ${validData.length} transaksi...`);
+        setStatus(`Mengimport ${Math.min(i + keys.length, groupedKeys.length)} dari ${groupedKeys.length} invoice...`);
       }
 
       toast.success('Import berhasil!');

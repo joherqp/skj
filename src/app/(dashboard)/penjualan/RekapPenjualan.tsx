@@ -167,15 +167,20 @@ export default function RekapPenjualan() {
 
     // Product Performance Aggregation
     const productPerformance = useMemo(() => {
-        const stats: Record<string, { name: string; code: string; qty: number; total: number }> = {};
+        const stats: Record<string, { name: string; code: string; qtyTerjual: number; qtyPromo: number; total: number }> = {};
         filtered.forEach(p => {
             p.items.forEach(item => {
                 const prodId = item.barangId;
                 if (!stats[prodId]) {
                     const b = barang.find(prod => prod.id === prodId);
-                    stats[prodId] = { name: b?.nama || item.barangId, code: b?.kode || '-', qty: 0, total: 0 };
+                    stats[prodId] = { name: b?.nama || item.barangId, code: b?.kode || '-', qtyTerjual: 0, qtyPromo: 0, total: 0 };
                 }
-                stats[prodId].qty += (item.jumlah * (item.konversi || 1));
+                const q = (item.jumlah * (item.konversi || 1));
+                if (item.isBonus || item.subtotal === 0) {
+                    stats[prodId].qtyPromo += q;
+                } else {
+                    stats[prodId].qtyTerjual += q;
+                }
                 stats[prodId].total += item.subtotal;
             });
         });
@@ -233,8 +238,8 @@ export default function RekapPenjualan() {
 
         autoTable(doc, {
             startY: (doc as any).lastAutoTable.finalY + 10,
-            head: [['#', 'Produk', 'Qty Terjual', 'Nilai Total']],
-            body: productPerformance.map((p, i) => [i + 1, p.name, formatQty(p.qty), formatRupiah(p.total)]),
+            head: [['#', 'Produk', 'Qty Terjual', 'Qty Promo', 'Nilai Total']],
+            body: productPerformance.map((p, i) => [i + 1, p.name, formatQty(p.qtyTerjual), formatQty(p.qtyPromo), formatRupiah(p.total)]),
             theme: 'grid',
             headStyles: { fillColor: [13, 148, 136] },
         });
@@ -611,7 +616,8 @@ export default function RekapPenjualan() {
                                     <thead className="bg-muted/50 border-b">
                                         <tr>
                                             <th className="p-4 text-left font-bold uppercase text-[10px] tracking-wider">Nama Produk</th>
-                                            <th className="p-4 text-right font-bold uppercase text-[10px] tracking-wider">Qty Terjual</th>
+                                            <th className="p-4 text-right font-bold uppercase text-[10px] tracking-wider text-primary">Qty Terjual</th>
+                                            <th className="p-4 text-right font-bold uppercase text-[10px] tracking-wider text-orange-600">Qty Promo</th>
                                             <th className="p-4 text-right font-bold uppercase text-[10px] tracking-wider">Total Nilai</th>
                                         </tr>
                                     </thead>
@@ -622,7 +628,8 @@ export default function RekapPenjualan() {
                                                     <div className="font-bold uppercase">{p.name}</div>
                                                     <div className="text-[10px] text-muted-foreground font-mono">{p.code}</div>
                                                 </td>
-                                                <td className="p-4 text-right font-mono font-bold text-primary">{formatQty(p.qty)}</td>
+                                                <td className="p-4 text-right font-mono font-bold text-primary">{formatQty(p.qtyTerjual)}</td>
+                                                <td className="p-4 text-right font-mono font-bold text-orange-600">{formatQty(p.qtyPromo)}</td>
                                                 <td className="p-4 text-right font-bold">{formatCurrency(p.total)}</td>
                                             </tr>
                                         ))}
