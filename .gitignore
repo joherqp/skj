@@ -1,10 +1,57 @@
-.env
-.env.local
-.env.development.local
-.env.test.local
-.env.production.local
+# Dependencies
 node_modules/
-dist/
-.DS_Store
-.vscode/
+/.pnp
+.pnp.js
+
+# Testing
+coverage/
+
+# Next.js
 .next/
+out/
+
+# Production
+build/
+dist/
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+lerna-debug.log*
+.pnpm-debug.log*
+
+# Environment variables
+.env
+.env*.local
+
+# Vercel
+.vercel
+
+# TypeScript
+*.tsbuildinfo
+next-env.d.ts
+
+# OS Files
+.DS_Store
+Thumbs.db
+
+# IDEs and editors
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Project specific
+scratch/
+supabase/
+skj-client/
+scripts/
+import_mutasi.csv
+import_penjualan.csv
+lint_errors.txt
+metadata.json
+temp_*.db
+test_auth.ts
+create_password.ts
