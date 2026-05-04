@@ -53,6 +53,8 @@ export default function Monitoring() {
     const [mapCenter, setMapCenter] = useState<{ lat: number; lng: number }>({ lat: -6.2088, lng: 106.8456 });
     const [selectedCabang, setSelectedCabang] = useState<string[]>([]);
     const isLeader = useMemo(() => currentUser?.roles.includes('leader'), [currentUser]);
+    const isSalesOnly = useMemo(() => currentUser?.roles.includes('sales') && !currentUser?.roles.includes('leader'), [currentUser]);
+    const isAdminOwner = useMemo(() => currentUser?.roles.includes('admin') || currentUser?.roles.includes('owner'), [currentUser]);
     const isRestricted = useMemo(() => currentUser?.roles.some(r => ['leader', 'sales'].includes(r)), [currentUser]);
 
     // Force branch selection for restricted roles (leader/sales)
@@ -1030,55 +1032,61 @@ export default function Monitoring() {
                                 className="!space-y-0 flex flex-col md:flex-row gap-2"
                             />
 
-                            <Select value={mapMode} onValueChange={(v) => setMapMode(v as MapMode)}>
-                                <SelectTrigger className="w-full md:w-[160px] h-9 text-xs bg-background">
-                                    <SelectValue placeholder="Pilih Mode Peta" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    <SelectItem value="team">
-                                        <div className="flex items-center gap-2">
-                                            <Users className="w-3.5 h-3.5 text-blue-500" />
-                                            <span className="text-xs">Lokasi Tim</span>
-                                        </div>
-                                    </SelectItem>
-                                    <SelectItem value="pelanggan">
-                                        <div className="flex items-center justify-between gap-4 w-full">
+                            {isAdminOwner && (
+                                <Select value={mapMode} onValueChange={(v) => setMapMode(v as MapMode)}>
+                                    <SelectTrigger className="w-full md:w-[160px] h-9 text-xs bg-background">
+                                        <SelectValue placeholder="Pilih Mode Peta" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="team">
                                             <div className="flex items-center gap-2">
-                                                <Crosshair className="w-3.5 h-3.5 text-green-500" />
-                                                <span className="text-xs">Lokasi Pelanggan</span>
+                                                <Users className="w-3.5 h-3.5 text-blue-500" />
+                                                <span className="text-xs">Lokasi Tim</span>
                                             </div>
-                                            {duplicateGroups.length > 0 && (
-                                                <Badge variant="destructive" className="h-4 px-1 text-[8px] animate-pulse">
-                                                    {duplicateGroups.length}!!
-                                                </Badge>
-                                            )}
-                                        </div>
-                                    </SelectItem>
-                                    <SelectItem value="transaksi">
-                                        <div className="flex items-center gap-2">
-                                            <ShoppingCart className="w-3.5 h-3.5 text-red-500" />
-                                            <span className="text-xs">Lokasi Transaksi</span>
-                                        </div>
-                                    </SelectItem>
-                                </SelectContent>
-                            </Select>
+                                        </SelectItem>
+                                        <SelectItem value="pelanggan">
+                                            <div className="flex items-center justify-between gap-4 w-full">
+                                                <div className="flex items-center gap-2">
+                                                    <Crosshair className="w-3.5 h-3.5 text-green-500" />
+                                                    <span className="text-xs">Lokasi Pelanggan</span>
+                                                </div>
+                                                {duplicateGroups.length > 0 && (
+                                                    <Badge variant="destructive" className="h-4 px-1 text-[8px] animate-pulse">
+                                                        {duplicateGroups.length}!!
+                                                    </Badge>
+                                                )}
+                                            </div>
+                                        </SelectItem>
+                                        <SelectItem value="transaksi">
+                                            <div className="flex items-center gap-2">
+                                                <ShoppingCart className="w-3.5 h-3.5 text-red-500" />
+                                                <span className="text-xs">Lokasi Transaksi</span>
+                                            </div>
+                                        </SelectItem>
+                                    </SelectContent>
+                                </Select>
+                            )}
 
-                            <Select value={colorIndicator} onValueChange={(v) => setColorIndicator(v as any)}>
-                                <SelectTrigger className="w-full md:w-[180px] h-9 text-xs bg-background">
-                                    <SelectValue placeholder="Indikator Warna" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    <SelectItem value="pengguna">
-                                        <span className="text-xs">Warna: Pengguna</span>
-                                    </SelectItem>
-                                    <SelectItem value="cabang">
-                                        <span className="text-xs">Warna: Cabang</span>
-                                    </SelectItem>
-                                    <SelectItem value="kategori">
-                                        <span className="text-xs">Warna: Kategori</span>
-                                    </SelectItem>
-                                </SelectContent>
-                            </Select>
+                            {!isSalesOnly && (
+                                <Select value={colorIndicator} onValueChange={(v) => setColorIndicator(v as any)}>
+                                    <SelectTrigger className="w-full md:w-[180px] h-9 text-xs bg-background">
+                                        <SelectValue placeholder="Indikator Warna" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="pengguna">
+                                            <span className="text-xs">Warna: Pengguna</span>
+                                        </SelectItem>
+                                        {isAdminOwner && (
+                                            <SelectItem value="cabang">
+                                                <span className="text-xs">Warna: Cabang</span>
+                                            </SelectItem>
+                                        )}
+                                        <SelectItem value="kategori">
+                                            <span className="text-xs">Warna: Kategori</span>
+                                        </SelectItem>
+                                    </SelectContent>
+                                </Select>
+                            )}
 
                             <div className="flex flex-col gap-1 md:border-l md:pl-4 min-w-[280px]">
                                 <div className="flex items-center justify-between gap-4 px-1">

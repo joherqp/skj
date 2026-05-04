@@ -51,6 +51,9 @@ export function MonitoringFilters({
     setDateRange
 }: MonitoringFiltersProps) {
     const isAdmin = currentUser?.roles.includes('admin') || currentUser?.roles.includes('owner') || currentUser?.roles.includes('finance');
+    const isAdminOwner = currentUser?.roles.includes('admin') || currentUser?.roles.includes('owner');
+    const isLeader = currentUser?.roles.includes('leader');
+    const isSales = currentUser?.roles.includes('sales');
 
     return (
         <div className="flex flex-col md:flex-row gap-2 p-2 bg-muted/40 rounded-xl border">
@@ -144,55 +147,61 @@ export function MonitoringFilters({
                 </>
             )}
 
-            <Select value={mapMode} onValueChange={(v) => setMapMode(v as MapMode)}>
-                <SelectTrigger className="w-full md:w-[160px] h-9 text-xs bg-background">
-                    <SelectValue placeholder="Pilih Mode Peta" />
-                </SelectTrigger>
-                <SelectContent>
-                    <SelectItem value="team">
-                        <div className="flex items-center gap-2">
-                            <Users className="w-3.5 h-3.5 text-blue-500" />
-                            <span className="text-xs">Lokasi Tim</span>
-                        </div>
-                    </SelectItem>
-                    <SelectItem value="pelanggan">
-                        <div className="flex items-center justify-between gap-4 w-full">
+            {isAdminOwner && (
+                <Select value={mapMode} onValueChange={(v) => setMapMode(v as MapMode)}>
+                    <SelectTrigger className="w-full md:w-[160px] h-9 text-xs bg-background">
+                        <SelectValue placeholder="Pilih Mode Peta" />
+                    </SelectTrigger>
+                    <SelectContent>
+                        <SelectItem value="team">
                             <div className="flex items-center gap-2">
-                                <Crosshair className="w-3.5 h-3.5 text-green-500" />
-                                <span className="text-xs">Lokasi Pelanggan</span>
+                                <Users className="w-3.5 h-3.5 text-blue-500" />
+                                <span className="text-xs">Lokasi Tim</span>
                             </div>
-                            {duplicateGroupsCount > 0 && (
-                                <Badge variant="destructive" className="h-4 px-1 text-[8px] animate-pulse">
-                                    {duplicateGroupsCount}!!
-                                </Badge>
-                            )}
-                        </div>
-                    </SelectItem>
-                    <SelectItem value="transaksi">
-                        <div className="flex items-center gap-2">
-                            <ShoppingCart className="w-3.5 h-3.5 text-red-500" />
-                            <span className="text-xs">Lokasi Transaksi</span>
-                        </div>
-                    </SelectItem>
-                </SelectContent>
-            </Select>
+                        </SelectItem>
+                        <SelectItem value="pelanggan">
+                            <div className="flex items-center justify-between gap-4 w-full">
+                                <div className="flex items-center gap-2">
+                                    <Crosshair className="w-3.5 h-3.5 text-green-500" />
+                                    <span className="text-xs">Lokasi Pelanggan</span>
+                                </div>
+                                {duplicateGroupsCount > 0 && (
+                                    <Badge variant="destructive" className="h-4 px-1 text-[8px] animate-pulse">
+                                        {duplicateGroupsCount}!!
+                                    </Badge>
+                                )}
+                            </div>
+                        </SelectItem>
+                        <SelectItem value="transaksi">
+                            <div className="flex items-center gap-2">
+                                <ShoppingCart className="w-3.5 h-3.5 text-red-500" />
+                                <span className="text-xs">Lokasi Transaksi</span>
+                            </div>
+                        </SelectItem>
+                    </SelectContent>
+                </Select>
+            )}
 
-            <Select value={colorIndicator} onValueChange={(v) => setColorIndicator(v as any)}>
-                <SelectTrigger className="w-full md:w-[180px] h-9 text-xs bg-background">
-                    <SelectValue placeholder="Indikator Warna" />
-                </SelectTrigger>
-                <SelectContent>
-                    <SelectItem value="pengguna">
-                        <span className="text-xs">Warna: Pengguna</span>
-                    </SelectItem>
-                    <SelectItem value="cabang">
-                        <span className="text-xs">Warna: Cabang</span>
-                    </SelectItem>
-                    <SelectItem value="kategori">
-                        <span className="text-xs">Warna: Kategori</span>
-                    </SelectItem>
-                </SelectContent>
-            </Select>
+            {!isSales && (
+                <Select value={colorIndicator} onValueChange={(v) => setColorIndicator(v as any)}>
+                    <SelectTrigger className="w-full md:w-[180px] h-9 text-xs bg-background">
+                        <SelectValue placeholder="Indikator Warna" />
+                    </SelectTrigger>
+                    <SelectContent>
+                        <SelectItem value="pengguna">
+                            <span className="text-xs">Warna: Pengguna</span>
+                        </SelectItem>
+                        {isAdminOwner && (
+                            <SelectItem value="cabang">
+                                <span className="text-xs">Warna: Cabang</span>
+                            </SelectItem>
+                        )}
+                        <SelectItem value="kategori">
+                            <span className="text-xs">Warna: Kategori</span>
+                        </SelectItem>
+                    </SelectContent>
+                </Select>
+            )}
 
             <div className="flex-1 min-w-0">
                 <DatePickerWithRange
