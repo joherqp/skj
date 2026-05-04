@@ -130,9 +130,9 @@ export function ScopeFilters({
                                         ? "text-rose-600 hover:bg-rose-50 hover:text-rose-700"
                                         : "text-indigo-600 hover:bg-indigo-50 hover:text-indigo-700"
                                         }`}
-                                    onClick={() => setSelectedCabangIds(selectedCabangIds.length === 0 ? ['__none__'] : [])}
+                                    onClick={() => setSelectedCabangIds([])}
                                 >
-                                    {selectedCabangIds.length === 0 ? "BATAL SEMUA" : "PILIH SEMUA"}
+                                    {selectedCabangIds.length === 0 ? "✓ SEMUA DIPILIH" : "PILIH SEMUA"}
                                 </Button>
                             </div>
                             <div className="flex-1 overflow-y-auto p-1 space-y-0.25">
@@ -143,40 +143,27 @@ export function ScopeFilters({
                                 )}
                                 {branchOptions.map(c => {
                                     const isAllSelected = selectedCabangIds.length === 0;
-                                    const isChecked = !selectedCabangIds.includes('__none__') && (isAllSelected || selectedCabangIds.includes(c.id));
+                                    const isChecked = isAllSelected || selectedCabangIds.includes(c.id);
 
                                     return (
                                         <DropdownMenuCheckboxItem
                                             key={c.id}
                                             checked={isChecked}
-                                            onCheckedChange={(checked) => {
-                                                if (checked) {
-                                                    // If it was 'none', set to this one
-                                                    if (selectedCabangIds.includes('__none__')) {
-                                                        setSelectedCabangIds([c.id]);
-                                                    } else {
-                                                        const newList = [...selectedCabangIds, c.id];
-                                                        // If all are now selected, just set to [] for "All"
-                                                        if (newList.length >= listCabang.length) {
-                                                            setSelectedCabangIds([]);
-                                                        } else {
-                                                            setSelectedCabangIds(newList);
-                                                        }
-                                                    }
+                                            onCheckedChange={() => {
+                                                if (isAllSelected) {
+                                                    // From "all" state → select only this item
+                                                    setSelectedCabangIds([c.id]);
+                                                } else if (selectedCabangIds.includes(c.id)) {
+                                                    // Uncheck this item
+                                                    const newList = selectedCabangIds.filter(id => id !== c.id);
+                                                    // If none left, go back to "all"
+                                                    setSelectedCabangIds(newList.length === 0 ? [] : newList);
                                                 } else {
-                                                    // Unchecking
-                                                    if (isAllSelected) {
-                                                        // If starting from All, populate with everything else
-                                                        setSelectedCabangIds(listCabang.filter(opt => opt.id !== c.id).map(opt => opt.id));
-                                                    } else {
-                                                        const newList = selectedCabangIds.filter(id => id !== c.id);
-                                                        if (newList.length === 0) {
-                                                            // If none left, use special marker to avoid returning to "All" state implicitly
-                                                            setSelectedCabangIds(['__none__']);
-                                                        } else {
-                                                            setSelectedCabangIds(newList);
-                                                        }
-                                                    }
+                                                    // Check this item
+                                                    const newList = [...selectedCabangIds, c.id];
+                                                    // If all items are now selected, reset to [] ("all")
+                                                    const allAvailable = availableCabangIds || listCabang.map(x => x.id);
+                                                    setSelectedCabangIds(newList.length >= allAvailable.length ? [] : newList);
                                                 }
                                             }}
                                             onSelect={(e) => e.preventDefault()}
@@ -235,9 +222,9 @@ export function ScopeFilters({
                                         ? "text-rose-600 hover:bg-rose-50 hover:text-rose-700"
                                         : "text-orange-600 hover:bg-orange-50 hover:text-orange-700"
                                         }`}
-                                    onClick={() => setSelectedUserIds(selectedUserIds.length === 0 ? ['__none__'] : [])}
+                                    onClick={() => setSelectedUserIds([])}
                                 >
-                                    {selectedUserIds.length === 0 ? "BATAL SEMUA" : "PILIH SEMUA"}
+                                    {selectedUserIds.length === 0 ? "✓ SEMUA DIPILIH" : "PILIH SEMUA"}
                                 </Button>
                             </div>
                             <div className="flex-1 overflow-y-auto p-1 space-y-0.5">
@@ -248,35 +235,27 @@ export function ScopeFilters({
                                 )}
                                 {userOptions.map(u => {
                                     const isAllSelected = selectedUserIds.length === 0;
-                                    const isChecked = !selectedUserIds.includes('__none__') && (isAllSelected || selectedUserIds.includes(u.id));
+                                    const isChecked = isAllSelected || selectedUserIds.includes(u.id);
 
                                     return (
                                         <DropdownMenuCheckboxItem
                                             key={u.id}
                                             checked={isChecked}
-                                            onCheckedChange={(checked) => {
-                                                if (checked) {
-                                                    if (selectedUserIds.includes('__none__')) {
-                                                        setSelectedUserIds([u.id]);
-                                                    } else {
-                                                        const newList = [...selectedUserIds, u.id];
-                                                        if (newList.length >= users.length) {
-                                                            setSelectedUserIds([]);
-                                                        } else {
-                                                            setSelectedUserIds(newList);
-                                                        }
-                                                    }
+                                            onCheckedChange={() => {
+                                                if (isAllSelected) {
+                                                    // From "all" state → select only this user
+                                                    setSelectedUserIds([u.id]);
+                                                } else if (selectedUserIds.includes(u.id)) {
+                                                    // Uncheck this user
+                                                    const newList = selectedUserIds.filter(id => id !== u.id);
+                                                    // If none left, go back to "all"
+                                                    setSelectedUserIds(newList.length === 0 ? [] : newList);
                                                 } else {
-                                                    if (isAllSelected) {
-                                                        setSelectedUserIds(users.filter(opt => opt.id !== u.id).map(opt => opt.id));
-                                                    } else {
-                                                        const newList = selectedUserIds.filter(id => id !== u.id);
-                                                        if (newList.length === 0) {
-                                                            setSelectedUserIds(['__none__']);
-                                                        } else {
-                                                            setSelectedUserIds(newList);
-                                                        }
-                                                    }
+                                                    // Check this user
+                                                    const newList = [...selectedUserIds, u.id];
+                                                    // If all users are now selected, reset to [] ("all")
+                                                    const allAvailable = availableUserIds || userOptions.map(x => x.id);
+                                                    setSelectedUserIds(newList.length >= allAvailable.length ? [] : newList);
                                                 }
                                             }}
                                             onSelect={(e) => e.preventDefault()}
