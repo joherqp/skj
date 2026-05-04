@@ -31,7 +31,8 @@ import {
   RiwayatPelanggan,
   SalesTarget,
   StokLog,
-  StokHarian
+  StokHarian,
+  RiwayatSaldoPengguna
 } from '@/types';
 import { toCamelCase, toSnakeCase } from '@/lib/utils';
 import { playNotificationSound } from '@/lib/notificationSound';
@@ -87,6 +88,7 @@ export function DatabaseProvider({ children }: { children: ReactNode }) {
   const [pushSubscriptions, setPushSubscriptions] = useState<any[]>([]);
   const [salesTargetHistory, setSalesTargetHistory] = useState<any[]>([]);
   const [stokSnapshot, setStokSnapshot] = useState<any[]>([]);
+  const [riwayatSaldoPengguna, setRiwayatSaldoPengguna] = useState<RiwayatSaldoPengguna[]>([]);
 
   // Profil Perusahaan
   const [profilPerusahaan, setProfilPerusahaan] = useState<ProfilPerusahaan>({
@@ -403,8 +405,9 @@ export function DatabaseProvider({ children }: { children: ReactNode }) {
         pembayaranPenjualanRes,
         userLocationsRes,
         pushSubscriptionsRes,
-        salesTargetHistoryRes,
-        stokSnapshotRes
+         salesTargetHistoryRes,
+        stokSnapshotRes,
+        riwayatSaldoRes
       ] = await Promise.all([
         fetchData<Kategori>('kategori', 30, effectiveMode),
         fetchData<Satuan>('satuan', 30, effectiveMode),
@@ -437,7 +440,8 @@ export function DatabaseProvider({ children }: { children: ReactNode }) {
         fetchData<any>('user_locations', 7, effectiveMode),
         fetchData<any>('push_subscriptions', 30, effectiveMode),
         fetchData<any>('sales_target_history', 30, effectiveMode),
-        fetchData<any>('stok_snapshot', 30, effectiveMode)
+        fetchData<any>('stok_snapshot', 30, effectiveMode),
+        fetchData<RiwayatSaldoPengguna>('riwayat_saldo_pengguna', daysLimit, effectiveMode)
       ]);
 
       setKategori(kategoriRes);
@@ -472,6 +476,7 @@ export function DatabaseProvider({ children }: { children: ReactNode }) {
       setPushSubscriptions(pushSubscriptionsRes);
       setSalesTargetHistory(salesTargetHistoryRes);
       setStokSnapshot(stokSnapshotRes);
+      setRiwayatSaldoPengguna(riwayatSaldoRes);
 
       if (pettyCashRes && pettyCashRes.length > 0) {
         setPettyCashBalance(pettyCashRes[0].saldoAkhir);
@@ -749,6 +754,7 @@ export function DatabaseProvider({ children }: { children: ReactNode }) {
     harga,
     stokPengguna,
     saldoPengguna,
+    riwayatSaldoPengguna,
     pelanggan,
     users,
     penjualan,
@@ -1111,9 +1117,48 @@ export function DatabaseProvider({ children }: { children: ReactNode }) {
     deleteMutasiBarang: (id) => deleteItem('mutasi_barang', id, setMutasiBarang),
 
     // Saldo
-    addSaldoPengguna: (item) => createItem('saldo_pengguna', item, setSaldoPengguna),
-    updateSaldoPengguna: (id, item) => updateItem('saldo_pengguna', id, item, setSaldoPengguna),
-    deleteSaldoPengguna: (id) => deleteItem('saldo_pengguna', id, setSaldoPengguna),
+
+    catatMutasiSaldo: async (userId: string, tipe: 'masuk' | 'keluar', jumlah: number, keterangan: string, referensiId?: string) => {
+      try {
+        const amount = Number(jumlah);
+        if (isNaN(amount)) throw new Error('Jumlah tidak valid');
+
+        const currentSaldoRecord = saldoPengguna.find(s => s.userId === userId);
+        const saldoAwal = currentSaldoRecord ? Number(currentSaldoRecord.saldo || 0) : 0;
+        const saldoAkhir = tipe === 'masuk' ? saldoAwal + amount : saldoAwal - amount;
+
+        // 1. Update Saldo Summary
+        if (currentSaldoRecord) {
+          await updateItem('saldo_pengguna', currentSaldoRecord.id, {
+            saldo: saldoAkhir,
+            updatedAt: new Date()
+          }, setSaldoPengguna);
+        } else {
+          await createItem('saldo_pengguna', {
+            userId,
+            saldo: saldoAkhir,
+            updatedAt: new Date()
+          }, setSaldoPengguna);
+        }
+
+        // 2. Insert Riwayat
+        await createItem('riwayat_saldo_pengguna', {
+          userId,
+          tipe,
+          jumlah: amount,
+          saldoAwal,
+          saldoAkhir,
+          keterangan,
+          referensiId,
+          createdAt: new Date()
+        }, setRiwayatSaldoPengguna);
+
+        return saldoAkhir;
+      } catch (error) {
+        console.error('Error catatMutasiSaldo:', error);
+        throw error;
+      }
+    },
 
     // NEW METHODS ADDED FOR MISSING PROPERTIES IN CONTEXT
     // Penyesuaian Stok
@@ -1247,6 +1292,7 @@ export function DatabaseProvider({ children }: { children: ReactNode }) {
     restock,
     riwayatPelanggan,
     saldoPengguna,
+    riwayatSaldoPengguna,
     satuan,
     setoran,
     stokHarian,

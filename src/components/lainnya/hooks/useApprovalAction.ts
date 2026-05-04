@@ -18,7 +18,7 @@ export const useApprovalAction = () => {
         satuan: satuanList, users, addNotifikasi,
         updatePelanggan, pelanggan, updateUser,
         addPromo, updatePromo,
-        updateSaldoPengguna, saldoPengguna, addSaldoPengguna,
+        catatMutasiSaldo,
         reimburse, updateReimburse, addPettyCash,
         penjualan, updatePenjualan, cabang, rekeningBank,
         permintaanBarang, updatePermintaanBarang,
@@ -216,21 +216,13 @@ export const useApprovalAction = () => {
                         try {
                             // 1. Deduct saldo from Sales (Sender)
                             if (st.salesId) {
-                                const salesSaldo = saldoPengguna.find(s => s.userId === st.salesId);
-                                if (salesSaldo) {
-                                    // Use absolute amount for consistency
-                                    const amount = Number(st.jumlah);
-                                    await updateSaldoPengguna(salesSaldo.id, {
-                                        saldo: Number(salesSaldo.saldo) - amount,
-                                        updatedAt: new Date()
-                                    });
-                                } else {
-                                    await addSaldoPengguna({
-                                        userId: st.salesId,
-                                        saldo: -Number(st.jumlah),
-                                        updatedAt: new Date()
-                                    });
-                                }
+                                await catatMutasiSaldo(
+                                    st.salesId,
+                                    'keluar',
+                                    Number(st.jumlah),
+                                    'Setoran Kas (Diterima)',
+                                    st.id
+                                );
                             }
 
                             // 2. Add saldo to Recipient
@@ -238,20 +230,13 @@ export const useApprovalAction = () => {
                             const receiverId = approvalItem?.targetUserId || user?.id;
 
                             if (receiverId) {
-                                const receiverSaldo = saldoPengguna.find(s => s.userId === receiverId);
-                                const amount = Number(st.jumlah);
-                                if (receiverSaldo) {
-                                    await updateSaldoPengguna(receiverSaldo.id, {
-                                        saldo: Number(receiverSaldo.saldo) + amount,
-                                        updatedAt: new Date()
-                                    });
-                                } else {
-                                    await addSaldoPengguna({
-                                        userId: receiverId,
-                                        saldo: amount,
-                                        updatedAt: new Date()
-                                    });
-                                }
+                                await catatMutasiSaldo(
+                                    receiverId,
+                                    'masuk',
+                                    Number(st.jumlah),
+                                    'Terima Setoran Kas',
+                                    st.id
+                                );
                                 toast.success("Setoran disetujui: Saldo Sales dipotong, Saldo Penerima bertambah.");
                             } else {
                                 toast.warning("Setoran disetujui, namun gagal menentukan penerima saldo.");
@@ -399,14 +384,13 @@ export const useApprovalAction = () => {
                             if (totalPaid > 0) {
                                 try {
                                     const sellerId = trx.salesId || trx.createdBy;
-                                    const currentSaldoRecord = saldoPengguna.find(s => s.userId === sellerId);
-                                    if (currentSaldoRecord) {
-                                        await updateSaldoPengguna(currentSaldoRecord.id, {
-                                            saldo: currentSaldoRecord.saldo - totalPaid
-                                        });
-                                    } else {
-                                        await addSaldoPengguna({ userId: sellerId, saldo: -totalPaid });
-                                    }
+                                    await catatMutasiSaldo(
+                                        sellerId,
+                                        'keluar',
+                                        totalPaid,
+                                        `Pembatalan Penjualan: ${trx.nomorNota}`,
+                                        trx.id
+                                    );
                                 } catch (e) {
                                     console.error("Failed to update saldo during cancellation", e);
                                 }
@@ -743,20 +727,13 @@ export const useApprovalAction = () => {
 
                         if (amount > 0 && senderId) {
                             try {
-                                const senderSaldo = saldoPengguna.find(s => s.userId === senderId);
-                                if (senderSaldo) {
-                                    await updateSaldoPengguna(senderSaldo.id, {
-                                        saldo: Number(senderSaldo.saldo) - amount,
-                                        updatedAt: new Date()
-                                    });
-                                } else {
-                                    // Fallback: create record with negative balance if not exists
-                                    await addSaldoPengguna({
-                                        userId: senderId,
-                                        saldo: -amount,
-                                        updatedAt: new Date()
-                                    });
-                                }
+                                await catatMutasiSaldo(
+                                    senderId,
+                                    'keluar',
+                                    amount,
+                                    'Setoran ke Pusat (Approved)',
+                                    approvalItem.id
+                                );
                                 toast.success(`Rencana setoran disetujui. Saldo terpotong ${formatRupiah(amount)}.`);
                             } catch (e) {
                                 console.error("Gagal update saldo rencana_setoran", e);

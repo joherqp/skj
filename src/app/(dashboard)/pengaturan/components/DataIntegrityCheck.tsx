@@ -49,9 +49,10 @@ type StockItemPayload = {
 export default function DataIntegrityCheck() {
     const {
         users, barang, stokPengguna,
-        updateStokPengguna, updateSaldoPengguna, addSaldoPengguna, addStokPengguna,
+        updateStokPengguna, addStokPengguna,
         updateMutasiBarang, updateSetoran, updateReimburse,
-        updatePermintaanBarang, updatePenyesuaianStok, updatePenjualan
+        updatePermintaanBarang, updatePenyesuaianStok, updatePenjualan,
+        catatMutasiSaldo
     } = useDatabase();
 
     const [isScanning, setIsScanning] = useState(false);
@@ -636,14 +637,16 @@ export default function DataIntegrityCheck() {
                     return;
                 }
             } else if (issue.type === 'Balance') {
-                if (issue.referenceId) {
-                    await updateSaldoPengguna(issue.referenceId, { saldo: issue.expected });
-                } else if (issue.userId) {
-                    await addSaldoPengguna({
-                        userId: issue.userId,
-                        saldo: issue.expected,
-                        updatedAt: new Date()
-                    });
+                if (issue.userId) {
+                    const delta = issue.expected - issue.actual;
+                    if (delta > 0) {
+                        await catatMutasiSaldo(issue.userId, 'masuk', delta, 'Penyesuaian Saldo (Integritas Data)');
+                    } else if (delta < 0) {
+                        await catatMutasiSaldo(issue.userId, 'keluar', Math.abs(delta), 'Penyesuaian Saldo (Integritas Data)');
+                    }
+                } else {
+                    toast.error("User ID tidak ditemukan untuk perbaikan saldo.");
+                    return;
                 }
             } else if (issue.type === 'MutasiStatus') {
                 if (issue.referenceId && issue.targetStatus) {

@@ -502,6 +502,18 @@ export interface SaldoPengguna {
   updatedAt: Date;
 }
 
+export interface RiwayatSaldoPengguna {
+  id: string;
+  userId: string;
+  tipe: 'masuk' | 'keluar';
+  jumlah: number;
+  saldoAwal: number;
+  saldoAkhir: number;
+  keterangan: string;
+  referensiId?: string;
+  createdAt: Date;
+}
+
 export interface RestockItem {
   barangId: string;
   namaBarang: string;
@@ -685,6 +697,7 @@ export interface DatabaseContextType {
   harga: Harga[];
   stokPengguna: StokPengguna[];
   saldoPengguna: SaldoPengguna[];
+  riwayatSaldoPengguna: RiwayatSaldoPengguna[];
   promo: Promo[];
 
   // Transactions
@@ -821,9 +834,6 @@ export interface DatabaseContextType {
   updateMutasiBarang: (id: string, item: Partial<MutasiBarang>) => Promise<void>;
   deleteMutasiBarang: (id: string) => Promise<void>;
 
-  addSaldoPengguna: (item: Partial<SaldoPengguna>) => Promise<SaldoPengguna>;
-  updateSaldoPengguna: (id: string, item: Partial<SaldoPengguna>) => Promise<void>;
-  deleteSaldoPengguna: (id: string) => Promise<void>;
 
   addPenyesuaianStok: (item: Record<string, unknown>) => Promise<unknown>;
   updatePenyesuaianStok: (id: string, item: Record<string, unknown>) => Promise<void>;
@@ -848,6 +858,7 @@ export interface DatabaseContextType {
 
   // Merge Pelanggan
   mergePelanggan: (targetId: string, sourceId: string) => Promise<void>;
+  catatMutasiSaldo: (userId: string, tipe: 'masuk' | 'keluar', jumlah: number, keterangan: string, referensiId?: string) => Promise<number>;
 }
 
 export interface StokLog {

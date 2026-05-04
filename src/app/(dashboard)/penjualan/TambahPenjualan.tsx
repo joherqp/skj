@@ -52,7 +52,7 @@ export default function TambahPenjualan() {
     const router = useRouter();
     const searchParams = useSearchParams();
     const { user } = useAuth();
-    const { pelanggan, barang, addPenjualan, satuan, stokPengguna, saldoPengguna, addSaldoPengguna, harga, promo, kategoriPelanggan, updateSaldoPengguna, penjualan, addPersetujuan, profilPerusahaan, absensi, addAbsensi, addKunjungan, addPembayaranPenjualan } = useDatabase(); // Added addPembayaranPenjualan
+    const { pelanggan, barang, addPenjualan, satuan, stokPengguna, catatMutasiSaldo, harga, promo, kategoriPelanggan, penjualan, addPersetujuan, profilPerusahaan, absensi, addAbsensi, addKunjungan, addPembayaranPenjualan } = useDatabase(); // Added addPembayaranPenjualan
     const { getPriceDetailed, getPromo } = usePricing();
     const [loadingLoc, setLoadingLoc] = useState(false);
 
@@ -986,12 +986,13 @@ export default function TambahPenjualan() {
                     if ((paymentMethod === 'tunai' || paymentAmount > 0) && user?.id) {
                         try {
                             if (paymentMethod === 'tunai') {
-                                const existingSaldo = saldoPengguna.find(s => s.userId === user.id);
-                                if (existingSaldo) {
-                                    await updateSaldoPengguna(existingSaldo.id, { saldo: existingSaldo.saldo + netReceived });
-                                } else {
-                                    await addSaldoPengguna({ userId: user.id, saldo: netReceived });
-                                }
+                                await catatMutasiSaldo(
+                                    user.id,
+                                    'masuk',
+                                    netReceived,
+                                    `Penjualan: ${invoiceNumber}`,
+                                    newPenjualanId
+                                );
                             }
                         } catch (err) {
                             console.error("Update saldo failed", err);

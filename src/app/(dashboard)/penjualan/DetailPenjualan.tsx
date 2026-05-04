@@ -29,8 +29,7 @@ export default function DetailPenjualan() {
         updatePenjualan,
         pelanggan,
         users,
-        updateSaldoPengguna,
-        saldoPengguna,
+        catatMutasiSaldo,
         addStokPengguna,
         updateStokPengguna,
         stokPengguna,
@@ -41,7 +40,6 @@ export default function DetailPenjualan() {
         addPembayaranPenjualan,
         isAdminOrOwner,
         addPersetujuan,
-        addSaldoPengguna
     } = useDatabase();
     const { user: currentUser } = useAuth();
 
@@ -155,12 +153,13 @@ export default function DetailPenjualan() {
                     const totalPaid = payments.reduce((sum, p) => sum + Number(p.jumlah), 0);
                     if (totalPaid > 0) {
                         const sellerId = trx.salesId || trx.createdBy;
-                        const currSaldo = saldoPengguna.find(s => s.userId === sellerId);
-                        if (currSaldo) {
-                            await updateSaldoPengguna(currSaldo.id, { saldo: currSaldo.saldo - totalPaid });
-                        } else {
-                            await addSaldoPengguna({ userId: sellerId, saldo: -totalPaid });
-                        }
+                        await catatMutasiSaldo(
+                            sellerId,
+                            'keluar',
+                            totalPaid,
+                            `Pembatalan Penjualan: ${trx.nomorNota}`,
+                            trx.id
+                        );
                     }
 
                     // 2. Delete payments
