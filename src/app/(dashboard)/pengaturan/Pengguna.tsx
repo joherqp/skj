@@ -13,7 +13,17 @@ import { useState } from 'react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { LocationPicker, extractAddressFromCoordinates } from '@/components/map/components/LocationPicker';
-import { MapPin, Locate, Search } from "lucide-react";
+import { MapPin, Locate, Search, Key, Copy, Check, ShieldAlert, Send } from "lucide-react";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 // Local UserRole removed, using imported one
 
@@ -50,9 +60,87 @@ export default function Pengguna() {
                         
     return matchTab && matchSearch;
   }).sort((a, b) => a.nama.localeCompare(b.nama));
+  
+  const [resetDialog, setResetDialog] = useState<{
+    open: boolean;
+    user: UserType | null;
+    password: string;
+    isSuccess: boolean;
+  }>({
+    open: false,
+    user: null,
+    password: '',
+    isSuccess: false
+  });
+  const [isResetting, setIsResetting] = useState(false);
+  const [hasCopied, setHasCopied] = useState(false);
+
+  const handleOpenResetDialog = (user: UserType) => {
+    const defaultPassword = 'skj' + Math.floor(100000 + Math.random() * 900000);
+    setResetDialog({
+      open: true,
+      user,
+      password: defaultPassword,
+      isSuccess: false
+    });
+    setHasCopied(false);
+  };
+
+  const handleConfirmReset = async () => {
+    if (!resetDialog.user) return;
+    
+    setIsResetting(true);
+    try {
+      const res = await fetch('/api/admin/set-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          userId: resetDialog.user.id,
+          newPassword: resetDialog.password
+        })
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Gagal mereset password');
+
+      setResetDialog(prev => ({ ...prev, isSuccess: true }));
+      toast.success(`Password ${resetDialog.user.nama} berhasil direset`);
+    } catch (error: any) {
+      console.error('Reset password error:', error);
+      toast.error(error.message || 'Terjadi kesalahan saat mereset password');
+      setResetDialog(prev => ({ ...prev, open: false }));
+    } finally {
+      setIsResetting(false);
+    }
+  };
+
+  const copyToClipboard = () => {
+    navigator.clipboard.writeText(resetDialog.password);
+    setHasCopied(true);
+    setTimeout(() => setHasCopied(false), 2000);
+    toast.info('Password disalin ke clipboard');
+  };
+
+  const copyFullInfo = () => {
+    if (!resetDialog.user) return;
+    const text = `Halo ${resetDialog.user.nama},
+Password akun SKJ Anda telah direset oleh Admin.
+
+Berikut informasi login Anda:
+Username: ${resetDialog.user.username}
+Password Baru: ${resetDialog.password}
+
+Silakan login di: ${window.location.origin}/login
+Demi keamanan, harap segera ubah password Anda di menu Profil setelah login.
+
+Terima kasih.`;
+    navigator.clipboard.writeText(text);
+    toast.success('Informasi lengkap disalin ke clipboard');
+  };
 
   return (
-    <SettingsCrud<UserType>
+    <>
+      <SettingsCrud<UserType>
       title="Pengelolaan Pengguna"
       icon={User}
       items={filteredUsers}
@@ -105,6 +193,24 @@ export default function Pengguna() {
           label: 'ID Sales',
           render: (item) => (
             <span className="font-mono font-bold text-primary">{item.kodeUnik || '-'}</span>
+          )
+        },
+        {
+          key: 'id',
+          label: 'Akses',
+          render: (item) => isAdminOrOwner && (
+            <Button 
+              variant="outline" 
+              size="sm" 
+              className="h-7 text-[10px] bg-yellow-50 hover:bg-yellow-100 border-yellow-200 text-yellow-700 font-bold"
+              onClick={(e) => {
+                e.stopPropagation();
+                handleOpenResetDialog(item);
+              }}
+            >
+              <Key className="w-3 h-3 mr-1" />
+              Reset Password
+            </Button>
           )
         }
       ]}
@@ -421,6 +527,87 @@ export default function Pengguna() {
           </div>
         );
       }}
-    />
+      />
+
+      <AlertDialog 
+        open={resetDialog.open} 
+        onOpenChange={(open) => !isResetting && setResetDialog(prev => ({ ...prev, open }))}
+      >
+        <AlertDialogContent className="max-w-[400px]">
+          <AlertDialogHeader>
+            <div className="flex items-center gap-2 text-yellow-600 mb-2">
+              <ShieldAlert className="w-5 h-5" />
+              <AlertDialogTitle>Reset Password Pengguna</AlertDialogTitle>
+            </div>
+            <AlertDialogDescription className="text-left space-y-3">
+              {resetDialog.isSuccess ? (
+                <div className="space-y-4">
+                  <p className="text-green-600 font-medium">Password berhasil direset! Berikut adalah password baru untuk <span className="font-bold">{resetDialog.user?.nama}</span>:</p>
+                  
+                  <div className="flex items-center gap-2 p-3 bg-muted rounded-lg border border-border group relative">
+                    <code className="flex-1 font-mono text-lg font-bold tracking-wider text-center">
+                      {resetDialog.password}
+                    </code>
+                    <Button
+                      size="icon"
+                      variant="ghost"
+                      className="h-8 w-8"
+                      onClick={copyToClipboard}
+                    >
+                      {hasCopied ? <Check className="w-4 h-4 text-green-600" /> : <Copy className="w-4 h-4" />}
+                    </Button>
+                  </div>
+                  
+                  <div className="p-3 bg-blue-50 border border-blue-100 rounded-md text-[12px] text-blue-700 leading-relaxed">
+                    <strong>Penting:</strong> Harap catat atau salin password di atas dan berikan kepada pengguna. Password ini tidak akan ditampilkan lagi setelah jendela ini ditutup.
+                  </div>
+
+                  <Button
+                    variant="outline"
+                    className="w-full flex items-center justify-center gap-2 border-primary/20 text-primary hover:bg-primary/5"
+                    onClick={copyFullInfo}
+                  >
+                    <Send className="w-4 h-4" />
+                    Salin Info Login (Kirim ke User)
+                  </Button>
+                </div>
+              ) : (
+                <>
+                  <p>Anda akan mereset password untuk <strong>{resetDialog.user?.nama}</strong>.</p>
+                  <p>Sistem telah menyiapkan password default sementara:</p>
+                  <div className="p-2 bg-muted rounded text-center font-mono font-bold border">
+                    {resetDialog.password}
+                  </div>
+                  <p className="text-[12px] text-muted-foreground italic">
+                    * Password ini dapat disalin setelah konfirmasi dilakukan.
+                  </p>
+                </>
+              )}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            {resetDialog.isSuccess ? (
+              <AlertDialogAction className="bg-green-600 hover:bg-green-700" onClick={() => setResetDialog(prev => ({ ...prev, open: false }))}>
+                Selesai
+              </AlertDialogAction>
+            ) : (
+              <>
+                <AlertDialogCancel disabled={isResetting}>Batal</AlertDialogCancel>
+                <AlertDialogAction 
+                  className="bg-yellow-600 hover:bg-yellow-700"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    handleConfirmReset();
+                  }}
+                  disabled={isResetting}
+                >
+                  {isResetting ? "Memproses..." : "Ya, Reset Sekarang"}
+                </AlertDialogAction>
+              </>
+            )}
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </>
   );
 }

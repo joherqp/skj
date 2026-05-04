@@ -70,10 +70,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const login = useCallback(async (usernameOrEmail: string, password: string): Promise<boolean> => {
     try {
-      const { error } = await authClient.signIn.email({
-        email: usernameOrEmail.includes('@') ? usernameOrEmail : `${usernameOrEmail}@skjaya.my.id`, // Fallback for username
-        password,
-      });
+      const isEmail = usernameOrEmail.includes('@');
+      
+      const { error } = isEmail 
+        ? await authClient.signIn.email({
+            email: usernameOrEmail.toLowerCase(),
+            password,
+          })
+        : await authClient.signIn.username({
+            username: usernameOrEmail.toLowerCase(),
+            password,
+          });
 
       if (error) {
         toast.error(error.message || 'Gagal login');

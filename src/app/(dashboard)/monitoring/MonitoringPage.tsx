@@ -9,7 +9,7 @@ import { useDatabase } from '@/contexts/DatabaseContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
 import { MapPin, Clock, User, Activity, Users, ShoppingCart, Crosshair, Wallet, LogIn, LogOut, Map as MapIcon, Package, Store, PlusCircle, Home, TrendingUp, Coins, Target, CheckCircle, CheckCircle2, ListFilter, Building, Navigation, RotateCcw, Search, AlertTriangle, Calendar, X, ALargeSmall, Settings2 } from 'lucide-react';
-import { formatTanggal, formatWaktu, formatRupiah } from '@/lib/utils';
+import { formatTanggal, formatWaktu, formatRupiah, sanitizeUUIDFilters } from '@/lib/utils';
 import { differenceInMinutes } from 'date-fns';
 import { SalesRouteMap } from '@/components/features/components/SalesRouteMap';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -524,7 +524,8 @@ export default function Monitoring() {
             if (viewMode === 'me') {
                 query = query.eq('user_id', currentUser.id);
             } else if (selectedSessionUsers.length > 0) {
-                query = query.in('user_id', selectedSessionUsers);
+                const sanitizedUserIds = sanitizeUUIDFilters(selectedSessionUsers);
+                query = query.in('user_id', sanitizedUserIds);
             }
 
             const { data, error } = await query;

@@ -393,7 +393,16 @@ export default function Profil() {
               {showPasswordForm ? (
                 <div className="space-y-4 pt-2">
                   <div className="space-y-1">
-                    <Label className="text-xs">Password Saat Ini</Label>
+                    <div className="flex justify-between items-center">
+                      <Label className="text-xs">Password Saat Ini</Label>
+                      <button 
+                        type="button"
+                        onClick={() => toast.info('Silakan hubungi Administrator untuk mereset password Anda.')}
+                        className="text-[10px] text-primary hover:underline font-medium"
+                      >
+                        Lupa password?
+                      </button>
+                    </div>
                     <div className="relative">
                       <Input
                         type={showPasswords ? "text" : "password"}

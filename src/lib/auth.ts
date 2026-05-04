@@ -1,5 +1,7 @@
 import { betterAuth } from "better-auth";
 import { Pool } from "pg";
+import { admin, username } from "better-auth/plugins";
+import { adminAc } from "better-auth/plugins/admin/access";
 
 // Better Auth expects singular table names: "user", "session", "account", "verification"
 // We created DB views that map those to the actual tables: "users", "sessions", "accounts", "verifications"
@@ -16,14 +18,25 @@ export const auth = betterAuth({
             clientSecret: process.env.GOOGLE_CLIENT_SECRET as string,
         },
     },
+    plugins: [
+        admin({
+            adminRoles: ["admin", "owner"],
+            roles: {
+                admin: adminAc,
+                owner: adminAc,
+            }
+        }),
+        username(),
+    ],
     user: {
+        modelName: "user",
         fields: {
             // Map Better Auth standard fields → actual DB column names (snake_case)
             name: "nama",
-            emailVerified: "email_verified",
-            createdAt: "created_at",
-            updatedAt: "updated_at",
-            image: "avatar_url",
+            emailVerified: "emailVerified",
+            createdAt: "createdAt",
+            updatedAt: "updatedAt",
+            image: "image",
         },
         additionalFields: {
             username: {
@@ -46,6 +59,11 @@ export const auth = betterAuth({
                 required: false,
                 defaultValue: ["staff"],
                 fieldName: "roles",
+            },
+            role: {
+                type: "string",
+                required: false,
+                fieldName: "role", // Map to the 'role' column in the view (first element of roles array)
             },
             cabangId: {
                 type: "string",
@@ -115,6 +133,15 @@ export const auth = betterAuth({
                 fieldName: "end_date",
             },
         },
+    },
+    session: {
+        modelName: "session",
+    },
+    account: {
+        modelName: "account",
+    },
+    verification: {
+        modelName: "verification",
     },
     debug: true,
 });

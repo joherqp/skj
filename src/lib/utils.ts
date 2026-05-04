@@ -126,3 +126,16 @@ export const formatWhatsAppNumber = (phone: string): string => {
   }
   return cleaned;
 };
+
+/**
+ * Sanitizes UUID filter arrays from ScopeFilters sentinel '__none__'
+ * If '__none__' is present, returns an array with a dummy UUID
+ * to ensure query returns no results instead of crashing.
+ */
+export const sanitizeUUIDFilters = (ids: string[]): string[] => {
+  if (!ids || ids.length === 0) return [];
+  if (ids.includes('__none__')) {
+    return ['00000000-0000-0000-0000-000000000000'];
+  }
+  return ids;
+};

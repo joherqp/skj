@@ -12,7 +12,7 @@ import {
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
 import { useDatabase } from '@/contexts/DatabaseContext';
-import { formatRupiah, formatNumber, toCamelCase } from '@/lib/utils';
+import { formatRupiah, formatNumber, toCamelCase, sanitizeUUIDFilters } from '@/lib/utils';
 import { Download, History, ArrowRight, ArrowLeft } from 'lucide-react';
 import { format, startOfMonth, endOfMonth } from 'date-fns';
 import { id as localeId } from 'date-fns/locale';
@@ -166,17 +166,19 @@ export default function LaporanSalesPerformance() {
             }
           } else if (user) {
              // User exists but has no branch, should not see anything if restricted
-             salesQuery = salesQuery.eq('cabang_id', 'none');
+             salesQuery = salesQuery.eq('cabang_id', '00000000-0000-0000-0000-000000000000');
           } else {
              // User still loading, wait
              setLoading(false);
              return;
           }
-        } else if (selectedCabangIds.length === 1) {
-          // For a single selection, use eq for efficiency; for multiple use in()
-          salesQuery = salesQuery.eq('cabang_id', selectedCabangIds[0]);
-        } else if (selectedCabangIds.length > 1) {
-          salesQuery = salesQuery.in('cabang_id', selectedCabangIds);
+        } else if (selectedCabangIds.length > 0) {
+          const sanitizedCabangIds = sanitizeUUIDFilters(selectedCabangIds);
+          if (sanitizedCabangIds.length === 1) {
+            salesQuery = salesQuery.eq('cabang_id', sanitizedCabangIds[0]);
+          } else {
+            salesQuery = salesQuery.in('cabang_id', sanitizedCabangIds);
+          }
         }
 
         const { data, error: salesError } = await salesQuery;

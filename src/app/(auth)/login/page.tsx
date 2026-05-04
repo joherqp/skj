@@ -171,6 +171,15 @@ export default function LoginPage() {
                                                 )}
                                             </Button>
                                         </div>
+                                        <div className="flex justify-end">
+                                            <button 
+                                                type="button"
+                                                onClick={() => toast.info('Silakan hubungi Administrator untuk mereset password Anda.')}
+                                                className="text-[10px] text-zinc-500 hover:text-primary hover:underline font-medium"
+                                            >
+                                                Lupa Password?
+                                            </button>
+                                        </div>
                                     </div>
                                     <Button
                                         type="submit"
