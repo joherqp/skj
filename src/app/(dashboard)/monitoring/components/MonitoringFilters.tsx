@@ -33,7 +33,7 @@ interface MonitoringFiltersProps {
     setColorIndicator: (indicator: 'pengguna' | 'cabang' | 'kategori') => void;
     dateRange: DateRange | undefined;
     setDateRange: (range: DateRange | undefined) => void;
-    tampilNama?: string;
+    tampilNama?: 'nama' | 'panggilan';
 }
 
 export function MonitoringFilters({
@@ -50,8 +50,9 @@ export function MonitoringFilters({
     colorIndicator,
     setColorIndicator,
     dateRange,
-    setDateRange
-}: MonitoringFiltersProps & { tampilNama?: string }) {
+    setDateRange,
+    tampilNama
+}: MonitoringFiltersProps) {
     const isAdmin = currentUser?.roles.includes('admin') || currentUser?.roles.includes('owner') || currentUser?.roles.includes('finance');
     const isAdminOwner = currentUser?.roles.includes('admin') || currentUser?.roles.includes('owner');
     const isLeader = currentUser?.roles.includes('leader');
