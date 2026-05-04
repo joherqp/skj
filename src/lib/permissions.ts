@@ -17,7 +17,7 @@ export interface RoutePermission {
 export const ROUTE_PERMISSIONS: RoutePermission[] = [
   {
     path: '/monitoring',
-    allowedRoles: ['admin', 'owner', 'manager']
+    allowedRoles: ['admin', 'owner', 'manager', 'leader', 'sales']
   },
   {
     path: '/petty-cash',

@@ -43,12 +43,14 @@ export const MainLayout = ({ children, className }: MainLayoutProps) => {
   }, []);
 
   useEffect(() => {
+    if (!mounted) return;
+    
     if (!isAuthLoading && !isAuthenticated && pathname !== '/login') {
       const searchParams = new URLSearchParams();
       searchParams.set('redirectTo', pathname);
       router.replace(`/login?${searchParams.toString()}`);
     }
-  }, [isAuthenticated, isAuthLoading, pathname, router]);
+  }, [isAuthenticated, isAuthLoading, pathname, router, mounted]);
 
   useEffect(() => {
     if (!isAuthenticated) return;

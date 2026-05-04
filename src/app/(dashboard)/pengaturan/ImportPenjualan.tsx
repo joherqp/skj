@@ -199,20 +199,30 @@ export default function ImportPenjualan() {
       const normalizedData: ImportRow[] = rawRows.slice(1).map((row: any[]) => {
         const getVal = (idx: number) => (idx !== -1 ? row[idx] : undefined);
 
+        const formatExcelDate = (val: any) => {
+          if (val === undefined || val === null || val === '') return '';
+          if (typeof val === 'number' && val > 40000) {
+            // Basic Excel serial date to ISO-like string
+            const d = new Date(Math.round((val - 25569) * 86400 * 1000));
+            return d.toISOString().replace('T', ' ').split('.')[0];
+          }
+          return String(val);
+        };
+
         const qty = Number(getVal(idxMap.qty)) || 0;
         const harga = Number(getVal(idxMap.harga)) || 0;
         const promo = Number(getVal(idxMap.promo)) || 0;
 
         return {
-          tanggal: String(getVal(idxMap.tanggal) || ''),
-          created_at: String(getVal(idxMap.created_at) || ''),
+          tanggal: formatExcelDate(getVal(idxMap.tanggal)),
+          created_at: formatExcelDate(getVal(idxMap.created_at)),
           cabang: String(getVal(idxMap.cabang) || '').trim(),
           note: String(getVal(idxMap.note) || '').trim(),
           produk: String(getVal(idxMap.produk) || '').trim(),
           qty: qty,
 
           // Penjualan
-          pelanggan_created_at: String(getVal(idxMap.pelanggan_created_at) || ''),
+          pelanggan_created_at: formatExcelDate(getVal(idxMap.pelanggan_created_at)),
           salesman: String(getVal(idxMap.salesman) || '').trim(),
           transaksi: String(getVal(idxMap.transaksi) || '').trim(),
           pelanggan: String(getVal(idxMap.pelanggan) || '').trim(),
@@ -1123,7 +1133,15 @@ export default function ImportPenjualan() {
 
                       return (
                         <tr key={i} className="hover:bg-muted/50 transition-colors">
-                          <td className="p-3 border-b whitespace-nowrap">{row.tanggal}</td>
+                          <td className="p-3 border-b whitespace-nowrap text-[11px] font-medium">
+                            {row.tanggal.includes(' ') 
+                              ? (() => {
+                                  const [d, t] = row.tanggal.split(' ');
+                                  const [y, m, day] = d.split('-');
+                                  return `${day}/${m}/${y} ${t.substring(0, 5)}`;
+                                })()
+                              : row.tanggal}
+                          </td>
                           <td className="p-3 border-b text-muted-foreground">{importType === 'penjualan' ? rawCust : row.cabang_asal}</td>
                           <td className="p-3 border-b">
                             <div className="flex flex-col min-w-[150px]">

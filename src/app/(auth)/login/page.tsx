@@ -33,7 +33,7 @@ export default function LoginPage() {
         if (!isAuthLoading && isAuthenticated) {
             router.replace(redirectTo);
         }
-    }, [isAuthenticated, isAuthLoading, router]);
+    }, [isAuthenticated, isAuthLoading, router, redirectTo]);
 
     const handleLogin = async () => {
         setIsLoading(true);

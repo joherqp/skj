@@ -20,10 +20,48 @@ function normalizeName(name) {
   return String(name || '').trim().toLowerCase().replace(/[^a-z0-9]/g, '');
 }
 
+function validatePhone(phone) {
+  if (!phone) return '';
+  const s = String(phone).trim();
+  // Remove all non-digits
+  const digits = s.replace(/[^0-9]/g, '');
+  
+  // Indonesian phone numbers (landline or mobile) are typically at least 9 digits
+  // Some old landlines might be 8, but most are 9-13.
+  // Also check for obvious junk characters
+  if (digits.length < 9) return '';
+  if (/[.,/@&|]/.test(s) && digits.length < 10) return '';
+  
+  return s;
+}
+
+function toProperCase(str) {
+  if (!str) return '';
+  return str.toLowerCase()
+    .split(' ')
+    .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(' ');
+}
+
 function cleanBranchName(name) {
   if (!name) return '';
   // Remove "Gudang " or "Wilayah " prefix (case insensitive)
   return name.replace(/^(gudang|wilayah)\s+/i, '').trim();
+}
+
+function formatToDBDate(dateStr) {
+  if (!dateStr) return '';
+  // Convert YYYY/MM/DD or other formats to YYYY-MM-DD
+  return String(dateStr).replace(/\//g, '-').split(' ')[0];
+}
+
+function formatToDBDateTime(dateTimeStr) {
+  if (!dateTimeStr) return '';
+  // Convert YYYY/MM/DD HH:mm:ss or ISO to YYYY-MM-DD HH:mm:ss
+  let s = String(dateTimeStr).replace(/\//g, '-').replace('T', ' ');
+  // Remove timezone part if present (e.g. +07:00 or .000Z)
+  s = s.split(/[+Z]/)[0];
+  return s.trim();
 }
 
 console.log('Reading Excel files...');
@@ -31,17 +69,37 @@ console.log('Reading Excel files...');
 try {
   // Read Employees
   let employeeMap = new Map();
+  let employeeBranchMap = new Map(); // name -> branchName (to help map customers)
+
   if (fs.existsSync(EMPLOYEE_FILE)) {
     const employeeWb = XLSX.readFile(EMPLOYEE_FILE);
     const employeeWs = employeeWb.Sheets[employeeWb.SheetNames[0]];
     const employees = XLSX.utils.sheet_to_json(employeeWs);
+    
     employees.forEach(e => {
       const normName = normalizeName(e.name);
       const normUsername = normalizeName(e.username);
-      employeeMap.set(normName, e);
-      employeeMap.set(normUsername, e);
+      const branchName = cleanBranchName(e.branchName || e.warehouseName);
+      const normBranch = normalizeName(branchName);
+      
+      // Full key for precise lookup
+      const fullKey = `${normBranch}|${normName}`;
+      employeeMap.set(fullKey, e);
+      
+      // Fallback keys
+      if (!employeeMap.has(normName) || e.role === 'SALES') {
+        employeeMap.set(normName, e);
+      }
+      if (normUsername) {
+        employeeMap.set(normUsername, e);
+      }
+
+      // Branch lookup for customers
+      if (!employeeBranchMap.has(normName) || e.role === 'SALES') {
+        employeeBranchMap.set(normName, branchName);
+      }
     });
-    console.log(`Loaded ${employeeMap.size} employee mappings.`);
+    console.log(`Loaded ${employees.length} employees.`);
   }
 
   // Read Customers
@@ -52,13 +110,34 @@ try {
   const customerMap = new Map();
   customers.forEach(c => {
     const normName = normalizeName(c.name);
+    const normSupplier = normalizeName(c.supplier);
+    const branchName = employeeBranchMap.get(normSupplier) || '';
+    const normBranch = normalizeName(branchName);
+    
     const loc = extractLatLng(c.maps);
-    customerMap.set(normName, {
+    const customerData = {
       ...c,
       lat: loc.lat,
-      long: loc.long
-    });
+      long: loc.long,
+      branchName: branchName
+    };
+
+    // Composite key: branch|salesman|customer
+    const compositeKey = `${normBranch}|${normSupplier}|${normName}`;
+    customerMap.set(compositeKey, customerData);
+    
+    // Also store by salesman|customer for fallback
+    const salesmanKey = `${normSupplier}|${normName}`;
+    if (!customerMap.has(salesmanKey)) {
+      customerMap.set(salesmanKey, customerData);
+    }
+
+    // Still keep global name fallback if absolutely necessary
+    if (!customerMap.has(normName)) {
+      customerMap.set(normName, customerData);
+    }
   });
+  console.log(`Loaded ${customers.length} customers.`);
 
   // Read BQ (Penjualan)
   const bqWb = XLSX.readFile(BQ_FILE);
@@ -67,42 +146,63 @@ try {
 
   console.log(`Processing ${bqRows.length} transaction rows...`);
 
-  // Phase 1: Calculate average qty per customer
-  const customerStats = new Map(); // normalizedName -> { totalQty: number, count: number }
+  // Phase 1: Calculate max qty per customer
+  const customerMaxQty = new Map(); // normalizedName -> maxQty
   bqRows.forEach(row => {
     const normToko = normalizeName(row.toko);
     const qty = Number(row.qty) || 0;
-    if (!customerStats.has(normToko)) {
-      customerStats.set(normToko, { totalQty: 0, count: 0 });
+    const currentMax = customerMaxQty.get(normToko) || 0;
+    if (qty > currentMax) {
+      customerMaxQty.set(normToko, qty);
     }
-    const stats = customerStats.get(normToko);
-    stats.totalQty += qty;
-    stats.count += 1;
   });
 
-  const getCategory = (avgQty) => {
-    if (avgQty >= 800) return 'WS (Agen Besar)';
-    if (avgQty >= 100) return 'SA (Agen Kecil)';
+  const getCategory = (maxQty) => {
+    if (maxQty >= 800) return 'WS (Agen Besar)';
+    if (maxQty >= 100) return 'SA (Agen Kecil)';
     return 'Retail';
   };
 
   // Phase 2: Map transactions
-  const resultRows = bqRows.map(row => {
+  const resultRows = [];
+  bqRows.forEach(row => {
     const normToko = normalizeName(row.toko);
-    const cust = customerMap.get(normToko);
-
     const normSales = normalizeName(row.nama);
-    const emp = employeeMap.get(normSales);
+    const rawBranch = cleanBranchName(row.divisi);
+    const normBranch = normalizeName(rawBranch);
 
-    // USER REQUEST: Prioritize branch from employee.xlsx wilayah (branchName)
-    const empBranchRaw = emp ? (emp.branchName || emp.warehouseName) : '';
-    const rawBranch = empBranchRaw || row.divisi;
-    const cabang = cleanBranchName(rawBranch);
+    // Precise employee lookup
+    let emp = employeeMap.get(`${normBranch}|${normSales}`);
+    if (!emp) {
+      emp = employeeMap.get(normSales);
+    }
 
-    // Calculate customer category based on average qty
-    const stats = customerStats.get(normToko);
-    const avgQty = stats ? (stats.totalQty / stats.count) : 0;
-    const kategoriPelanggan = getCategory(avgQty);
+    // FILTER: If branchName is empty in employee.xlsx, skip transaction
+    if (!emp || !emp.branchName) {
+      return;
+    }
+
+    // Use branchName from employee.xlsx as the primary branch
+    const empBranch = cleanBranchName(emp.branchName);
+    const cabang = toProperCase(empBranch);
+
+    // Precise lookup: branch|salesman|customer
+    const compositeKey = `${normBranch}|${normSales}|${normToko}`;
+    let cust = customerMap.get(compositeKey);
+    
+    // Fallback 1: salesman|customer
+    if (!cust) {
+      cust = customerMap.get(`${normSales}|${normToko}`);
+    }
+    
+    // Fallback 2: customer name
+    if (!cust) {
+      cust = customerMap.get(normToko);
+    }
+
+    // Calculate customer category based on max qty
+    const maxQty = customerMaxQty.get(normToko) || 0;
+    const kategoriPelanggan = getCategory(maxQty);
 
     // Calculate total
     const qty = Number(row.qty) || 0;
@@ -110,22 +210,41 @@ try {
     const diskon = Number(row.diskon) || 0;
     const total = (qty * harga) - diskon;
 
-    const alamat = row.alamat || (cust ? cust.address : '');
-    const kecamatan = row.kecamatan || (cust ? cust.district : '');
-    const telp = row.telp || (cust ? cust.phone : '');
+    // Address construction: use customer.xlsx if available, otherwise BQ.xlsx
+    let alamat = '';
+    let lat = '';
+    let long = '';
+    let telp = '';
 
-    return {
-      tanggal: row.tanggal,
-      created_at: row.waktu,
-      pelanggan_created_at: cust ? cust.registered : '',
+    if (cust) {
+      const parts = [
+        cust.address,
+        cust.village,
+        cust.district,
+        cust.city,
+        cust.province
+      ].filter(p => p && String(p).trim() !== '' && String(p) !== '0');
+      alamat = parts.join(', ');
+      lat = cust.lat;
+      long = cust.long;
+      telp = validatePhone(cust.phone);
+    } else {
+      alamat = `${row.alamat || ''}${row.kecamatan ? ', ' + row.kecamatan : ''}`;
+      telp = validatePhone(row.telp);
+    }
+
+    resultRows.push({
+      tanggal: formatToDBDateTime(row.waktu),
+      created_at: formatToDBDateTime(row.waktu),
+      pelanggan_created_at: formatToDBDateTime(cust ? cust.registered : ''),
       cabang: cabang,
       salesman: emp ? emp.name : row.nama,
       transaksi: row.transaksi,
-      pelanggan: row.toko,
+      pelanggan: toProperCase(row.toko),
       kategori_pelanggan: kategoriPelanggan,
-      alamat: `${alamat}${kecamatan ? ', ' + kecamatan : ''}`,
-      lat: cust ? cust.lat : '',
-      long: cust ? cust.long : '',
+      alamat: toProperCase(alamat),
+      lat: lat,
+      long: long,
       telp: telp,
       note: row.catatan || '',
       produk: row.produk,
@@ -133,8 +252,9 @@ try {
       harga: harga,
       promo: diskon,
       total: total
-    };
+    });
   });
+
 
   // Convert to CSV
   const headers = [

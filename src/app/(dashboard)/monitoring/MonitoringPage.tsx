@@ -53,13 +53,14 @@ export default function Monitoring() {
     const [mapCenter, setMapCenter] = useState<{ lat: number; lng: number }>({ lat: -6.2088, lng: 106.8456 });
     const [selectedCabang, setSelectedCabang] = useState<string[]>([]);
     const isLeader = useMemo(() => currentUser?.roles.includes('leader'), [currentUser]);
+    const isRestricted = useMemo(() => currentUser?.roles.some(r => ['leader', 'sales'].includes(r)), [currentUser]);
 
-    // Force branch selection for leaders
+    // Force branch selection for restricted roles (leader/sales)
     useEffect(() => {
-        if (isLeader && currentUser?.cabangId) {
+        if (isRestricted && currentUser?.cabangId) {
             setSelectedCabang([currentUser.cabangId]);
         }
-    }, [isLeader, currentUser]);
+    }, [isRestricted, currentUser]);
 
     const [selectedUser, setSelectedUser] = useState<string[]>([]);
     const [isSingleDate, setIsSingleDate] = useState(true);
@@ -102,11 +103,11 @@ export default function Monitoring() {
 
     // Validate active tab based on role
     const activeTab = useMemo(() => {
-        if (isLeader && !['explore', 'double-toko'].includes(rawActiveTab)) {
+        if (isRestricted && !['explore', 'double-toko'].includes(rawActiveTab)) {
             return 'explore';
         }
         return rawActiveTab;
-    }, [isLeader, rawActiveTab]);
+    }, [isRestricted, rawActiveTab]);
 
 
     // Search input states maintained for UI only
@@ -176,7 +177,8 @@ export default function Monitoring() {
 
     // Helper to filter items based on viewMode
     const filterByViewMode = useCallback(<T extends { userId?: string; salesId?: string; createdBy?: string; id: string }>(items: T[]) => {
-        if (viewMode === 'me') {
+        // Force "me" filter ONLY for sales. Leaders can see their branch.
+        if (viewMode === 'me' || (currentUser?.roles.includes('sales') && !currentUser?.roles.includes('leader'))) {
             return items.filter(item =>
                 (item.userId && item.userId === currentUser?.id) ||
                 (item.salesId && item.salesId === currentUser?.id) ||
@@ -185,7 +187,7 @@ export default function Monitoring() {
             );
         }
         return items;
-    }, [viewMode, currentUser]);
+    }, [viewMode, currentUser, isRestricted]);
 
     // Calculate Team Markers
     const teamMarkers = useMemo(() => {
@@ -462,6 +464,14 @@ export default function Monitoring() {
         setActiveLegendFilters([]);
     }, [mapMode]);
 
+    // Filtered Master Pelanggan for stats (not filtered by date)
+    const filteredMasterPelanggan = useMemo(() => {
+        return filterByViewMode<Pelanggan>(listPelanggan).filter(p => {
+            if (selectedCabang.length > 0 && (!p.cabangId || !selectedCabang.includes(p.cabangId))) return false;
+            return true;
+        });
+    }, [listPelanggan, filterByViewMode, selectedCabang]);
+
 
     // --- EXISTING LOGIC FOR OTHER TABS ---
     // Get today's check-ins
@@ -482,12 +492,15 @@ export default function Monitoring() {
             if (currentUser?.roles.includes('admin') || currentUser?.roles.includes('owner') || currentUser?.roles.includes('finance') || currentUser?.roles.includes('manager')) {
                 return true;
             }
-            // If Leader -> See only their branch
+            // If Leader -> See their branch
             if (currentUser?.roles.includes('leader')) {
                 return u.cabangId === currentUser.cabangId;
             }
             // If Sales -> See ONLY themselves
-            return u.id === currentUser?.id;
+            if (currentUser?.roles.includes('sales')) {
+                return u.id === currentUser?.id;
+            }
+            return true;
         });
 
         // Apply viewMode filter
@@ -835,7 +848,7 @@ export default function Monitoring() {
         <div className="animate-in fade-in duration-500">
             <div className="p-4 space-y-4">
                 <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full">
-                    <TabsList className={`w-full grid ${isLeader ? 'grid-cols-2' : currentUser?.roles.some(r => (['admin', 'owner'] as string[]).includes(r)) ? 'grid-cols-5' : 'grid-cols-4'} h-auto p-1`}>
+                    <TabsList className={`w-full grid ${isRestricted ? 'grid-cols-2' : currentUser?.roles.some(r => (['admin', 'owner'] as string[]).includes(r)) ? 'grid-cols-5' : 'grid-cols-4'} h-auto p-1`}>
                         <TabsTrigger value="explore" className="text-xs md:text-sm py-2">
                             <MapPin className="w-3 h-3 md:w-4 md:h-4 mr-1 md:mr-2" />
                             Jelajahi
@@ -856,7 +869,7 @@ export default function Monitoring() {
                                 Tracking
                             </TabsTrigger>
                         )}
-                        {!isLeader && (
+                        {!isRestricted && (
                             <>
                                 <TabsTrigger value="history" className="text-xs md:text-sm py-2">
                                     <Clock className="w-3 h-3 md:w-4 md:h-4 mr-1 md:mr-2" />
@@ -918,19 +931,26 @@ export default function Monitoring() {
                                     </Card>
                                     <Card className="bg-gradient-to-br from-cyan-500/10 to-blue-500/10 border-cyan-200/50">
                                         <CardContent className="p-3">
-                                            <p className="text-[10px] text-cyan-600 font-semibold uppercase tracking-wider mb-1">Total Terdata</p>
+                                            <p className="text-[10px] text-cyan-600 font-semibold uppercase tracking-wider mb-1">Total Pelanggan</p>
                                             <div className="flex items-center justify-between">
-                                                <h4 className="text-xl font-bold text-cyan-700">{listPelanggan.length}</h4>
+                                                <h4 className="text-xl font-bold text-cyan-700">{filteredMasterPelanggan.length}</h4>
                                                 <ListFilter className="w-4 h-4 text-cyan-400" />
                                             </div>
                                         </CardContent>
                                     </Card>
                                     <Card className="bg-gradient-to-br from-indigo-500/10 to-purple-500/10 border-indigo-200/50 col-span-2 md:col-span-1">
                                         <CardContent className="p-3">
-                                            <p className="text-[10px] text-indigo-600 font-semibold uppercase tracking-wider mb-1">Cakupan Wilayah</p>
+                                            <p className="text-[10px] text-indigo-600 font-semibold uppercase tracking-wider mb-1">
+                                                {isRestricted ? 'Cabang Terdaftar' : 'Cakupan Wilayah'}
+                                            </p>
                                             <div className="flex items-center justify-between">
-                                                <h4 className="text-xl font-bold text-indigo-700">{new Set(listPelanggan.map(p => p.cabangId)).size} Cabang</h4>
-                                                <MapPin className="w-4 h-4 text-indigo-400" />
+                                                <h4 className="text-xl font-bold text-indigo-700 truncate mr-2">
+                                                    {isRestricted
+                                                        ? (listCabang.find(c => c.id === currentUser?.cabangId)?.nama || '-')
+                                                        : `${new Set(listPelanggan.map(p => p.cabangId)).size} Cabang`
+                                                    }
+                                                </h4>
+                                                <MapPin className="w-4 h-4 text-indigo-400 shrink-0" />
                                             </div>
                                         </CardContent>
                                     </Card>
@@ -1721,8 +1741,8 @@ export default function Monitoring() {
                         </div>
                     </TabsContent>
 
-                    {!isLeader && (
-                        <TabsContent value="history" className="mt-4 space-y-3">
+                    {!isRestricted && (
+                        <TabsContent value="history" className="m-0 border-none p-0 outline-none">
                             <h3 className="text-sm font-semibold text-muted-foreground px-1">Riwayat Absensi Terkini</h3>
 
                             {/* Show recent check-ins instead of generic users list */}
@@ -1784,7 +1804,7 @@ export default function Monitoring() {
                     )}
 
                     {/* TRACKING TAB CONTENT */}
-                    {currentUser?.roles.some(r => (['admin', 'owner'] as string[]).includes(r)) && (
+                    {!isRestricted && (
                         <TabsContent value="tracking" className="mt-4 space-y-4">
 
                             {/* Session Controls */}
@@ -1997,8 +2017,8 @@ export default function Monitoring() {
                     )}
 
 
-                    {!isLeader && (
-                        <TabsContent value="route" className="mt-4 space-y-4">
+                    {!isRestricted && (
+                        <TabsContent value="route" className="m-0 border-none p-0 outline-none">
                             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                                 {/* Customer Selection Sidebar */}
                                 <div className="lg:col-span-1 space-y-4">

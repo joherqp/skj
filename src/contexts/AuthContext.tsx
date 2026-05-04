@@ -56,7 +56,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, [session]);
 
-  const loginWithGoogle = async (): Promise<void> => {
+  const loginWithGoogle = useCallback(async (): Promise<void> => {
     try {
       await authClient.signIn.social({
         provider: 'google',
@@ -66,7 +66,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       console.error('Login error:', error);
       toast.error('Gagal login dengan Google');
     }
-  };
+  }, []);
 
   const login = useCallback(async (usernameOrEmail: string, password: string): Promise<boolean> => {
     try {
@@ -104,7 +104,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, [router]);
 
-  const updatePassword = async (newPassword: string, currentPassword: string): Promise<void> => {
+  const updatePassword = useCallback(async (newPassword: string, currentPassword: string): Promise<void> => {
     const { error } = await authClient.changePassword({
         newPassword: newPassword,
         currentPassword: currentPassword,
@@ -114,7 +114,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         throw error;
     }
     toast.success('Password berhasil diperbarui');
-  };
+  }, []);
 
   const hasRole = useCallback((roles: UserRole[]) => {
     if (!user || !user.isActive) return false;
@@ -127,10 +127,29 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await authClient.getSession();
   }, []);
 
+  const [isLoading, setIsLoading] = useState(true);
+
+  // Unified loading state management
+  useEffect(() => {
+    if (isLoadingSession) {
+      setIsLoading(true);
+      return;
+    }
+
+    // If session exists but user state isn't mapped yet, stay in loading
+    if (session?.user && !user) {
+      setIsLoading(true);
+      return;
+    }
+
+    // Once we've determined session status (either mapped or confirmed null)
+    setIsLoading(false);
+  }, [isLoadingSession, session, user]);
+
   const value = useMemo<AuthContextType>(() => ({
     user,
     isAuthenticated: !!user && user.isActive === true,
-    isLoading: isLoadingSession,
+    isLoading: isLoading,
     login,
     logout,
     updatePassword,
@@ -139,9 +158,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     hasRole,
   }), [
     user,
-    isLoadingSession,
+    isLoading,
     login,
     logout,
+    updatePassword,
+    loginWithGoogle,
     refreshUser,
     hasRole,
   ]);
