@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useDatabase } from '@/contexts/DatabaseContext';
 import { useAuth } from '@/contexts/AuthContext';
-import { formatRupiah } from '@/lib/utils';
+import { formatRupiah, getUserDisplayName } from '@/lib/utils';
 import { ArrowLeft, Download, FileSpreadsheet, FileText, Calendar, Printer } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
@@ -51,6 +51,7 @@ export default function LaporanPenjualan() {
         penjualan, barang, pelanggan, profilPerusahaan, users,
         stokPengguna, persetujuan, cabang: listCabang, kategoriPelanggan, satuan, setoran, saldoPengguna
     } = useDatabase();
+    const tampilNama = profilPerusahaan?.config?.tampilNama || 'nama';
 
     const [selectedDate, setSelectedDate] = useState<Date>(() => {
         const d = new Date();
@@ -424,7 +425,7 @@ export default function LaporanPenjualan() {
             container.style.left = '-9999px';
             document.body.appendChild(container);
 
-            const salesName = user?.nama || 'Admin';
+            const salesName = user ? getUserDisplayName(user, tampilNama) : 'Admin';
             const root = createRoot(container);
 
             await new Promise<void>((resolve) => {
@@ -471,7 +472,7 @@ export default function LaporanPenjualan() {
         try {
             const { salesSummary, notes, stockHistory, bills, totals, depositNotes } = reportData;
             const dateStr = format(selectedDate, 'yyyy-MM-dd');
-            const salesName = user?.nama || 'Admin';
+            const salesName = user ? getUserDisplayName(user, tampilNama) : 'Admin';
 
             const wb = XLSX.utils.book_new();
 
@@ -557,7 +558,7 @@ export default function LaporanPenjualan() {
                         </Button>
                         <div>
                             <h2 className="font-semibold text-lg">Laporan Harian</h2>
-                            <p className="text-xs text-muted-foreground">Salesman: {user?.nama}</p>
+                            <p className="text-xs text-muted-foreground">Salesman: {user ? getUserDisplayName(user, tampilNama) : '-'}</p>
                         </div>
                     </div>
 

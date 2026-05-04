@@ -271,6 +271,7 @@ export default function TambahPenjualan() {
         item.harga = priceResult.price;
         item.hargaTier = priceResult.tier; // Snapshot applied tier
         item.totalQty = item.jumlah * (item.konversi || 1); // Calculate Total Qty
+        item.maxStok = getUserStock(item.barangId); // Ensure maxStok is always fresh
 
         const promoData = getPromo(item.barangId, item.harga, item.jumlah, item.konversi, formData.pelangganId, totalProductQtyBase, item.selectedPromoId, perNotaQuantities);
         item.diskon = promoData.discount;
@@ -280,7 +281,7 @@ export default function TambahPenjualan() {
         // Note: we don't necessarily overwrite selectedPromoId here, but we could track applied
 
         return item;
-    }, [getPriceDetailed, getPromo, formData.pelangganId]);
+    }, [getPriceDetailed, getPromo, formData.pelangganId, getUserStock]);
 
     const syncCart = useCallback((rawCart: CartItem[]) => {
         const manualItems = rawCart.filter(c => !c.isBonus && c.jumlah > 0);
@@ -387,20 +388,44 @@ export default function TambahPenjualan() {
                         // Since we didn't track promoId before, we rely on implicit logic: 
                         // Items in rawCart that are isBonus are preserved if they match criteria.
 
-                        const existingBonuses = rawCart.filter(c => c.isBonus && c.promoId === promoId);
-                        const pickedQty = existingBonuses.reduce((sum, c) => sum + (c.jumlah * (c.konversi || 1)), 0);
+                        const validBonuses = rawCart.filter(c => c.isBonus && c.promoId === promoId && productIds.includes(c.barangId));
+                        let pickedQty = validBonuses.reduce((sum, c) => sum + (c.jumlah * (c.konversi || 1)), 0);
 
-                        // A. Add preserved valid selections
-                        existingBonuses.forEach(b => {
-                            // Validate if this product is still in options list? Optional but good.
-                            if (productIds.includes(b.barangId)) {
+                        // A. Handle surplus (Trim) if pickedQty > targetQty
+                        if (pickedQty > targetQty) {
+                            let currentTotal = pickedQty;
+                            const keptBonuses: CartItem[] = [];
+                            
+                            // Process in reverse to remove "newer" additions first
+                            const sortedBonuses = [...validBonuses].reverse();
+                            for (const b of sortedBonuses) {
+                                const bQty = b.jumlah * (b.konversi || 1);
+                                if (currentTotal - bQty >= targetQty) {
+                                    currentTotal -= bQty;
+                                    // Skip/Remove
+                                } else if (currentTotal > targetQty) {
+                                    const allowedBase = targetQty - (currentTotal - bQty);
+                                    keptBonuses.push({
+                                        ...b,
+                                        jumlah: Math.max(0, allowedBase / (b.konversi || 1)),
+                                        maxStok: getUserStock(b.barangId)
+                                    });
+                                    currentTotal = targetQty;
+                                } else {
+                                    keptBonuses.push({ ...b, maxStok: getUserStock(b.barangId) });
+                                }
+                            }
+                            keptBonuses.reverse().forEach(b => fullCart.push(b));
+                            pickedQty = targetQty;
+                        } else {
+                            // No surplus, add all valid ones
+                            validBonuses.forEach(b => {
                                 fullCart.push({
                                     ...b,
-                                    // Recalc max stock just in case
                                     maxStok: getUserStock(b.barangId)
                                 });
-                            }
-                        });
+                            });
+                        }
 
                         // B. If deficit, add "Pending Bonus" placeholder
                         const deficit = targetQty - pickedQty;
@@ -420,19 +445,15 @@ export default function TambahPenjualan() {
                                     maxQty: deficit // Only allow picking what's left
                                 }
                             });
-                        } else if (deficit < 0) {
-                            // If surplus (user reduced purchase), we might need to TRIM the bonuses
-                            // Simple strategy: The "deficit < 0" means picked > target.
-                            // We just let the list rebuild. Assuming rawCart filter above took them all.
-                            // Actually, we should slice the preserved bonuses if they exceed target.
-                            // For now, let's just warn or let it be? Ideally trim.
-                            // Implementing Trim:
-                            // Re-loop existingBonuses and trim/exclude last ones until fit.
-                            // (Skipping for brevity, assuming standard flow).
                         }
                     }
                 }
-                bonusProcessed.add(item.barangId);
+                // Correctly track that we've handled bonuses for this trigger source
+                if (isAggregated) {
+                    bonusPromoProcessed.add(promoData.bonus.promoId);
+                } else {
+                    bonusProcessed.add(item.barangId);
+                }
             }
         });
 

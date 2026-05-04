@@ -12,6 +12,7 @@ import { PackagePlus, Save, ArrowLeft, Trash2 } from 'lucide-react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useDatabase } from '@/contexts/DatabaseContext';
 import { useAuth } from '@/contexts/AuthContext';
+import { getUserDisplayName } from '@/lib/utils';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -35,8 +36,9 @@ export function RestockForm({ embedded, onSuccess }: RestockFormProps) {
 
   const {
     barang, addRestock, addPersetujuan, addNotifikasi,
-    users, cabang, satuan: satuanList
+    users, cabang, satuan: satuanList, profilPerusahaan
   } = useDatabase();
+  const tampilNama = profilPerusahaan?.config?.tampilNama || 'nama';
   const { user, hasRole } = useAuth();
 
   const [formData, setFormData] = useState({
@@ -58,7 +60,7 @@ export function RestockForm({ embedded, onSuccess }: RestockFormProps) {
     const isCabangMatch = userCabangId === targetCabangId;
     const isRoleMatch = (u.roles.includes('gudang') || u.roles.includes('driver') || u.roles.includes('leader') || u.roles.includes('admin') || u.roles.includes('staff') || u.roles.includes('sales'));
     return isCabangMatch && isRoleMatch;
-  }).sort((a, b) => a.nama.localeCompare(b.nama));
+  }).sort((a, b) => getUserDisplayName(a, tampilNama).localeCompare(getUserDisplayName(b, tampilNama)));
 
 
 
@@ -169,7 +171,7 @@ export function RestockForm({ embedded, onSuccess }: RestockFormProps) {
           nomorRestock,
           items: itemsData,
           nilai: totalNilai,
-          receiverName: receiverUser?.nama,
+          receiverName: getUserDisplayName(receiverUser, tampilNama),
           receiverId: formData.receiverId,
           targetCabangName: cabang.find(c => c.id === targetCabangId)?.nama
         }
@@ -181,7 +183,7 @@ export function RestockForm({ embedded, onSuccess }: RestockFormProps) {
       addNotifikasi({
         userId: formData.receiverId,
         judul: 'Ada Barang Masuk Nih!',
-        pesan: `${user?.nama || 'Seseorang'} ngirim ${itemDetails} ke kamu. Yuk dicek dan diterima!`,
+        pesan: `${getUserDisplayName(user, tampilNama) || 'Seseorang'} ngirim ${itemDetails} ke kamu. Yuk dicek dan diterima!`,
         jenis: 'info',
         dibaca: false,
         tanggal: new Date(),
@@ -265,7 +267,7 @@ export function RestockForm({ embedded, onSuccess }: RestockFormProps) {
                 emptyMessage="Tidak ada user di cabang ini"
                 options={potentialReceivers.map(u => ({
                   value: u.id,
-                  label: u.nama,
+                  label: getUserDisplayName(u, tampilNama),
                   description: u.roles.join(', ')
                 }))}
               />
@@ -430,7 +432,7 @@ export function RestockForm({ embedded, onSuccess }: RestockFormProps) {
             <div className="grid grid-cols-2 gap-4 text-sm bg-muted/50 p-4 rounded-lg">
                <div>
                   <p className="text-xs text-muted-foreground">Penerima</p>
-                  <p className="font-semibold">{users.find(u => u.id === formData.receiverId)?.nama || '-'}</p>
+                  <p className="font-semibold">{getUserDisplayName(users.find(u => u.id === formData.receiverId), tampilNama) || '-'}</p>
                </div>
                <div>
                   <p className="text-xs text-muted-foreground">Cabang</p>

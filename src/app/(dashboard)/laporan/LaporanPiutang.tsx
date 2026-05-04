@@ -6,7 +6,7 @@ import { Input } from '@/components/ui/input';
 import { useDatabase } from '@/contexts/DatabaseContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { ArrowLeft, TrendingUp, FileSpreadsheet, Search, ArrowUpDown, AlertTriangle, MessageCircle, Phone, Share2, Building } from 'lucide-react';
-import { formatRupiah, formatWhatsAppNumber } from '@/lib/utils';
+import { formatRupiah, formatWhatsAppNumber, getUserDisplayName } from '@/lib/utils';
 import { useRouter } from 'next/navigation';
 import * as XLSX from 'xlsx';
 import { toast } from 'sonner';
@@ -49,6 +49,7 @@ export default function LaporanPiutang() {
   const {
     penjualan, users, pelanggan, profilPerusahaan, cabang, kategoriPelanggan
   } = useDatabase();
+  const tampilNama = profilPerusahaan?.config?.tampilNama || 'nama';
 
   const isAdminOrOwner = currentUser?.roles.some(r => ['admin', 'owner'].includes(r));
   const [selectedCabangIds, setSelectedCabangIds] = useState<string[]>([]);
@@ -233,7 +234,7 @@ ${profilPerusahaan.nama}`;
             const kategori = kategoriPelanggan.find(k => k.id === item.kategoriId);
             const userSales = users.find(u => u.id === item.salesId);
             return {
-                "Sales": userSales?.nama || '-',
+                "Sales": userSales ? getUserDisplayName(userSales, tampilNama) : '-',
                 "Kategori": kategori?.nama || '-',
                 "Nama Pelanggan": item.nama,
                 "Limit Kredit": item.limitMax,
@@ -377,7 +378,8 @@ ${profilPerusahaan.nama}`;
 
                             Object.keys(groups).forEach(salesId => {
                                 const groupItems = groups[salesId];
-                                const salesName = users.find(u => u.id === salesId)?.nama || 'Tanpa Sales';
+                                const salesUser = users.find(u => u.id === salesId);
+                                const salesName = salesUser ? getUserDisplayName(salesUser, tampilNama) : 'Tanpa Sales';
                                 let subtotal = 0;
 
                                 groupItems.forEach(item => {

@@ -9,7 +9,7 @@ import { Switch } from '@/components/ui/switch';
 import { Separator } from '@/components/ui/separator';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { toast } from 'sonner';
-import { Building2, Save, CreditCard, Shield, AlertTriangle, CalendarClock, Activity, CheckCircle, XCircle, Wrench, Bot } from 'lucide-react';
+import { Building2, Save, CreditCard, Shield, AlertTriangle, CalendarClock, Activity, CheckCircle, XCircle, Wrench, Bot, UserCog } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { cn } from '@/lib/utils';
 import { useDatabase } from '@/contexts/DatabaseContext';
@@ -48,6 +48,7 @@ export default function ProfilPerusahaan() {
     radiusKunjungan: 100,
     radiusBehavior: 'allow' as 'allow' | 'reject',
     enableAIChat: true,
+    tampilNama: 'nama' as 'nama' | 'panggilan',
   });
 
   const [isTesting, setIsTesting] = useState(false);
@@ -613,7 +614,77 @@ export default function ProfilPerusahaan() {
           </CardContent>
         </Card>
 
-        {/* --- Card 7: Pengaturan Jarak Toko/Pelanggan --- */}
+        {/* --- Card 7: Pengaturan Tampilan Nama --- */}
+        <Card elevated>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <UserCog className="w-5 h-5 text-violet-600" />
+              Tampilan Nama Pengguna
+            </CardTitle>
+            <CardDescription>
+              Atur apakah filter, dropdown, dan laporan menampilkan nama lengkap atau nama panggilan.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="space-y-3">
+              <Label>Mode Tampilan Nama</Label>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {/* Option: Nama Lengkap */}
+                <button
+                  type="button"
+                  onClick={() => setSettings(s => ({ ...s, tampilNama: 'nama' }))}
+                  className={cn(
+                    "relative flex flex-col items-start gap-1.5 p-4 rounded-xl border-2 transition-all text-left",
+                    settings.tampilNama === 'nama'
+                      ? "border-violet-500 bg-violet-50 shadow-md ring-2 ring-violet-200"
+                      : "border-muted hover:border-violet-300 hover:bg-violet-50/30"
+                  )}
+                >
+                  {settings.tampilNama === 'nama' && (
+                    <div className="absolute top-2 right-2">
+                      <CheckCircle className="w-4 h-4 text-violet-600" />
+                    </div>
+                  )}
+                  <span className="text-sm font-bold">Nama Lengkap</span>
+                  <span className="text-[11px] text-muted-foreground">Menampilkan nama sesuai KTP / nama lengkap pengguna.</span>
+                  <div className="mt-1 flex flex-wrap gap-1">
+                    <span className="px-2 py-0.5 bg-violet-100 text-violet-700 rounded text-[10px] font-mono">Muhammad Rizki</span>
+                    <span className="px-2 py-0.5 bg-violet-100 text-violet-700 rounded text-[10px] font-mono">Siti Nurhaliza</span>
+                  </div>
+                </button>
+
+                {/* Option: Nama Panggilan */}
+                <button
+                  type="button"
+                  onClick={() => setSettings(s => ({ ...s, tampilNama: 'panggilan' }))}
+                  className={cn(
+                    "relative flex flex-col items-start gap-1.5 p-4 rounded-xl border-2 transition-all text-left",
+                    settings.tampilNama === 'panggilan'
+                      ? "border-violet-500 bg-violet-50 shadow-md ring-2 ring-violet-200"
+                      : "border-muted hover:border-violet-300 hover:bg-violet-50/30"
+                  )}
+                >
+                  {settings.tampilNama === 'panggilan' && (
+                    <div className="absolute top-2 right-2">
+                      <CheckCircle className="w-4 h-4 text-violet-600" />
+                    </div>
+                  )}
+                  <span className="text-sm font-bold">Nama Panggilan</span>
+                  <span className="text-[11px] text-muted-foreground">Menampilkan nama panggilan yang lebih ringkas.</span>
+                  <div className="mt-1 flex flex-wrap gap-1">
+                    <span className="px-2 py-0.5 bg-violet-100 text-violet-700 rounded text-[10px] font-mono">Rizki</span>
+                    <span className="px-2 py-0.5 bg-violet-100 text-violet-700 rounded text-[10px] font-mono">Siti</span>
+                  </div>
+                </button>
+              </div>
+              <p className="text-[10px] text-muted-foreground italic mt-2">
+                * Jika nama panggilan belum diisi pada data pengguna, maka nama lengkap akan tetap digunakan sebagai fallback.
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* --- Card 8: Pengaturan Jarak Toko/Pelanggan --- */}
         <Card elevated>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">

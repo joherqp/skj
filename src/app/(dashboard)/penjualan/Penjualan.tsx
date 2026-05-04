@@ -17,7 +17,7 @@ import {
   TrendingUp, Users, ChevronLeft, ChevronRight, User, Coins,
   Building, ChevronDown, MessageCircle, Phone, Share2 
 } from 'lucide-react';
-import { formatRupiah, formatTanggal, cn, formatNumber, formatWhatsAppNumber } from '@/lib/utils';
+import { formatRupiah, formatTanggal, cn, formatNumber, formatWhatsAppNumber, getUserDisplayName } from '@/lib/utils';
 import {
   Dialog,
   DialogContent,
@@ -84,7 +84,7 @@ ${items}
 💰 *Total: ${formatRupiah(trx.total)}*
 📊 Status: ${shareStatus}
 ━━━━━━━━━━━━━━━━━━
-${user?.nama || 'Sales'}`;
+${getUserDisplayName(user as any, profilPerusahaan?.config?.tampilNama || 'nama') || 'Sales'}`;
 
     // If customer has phone, send directly to WA
     if (customerInfo?.telepon && customerInfo.telepon !== '-') {
@@ -509,7 +509,11 @@ ${user?.nama || 'Sales'}`;
                             return isSalesOrLeader && isActive && isInSelectedCabang;
                           }
                           return isSalesOrLeader && isActive && u.cabangId === user?.cabangId;
-                        }).sort((a, b) => a.nama.localeCompare(b.nama)).map(u => (
+                        }).sort((a, b) => {
+                          const nameA = getUserDisplayName(a, profilPerusahaan?.config?.tampilNama || 'nama');
+                          const nameB = getUserDisplayName(b, profilPerusahaan?.config?.tampilNama || 'nama');
+                          return nameA.localeCompare(nameB);
+                        }).map(u => (
                           <DropdownMenuCheckboxItem
                             key={u.id}
                             checked={selectedUserIds.includes(u.id)}
@@ -518,7 +522,7 @@ ${user?.nama || 'Sales'}`;
                               else setSelectedUserIds(selectedUserIds.filter(id => id !== u.id));
                             }}
                           >
-                            {u.nama.toUpperCase()}
+                            {getUserDisplayName(u, profilPerusahaan?.config?.tampilNama || 'nama')}
                           </DropdownMenuCheckboxItem>
                         ))}
                       </DropdownMenuContent>
@@ -592,9 +596,8 @@ ${user?.nama || 'Sales'}`;
 
                 // Resolve Sales Name
                 const salesId = item.salesId || item.createdBy;
-                const linkedEmployee = users.find(u => u.id === salesId);
                 const salesPerson = users.find(u => u.id === salesId);
-                const salesName = linkedEmployee?.nama || salesPerson?.nama || 'Sales';
+                const salesName = salesPerson ? getUserDisplayName(salesPerson, profilPerusahaan?.config?.tampilNama || 'nama') : 'Sales';
 
                 return (
                   <Card

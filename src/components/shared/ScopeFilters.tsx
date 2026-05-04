@@ -4,6 +4,7 @@ import { useAuth } from '@/contexts/AuthContext';
 
 import { useDatabase } from '@/contexts/DatabaseContext';
 import { Building, Users, ChevronDown, Search } from 'lucide-react';
+import { getUserDisplayName } from '@/lib/utils';
 
 import { Button } from '@/components/ui/button';
 import {
@@ -40,7 +41,8 @@ export function ScopeFilters({
     className = ""
 }: ScopeFiltersProps) {
     const { user: currentUser } = useAuth();
-    const { cabang: listCabang, users, viewMode } = useDatabase();
+    const { cabang: listCabang, users, viewMode, profilPerusahaan } = useDatabase();
+    const tampilNama = profilPerusahaan?.config?.tampilNama || 'nama';
     const [cabangSearch, setCabangSearch] = useState('');
     const [userSearch, setUserSearch] = useState('');
 
@@ -77,12 +79,14 @@ export function ScopeFilters({
 
             if (!rolePass) return false;
 
-            const matchesSearch = u.nama.toLowerCase().includes(userSearch.toLowerCase());
+            const displayName = getUserDisplayName(u, tampilNama);
+            const matchesSearch = displayName.toLowerCase().includes(userSearch.toLowerCase()) ||
+                u.nama.toLowerCase().includes(userSearch.toLowerCase());
             const isAvailable = !availableUserIds || availableUserIds.includes(u.id);
 
             return matchesSearch && isAvailable;
         })
-        .sort((a, b) => a.nama.localeCompare(b.nama));
+        .sort((a, b) => getUserDisplayName(a, tampilNama).localeCompare(getUserDisplayName(b, tampilNama)));
 
     return (
         <div className={`space-y-4 ${className}`}>
@@ -261,7 +265,7 @@ export function ScopeFilters({
                                             onSelect={(e) => e.preventDefault()}
                                             className="rounded-lg text-xs py-2 pl-8 pr-5 font-medium"
                                         >
-                                            {u.nama.toUpperCase()}
+                                            {getUserDisplayName(u, tampilNama)}
                                         </DropdownMenuCheckboxItem>
                                     );
                                 })}

@@ -9,7 +9,7 @@ import { useDatabase } from '@/contexts/DatabaseContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
 import { MapPin, Clock, User, Activity, Users, ShoppingCart, Crosshair, Wallet, LogIn, LogOut, Map as MapIcon, Package, Store, PlusCircle, Home, TrendingUp, Coins, Target, CheckCircle, CheckCircle2, ListFilter, Building, Navigation, RotateCcw, Search, AlertTriangle, Calendar, X, ALargeSmall, Settings2 } from 'lucide-react';
-import { formatTanggal, formatWaktu, formatRupiah, sanitizeUUIDFilters } from '@/lib/utils';
+import { formatTanggal, formatWaktu, formatRupiah, sanitizeUUIDFilters, getUserDisplayName } from '@/lib/utils';
 import { differenceInMinutes } from 'date-fns';
 import { SalesRouteMap } from '@/components/features/components/SalesRouteMap';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -47,6 +47,7 @@ export default function Monitoring() {
         users, absensi, cabang: listCabang, pelanggan: listPelanggan, penjualan, setoran, mutasiBarang,
         barang: listBarang, stokPengguna: listStokPengguna, targets: listTargets, kunjungan: listKunjungan, viewMode, kategoriPelanggan, profilPerusahaan, deletePelanggan, refresh, dbMode
     } = useDatabase();
+    const tampilNama = profilPerusahaan?.config?.tampilNama || 'nama';
 
     const [mapMode, setMapMode] = useState<MapMode>('pelanggan');
     const [selectedMarker, setSelectedMarker] = useState<MapMarker | null>(null);
@@ -215,17 +216,17 @@ export default function Monitoring() {
             if (selectedUser.length > 0 && !selectedUser.includes(u.id)) return null;
 
             let color = stringToColor(u.id);
-            let userName = u.nama;
+            let userName = getUserDisplayName(u, tampilNama);
             if (colorIndicator === 'cabang') {
                 const cbg = listCabang.find(c => c.id === u.cabangId);
                 color = cbg ? stringToColor(cbg.id) : stringToColor(u.id);
-                userName = cbg ? cbg.nama : u.nama;
+                userName = cbg ? cbg.nama : getUserDisplayName(u, tampilNama);
             }
 
             return {
                 id: record.id,
                 position: { lat: record.lokasiCheckIn!.latitude, lng: record.lokasiCheckIn!.longitude },
-                title: u.nama,
+                title: getUserDisplayName(u, tampilNama),
                 subtitle: `Check-in: ${formatWaktu(new Date(record.checkIn || record.tanggal))}`,
                 type: 'team',
                 detail: u.roles.join(', '),
@@ -258,7 +259,7 @@ export default function Monitoring() {
 
             if (colorIndicator === 'pengguna' && sales) {
                 color = stringToColor(sales.id);
-                userName = sales.nama;
+                userName = getUserDisplayName(sales, tampilNama);
             } else if (colorIndicator === 'cabang' && cabang) {
                 color = stringToColor(cabang.id);
                 userName = cabang.nama;
@@ -279,7 +280,7 @@ export default function Monitoring() {
                 title: p.nama,
                 subtitle: p.telepon,
                 type: 'customer',
-                detail: `${p.alamat} (Sales: ${sales?.nama || '-'} | Cabang: ${cabang?.nama || '-'})`,
+                detail: `${p.alamat} (Sales: ${sales ? getUserDisplayName(sales, tampilNama) : '-'} | Cabang: ${cabang?.nama || '-'})`,
                 color,
                 data: p,
                 userName
@@ -310,7 +311,7 @@ export default function Monitoring() {
             const kategori = kategoriPelanggan.find(k => k.id === cust?.kategoriId);
 
             let color = sales ? stringToColor(sales.id) : undefined;
-            let userName = sales?.nama || 'Umum';
+            let userName = sales ? getUserDisplayName(sales, tampilNama) : 'Umum';
 
             if (colorIndicator === 'cabang') {
                 color = cabang ? stringToColor(cabang.id) : undefined;
@@ -324,7 +325,7 @@ export default function Monitoring() {
                 id: p.id,
                 position: { lat: p.lokasi!.latitude, lng: p.lokasi!.longitude },
                 title: cust?.nama || 'Umum',
-                subtitle: `${sales?.nama || '-'} • ${formatRupiah(p.total)}`,
+                subtitle: `${sales ? getUserDisplayName(sales, tampilNama) : '-'} • ${formatRupiah(p.total)}`,
                 type: 'transaction',
                 detail: `Nota: ${p.nomorNota}`,
                 color,
@@ -630,7 +631,7 @@ export default function Monitoring() {
                     type: 'checkin',
                     timestamp: new Date(a.checkIn),
                     userId: a.userId,
-                    userName: u?.nama || 'Unknown',
+                    userName: u ? getUserDisplayName(u, tampilNama) : 'Unknown',
                     title: 'Absen Masuk',
                     description: a.lokasiCheckIn?.alamat || 'Check-in Absensi',
                     lat: a.lokasiCheckIn?.latitude,
@@ -644,7 +645,7 @@ export default function Monitoring() {
                     type: 'checkout',
                     timestamp: new Date(a.checkOut),
                     userId: a.userId,
-                    userName: u?.nama || 'Unknown',
+                    userName: u ? getUserDisplayName(u, tampilNama) : 'Unknown',
                     title: 'Absen Pulang',
                     description: a.lokasiCheckOut?.alamat || 'Check-out Absensi',
                     lat: a.lokasiCheckOut?.latitude,
@@ -666,7 +667,7 @@ export default function Monitoring() {
                 type: 'sales',
                 timestamp: new Date(p.tanggal),
                 userId: p.salesId,
-                userName: u?.nama || 'Unknown',
+                userName: u ? getUserDisplayName(u, tampilNama) : 'Unknown',
                 title: `Penjualan: ${c?.nama || 'Umum'}`,
                 description: `Nota: ${p.nomorNota} • ${formatRupiah(p.total)}`,
                 lat: p.lokasi?.latitude,
@@ -686,7 +687,7 @@ export default function Monitoring() {
                 type: 'deposit',
                 timestamp: new Date(s.tanggal),
                 userId: s.salesId,
-                userName: u?.nama || 'Unknown',
+                userName: u ? getUserDisplayName(u, tampilNama) : 'Unknown',
                 title: 'Setoran Uang',
                 description: `${formatRupiah(s.jumlah)} • ${s.status.toUpperCase()}`,
                 data: s
@@ -704,7 +705,7 @@ export default function Monitoring() {
                 type: 'noo',
                 timestamp: new Date(p.createdAt),
                 userId: p.salesId,
-                userName: u?.nama || 'Unknown',
+                userName: u ? getUserDisplayName(u, tampilNama) : 'Unknown',
                 title: 'Toko Baru (NOO)',
                 description: `Mendaftarkan toko: ${p.nama}`,
                 lat: p.lokasi?.latitude,
@@ -813,13 +814,13 @@ export default function Monitoring() {
 
                 if (isHome) {
                     currentStay.type = 'visit';
-                    currentStay.title = `Rumah: ${nearbyUserHome?.nama}`;
+                    currentStay.title = `Rumah: ${nearbyUserHome ? getUserDisplayName(nearbyUserHome, tampilNama) : 'Unknown'}`;
                     currentStay.description = isOwnHome
                         ? `Berada di rumah sendiri (${currentStay.duration} mnt)`
-                        : `Sedang berkunjung ke rumah ${nearbyUserHome?.nama} (${currentStay.duration} mnt)`;
+                        : `Sedang berkunjung ke rumah ${nearbyUserHome ? getUserDisplayName(nearbyUserHome, tampilNama) : 'Unknown'} (${currentStay.duration} mnt)`;
                     const d = currentStay.data as DynamicActivityData;
                     d.isHome = true;
-                    d.ownerName = nearbyUserHome?.nama;
+                    d.ownerName = nearbyUserHome ? getUserDisplayName(nearbyUserHome, tampilNama) : undefined;
                 } else if (nearbyCabang) {
                     currentStay.type = 'visit';
                     currentStay.title = `Basecamp: ${nearbyCabang.nama}`;
@@ -1346,7 +1347,7 @@ export default function Monitoring() {
                                                             }`} />
                                                     </div>
                                                     <div className="flex-1 min-w-0">
-                                                        <p className="font-semibold text-sm truncate">{user.nama} {user.id === currentUser?.id ? '(Saya)' : ''}</p>
+                                                        <p className="font-semibold text-sm truncate">{getUserDisplayName(user, tampilNama)} {user.id === currentUser?.id ? '(Saya)' : ''}</p>
                                                         <p className="text-xs text-muted-foreground truncate">{cabang?.nama}</p>
                                                     </div>
                                                     <div className="text-right flex flex-col items-end gap-1">
@@ -1782,7 +1783,7 @@ export default function Monitoring() {
                                                     <Activity className="w-4 h-4 text-muted-foreground" />
                                                 </div>
                                                 <div className="flex-1">
-                                                    <p className="font-medium text-sm">{user.nama}</p>
+                                                    <p className="font-medium text-sm">{getUserDisplayName(user, tampilNama)}</p>
                                                     <p className="text-xs text-muted-foreground">
                                                         {record.status === 'hadir' ? 'Check-In' : record.status} • {cabang?.nama}
                                                     </p>

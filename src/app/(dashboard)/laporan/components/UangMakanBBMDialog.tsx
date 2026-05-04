@@ -14,7 +14,7 @@ import html2canvas from 'html2canvas';
 import jsPDF from 'jspdf';
 import { createRoot } from 'react-dom/client';
 import { UangMakanBBMPrintTemplate } from '@/app/(dashboard)/laporan/components/UangMakanBBMPrintTemplate';
-import { formatRupiah } from '@/lib/utils';
+import { formatRupiah, getUserDisplayName } from '@/lib/utils';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 
@@ -30,6 +30,7 @@ export const UangMakanBBMDialog = ({ open, onOpenChange }: UangMakanBBMDialogPro
         viewMode, cabang, profilPerusahaan
     } = useDatabase();
     const { user } = useAuth();
+    const tampilNama = profilPerusahaan?.config?.tampilNama || 'nama';
     
     const [rateUangMakan, setRateUangMakan] = useState('30.000');
     const [isPaymentConfirmOpen, setIsPaymentConfirmOpen] = useState(false);
@@ -162,7 +163,7 @@ export const UangMakanBBMDialog = ({ open, onOpenChange }: UangMakanBBMDialogPro
     
           return {
             userId: u.id,
-            nama: u.nama,
+            nama: getUserDisplayName(u, tampilNama),
             posisi: u.posisi || 'Staff',
             hariKerja: userAbsensi.length,
             nominalUangMakan: totalUangMakan,
@@ -185,7 +186,7 @@ export const UangMakanBBMDialog = ({ open, onOpenChange }: UangMakanBBMDialogPro
           });
     
           return {
-            nama: u.nama,
+            nama: getUserDisplayName(u, tampilNama),
             statuses,
             total: statuses.filter(s => s === 'M').length
           };
@@ -198,7 +199,10 @@ export const UangMakanBBMDialog = ({ open, onOpenChange }: UangMakanBBMDialogPro
                  branchUsers.some(bu => bu.id === r.userId);
         }).map(r => ({
           tanggal: new Date(r.tanggal),
-          nama: users.find(u => u.id === r.userId)?.nama || 'Unknown',
+          nama: (() => {
+            const u = users.find(usr => usr.id === r.userId);
+            return u ? getUserDisplayName(u, tampilNama) : 'Unknown';
+          })(),
           kategori: r.kategori,
           keterangan: r.keterangan,
           jumlah: r.jumlah,

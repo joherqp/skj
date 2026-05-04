@@ -7,7 +7,7 @@ import { Badge } from '@/components/ui/badge';
 import { useAuth } from '@/contexts/AuthContext';
 import { useDatabase } from '@/contexts/DatabaseContext';
 import { Search, Plus, Wallet, Filter, Clock, CheckCircle, XCircle, Users, AlertCircle, Building, ChevronDown, FileText } from 'lucide-react';
-import { formatRupiah, formatCompactRupiah, formatTanggal } from '@/lib/utils';
+import { formatRupiah, formatCompactRupiah, formatTanggal, getUserDisplayName } from '@/lib/utils';
 import { useRouter } from 'next/navigation';
 import { ImagePreviewModal } from '@/components/shared/ImagePreviewModal';
 import {
@@ -51,8 +51,9 @@ export default function Setoran() {
   const { user } = useAuth();
   const {
     setoran, penjualan, saldoPengguna, rekeningBank,
-    users, cabang, viewMode, persetujuan
+    users, cabang, viewMode, persetujuan, profilPerusahaan
   } = useDatabase();
+  const tampilNama = profilPerusahaan?.config?.tampilNama || 'nama';
   const [search, setSearch] = useState('');
   const [selectedCabangIds, setSelectedCabangIds] = useState<string[]>([]);
   const [selectedUserIds, setSelectedUserIds] = useState<string[]>([]);
@@ -361,10 +362,10 @@ export default function Setoran() {
                     <CardContent className="p-2.5 md:p-3 flex items-center justify-between gap-2 md:gap-3">
                       <div className="flex items-center gap-2 md:gap-3 min-w-0 flex-1">
                         <div className="w-7 h-7 md:w-8 md:h-8 rounded-full bg-primary/10 flex items-center justify-center text-[10px] md:text-xs font-bold text-primary shrink-0">
-                          {item.user.nama.charAt(0).toUpperCase()}
+                          {getUserDisplayName(item.user, tampilNama).charAt(0).toUpperCase()}
                         </div>
                         <div className="min-w-0">
-                          <p className="text-xs md:text-sm font-medium truncate">{item.user.nama}</p>
+                          <p className="text-xs md:text-sm font-medium truncate">{getUserDisplayName(item.user, tampilNama)}</p>
                           <p className="text-[10px] text-muted-foreground uppercase truncate">{item.user.roles[0]}</p>
                         </div>
                       </div>
@@ -571,7 +572,7 @@ export default function Setoran() {
                               }
                             }}
                           >
-                            {u.nama.toUpperCase()}
+                            {getUserDisplayName(u, tampilNama)}
                           </DropdownMenuCheckboxItem>
                         ))}
                       </DropdownMenuContent>

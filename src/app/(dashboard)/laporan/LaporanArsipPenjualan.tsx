@@ -4,11 +4,12 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { supabase } from '@/lib/supabase';
-import { formatRupiah, formatCompactRupiah } from '@/lib/utils';
+import { formatRupiah, formatCompactRupiah, getUserDisplayName } from '@/lib/utils';
 import { ArrowLeft, Download, Search, Loader2, Eye, Receipt } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
+import { useDatabase } from '@/contexts/DatabaseContext';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from '@/components/ui/badge';
 import * as XLSX from 'xlsx';
@@ -35,12 +36,14 @@ interface ArchiveSale {
   metode_pembayaran: string;
   catatan?: string;
   pelanggan?: { nama: string };
-  sales?: { nama: string };
+  sales?: { nama: string; nama_panggilan?: string };
   items: ArchiveItem[];
 }
 
 export default function LaporanArsipPenjualan() {
   const { user: currentUser } = useAuth();
+  const { profilPerusahaan } = useDatabase();
+  const tampilNama = profilPerusahaan?.config?.tampilNama || 'nama';
   const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [data, setData] = useState<ArchiveSale[]>([]);
@@ -65,7 +68,7 @@ export default function LaporanArsipPenjualan() {
               .select(`
                   *,
                   pelanggan:pelanggan(nama),
-                  sales:users!sales_id(nama)
+                  sales:users!sales_id(nama, nama_panggilan)
               `);
 
           // Add role-based branch filtering
@@ -114,7 +117,7 @@ export default function LaporanArsipPenjualan() {
                 'Tanggal': new Date(item.tanggal).toLocaleDateString('id-ID'),
                 'No Nota': item.nomor_nota,
                 'Pelanggan': item.pelanggan?.nama || 'UMUM',
-                'Sales': item.sales?.nama || 'Unknown',
+                'Sales': item.sales ? getUserDisplayName({ nama: item.sales.nama, namaPanggilan: item.sales.nama_panggilan }, tampilNama) : 'Unknown',
                 'Metode': item.metode_pembayaran,
                 'Detail Barang': itemsString,
                 'Total': item.total,
@@ -231,7 +234,7 @@ export default function LaporanArsipPenjualan() {
                                     </TableCell>
                                     <TableCell className="font-medium font-mono text-xs">{item.nomor_nota}</TableCell>
                                     <TableCell>{item.pelanggan?.nama || 'UMUM'}</TableCell>
-                                    <TableCell>{item.sales?.nama || '-'}</TableCell>
+                                    <TableCell>{item.sales ? getUserDisplayName({ nama: item.sales.nama, namaPanggilan: item.sales.nama_panggilan }, tampilNama) : '-'}</TableCell>
                                     <TableCell>
                                         <Badge variant="outline" className="uppercase text-[10px]">{item.metode_pembayaran}</Badge>
                                     </TableCell>
@@ -273,7 +276,7 @@ export default function LaporanArsipPenjualan() {
                            <div className="text-right font-medium">{selectedTx.pelanggan?.nama || 'UMUM'}</div>
                            
                            <div className="text-muted-foreground">Sales</div>
-                           <div className="text-right">{selectedTx.sales?.nama || '-'}</div>
+                           <div className="text-right">{selectedTx.sales ? getUserDisplayName({ nama: selectedTx.sales.nama, namaPanggilan: selectedTx.sales.nama_panggilan }, tampilNama) : '-'}</div>
 
                            <div className="text-muted-foreground">Metode</div>
                            <div className="text-right uppercase font-semibold">{selectedTx.metode_pembayaran}</div>

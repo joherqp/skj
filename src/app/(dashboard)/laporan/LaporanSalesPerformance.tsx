@@ -12,7 +12,7 @@ import {
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
 import { useDatabase } from '@/contexts/DatabaseContext';
-import { formatRupiah, formatNumber, toCamelCase, sanitizeUUIDFilters } from '@/lib/utils';
+import { formatRupiah, formatNumber, toCamelCase, sanitizeUUIDFilters, getUserDisplayName } from '@/lib/utils';
 import { Download, History, ArrowRight, ArrowLeft } from 'lucide-react';
 import { format, startOfMonth, endOfMonth } from 'date-fns';
 import { id as localeId } from 'date-fns/locale';
@@ -55,7 +55,8 @@ interface AdjustmentHistory {
 export default function LaporanSalesPerformance() {
   const router = useRouter();
   const { user } = useAuth();
-  const { } = useDatabase();
+  const { profilPerusahaan } = useDatabase();
+  const tampilNama = profilPerusahaan?.config?.tampilNama || 'nama';
   const [loading, setLoading] = useState(false);
   const [performanceData, setPerformanceData] = useState<PerformanceItem[]>([]);
   const [availableCabangIds, setAvailableCabangIds] = useState<string[]>([]);
@@ -140,8 +141,8 @@ export default function LaporanSalesPerformance() {
         const cabangMap: Record<string, string> = {};
 
         if (salesIds.length > 0) {
-          const { data } = await supabase.from('users').select('id, nama').in('id', salesIds);
-          data?.forEach((u: { id: string; nama: string }) => salesMap[u.id] = u.nama);
+          const { data } = await supabase.from('users').select('id, nama, nama_panggilan').in('id', salesIds);
+          data?.forEach((u: { id: string; nama: string; nama_panggilan?: string }) => salesMap[u.id] = getUserDisplayName({ nama: u.nama, namaPanggilan: u.nama_panggilan }, tampilNama));
         }
         if (cabangIds.length > 0) {
           const { data } = await supabase.from('cabang').select('id, nama').in('id', cabangIds);

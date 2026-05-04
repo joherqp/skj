@@ -12,6 +12,7 @@ import { useRouter } from 'next/navigation';
 import { Badge } from '@/components/ui/badge';
 import { useDatabase } from '@/contexts/DatabaseContext';
 import { useAuth } from '@/contexts/AuthContext';
+import { getUserDisplayName } from '@/lib/utils';
 
 import {
   AlertDialog,
@@ -32,7 +33,8 @@ interface PermintaanBarangFormProps {
 
 export function PermintaanBarangForm({ embedded, onSuccess, onCancel }: PermintaanBarangFormProps) {
   const { user } = useAuth();
-  const { barang, addPermintaanBarang, addPersetujuan, cabang, satuan: satuanList, users } = useDatabase();
+  const { barang, addPermintaanBarang, addPersetujuan, cabang, satuan: satuanList, users, profilPerusahaan } = useDatabase();
+  const tampilNama = profilPerusahaan?.config?.tampilNama || 'nama';
 
   const [isConfirmOpen, setIsConfirmOpen] = useState(false);
   const [formData, setFormData] = useState({
@@ -181,7 +183,7 @@ export function PermintaanBarangForm({ embedded, onSuccess, onCancel }: Perminta
                   placeholder="Pilih pengguna untuk dituju..."
                   options={users
                     .filter(u => u.cabangId === formData.keCabangId && u.isActive !== false)
-                    .map(u => ({ label: `${u.nama} (${u.roles.join(', ')})`, value: u.id }))
+                    .map(u => ({ label: `${getUserDisplayName(u, tampilNama)} (${u.roles.join(', ')})`, value: u.id }))
                   }
                 />
               </div>
@@ -345,7 +347,7 @@ export function PermintaanBarangForm({ embedded, onSuccess, onCancel }: Perminta
             <div className="text-sm bg-muted/50 p-3 rounded-md space-y-2">
               <p><strong>Tujuan:</strong> {cabang.find(c => c.id === formData.keCabangId)?.nama || '-'}</p>
               {formData.targetUserId && (
-                <p><strong>Pengguna:</strong> {users.find(u => u.id === formData.targetUserId)?.nama}</p>
+                <p><strong>Pengguna:</strong> {getUserDisplayName(users.find(u => u.id === formData.targetUserId), tampilNama)}</p>
               )}
               <p><strong>Catatan:</strong> {formData.catatan || '-'}</p>
             </div>

@@ -6,7 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { useDatabase } from '@/contexts/DatabaseContext';
 import { Search, Plus, Users, MapPin, Phone, Filter, ArrowLeftRight, UserCheck, Store, Building, ChevronDown, MessageCircle, Share2, AlertCircle, Trash2, ArrowUpDown } from 'lucide-react';
-import { formatRupiah, formatCompactRupiah, formatWhatsAppNumber } from '@/lib/utils';
+import { formatRupiah, formatCompactRupiah, formatWhatsAppNumber, getUserDisplayName } from '@/lib/utils';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 
@@ -38,6 +38,7 @@ import { cn } from '@/lib/utils';
 export default function Pelanggan() {
   const { user } = useAuth();
   const { pelanggan, users, kategoriPelanggan, profilPerusahaan, viewMode, setViewMode, kunjungan, penjualan, cabang: listCabang, mergePelanggan } = useDatabase();
+  const tampilNama = profilPerusahaan?.config?.tampilNama || 'nama';
   const [search, setSearch] = useState('');
   const [displayLimit, setDisplayLimit] = useState(10);
   const [selectedCabangIds, setSelectedCabangIds] = useState<string[]>([]);
@@ -549,7 +550,7 @@ ${profilPerusahaan?.nama || ''}`;
                                                   }
                                               }}
                                           >
-                                              {u.nama.toUpperCase()}
+                                              {getUserDisplayName(u, tampilNama)}
                                           </DropdownMenuCheckboxItem>
                                       ))}
                                   </DropdownMenuContent>
@@ -1021,7 +1022,7 @@ ${profilPerusahaan?.nama || ''}`;
                               )}
                             </div>
                             <p className="text-xs text-muted-foreground">
-                              Sales: <span className="font-medium text-foreground">{sales?.nama}</span>
+                              Sales: <span className="font-medium text-foreground">{sales ? getUserDisplayName(sales, tampilNama) : '-'}</span>
                             </p>
                           </div>
                            <div className="grid grid-cols-2 gap-x-4 gap-y-2 mt-2 pt-2 border-t bg-muted/10 -mx-4 -mb-4 px-4 py-2">

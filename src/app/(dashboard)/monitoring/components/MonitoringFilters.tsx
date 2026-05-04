@@ -16,6 +16,7 @@ import { DatePickerWithRange } from '@/components/ui/date-range-picker';
 import { DateRange } from "react-day-picker";
 import { MapMode } from '../types';
 import { Cabang, User } from '@/types';
+import { getUserDisplayName } from '@/lib/utils';
 
 interface MonitoringFiltersProps {
     currentUser: any;
@@ -32,6 +33,7 @@ interface MonitoringFiltersProps {
     setColorIndicator: (indicator: 'pengguna' | 'cabang' | 'kategori') => void;
     dateRange: DateRange | undefined;
     setDateRange: (range: DateRange | undefined) => void;
+    tampilNama?: string;
 }
 
 export function MonitoringFilters({
@@ -49,7 +51,7 @@ export function MonitoringFilters({
     setColorIndicator,
     dateRange,
     setDateRange
-}: MonitoringFiltersProps) {
+}: MonitoringFiltersProps & { tampilNama?: string }) {
     const isAdmin = currentUser?.roles.includes('admin') || currentUser?.roles.includes('owner') || currentUser?.roles.includes('finance');
     const isAdminOwner = currentUser?.roles.includes('admin') || currentUser?.roles.includes('owner');
     const isLeader = currentUser?.roles.includes('leader');
@@ -139,7 +141,7 @@ export function MonitoringFilters({
                                             }
                                         }}
                                     >
-                                        {user.nama}
+                                        {getUserDisplayName(user, tampilNama || 'nama')}
                                     </DropdownMenuCheckboxItem>
                                 ))}
                         </DropdownMenuContent>

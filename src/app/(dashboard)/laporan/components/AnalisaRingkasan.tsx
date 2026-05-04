@@ -3,7 +3,7 @@ import { useMemo } from 'react';
 import { useDatabase } from '@/contexts/DatabaseContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { formatRupiah } from '@/lib/utils';
+import { formatRupiah, getUserDisplayName } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
 import { 
   TrendingUp, 
@@ -29,7 +29,7 @@ import {
 const COLORS = ['#6366f1', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899'];
 
 export default function AnalisaRingkasan() {
-  const { penjualan, pelanggan, users, barang, kategoriPelanggan, targets } = useDatabase();
+  const { penjualan, pelanggan, users, barang, kategoriPelanggan, targets, profilPerusahaan } = useDatabase();
   const { user: currentUser } = useAuth();
 
   const isAdminOrOwner = currentUser?.roles.some(r => ['admin', 'owner'].includes(r));
@@ -80,7 +80,8 @@ export default function AnalisaRingkasan() {
     // Top Sales
     const salesMap = new Map<string, number>();
     thisMonthSales.forEach(p => {
-      const name = users.find(u => u.id === p.salesId)?.nama || 'Unknown';
+      const u = users.find(u => u.id === p.salesId);
+      const name = u ? getUserDisplayName(u, profilPerusahaan?.config?.tampilNama || 'nama') : 'Unknown';
       salesMap.set(name, (salesMap.get(name) || 0) + p.total);
     });
     const topSales = Array.from(salesMap.entries())

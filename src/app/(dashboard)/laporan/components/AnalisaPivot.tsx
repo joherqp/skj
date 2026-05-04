@@ -5,7 +5,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { useDatabase } from '@/contexts/DatabaseContext';
 import { useAuth } from '@/contexts/AuthContext';
-import { formatRupiah } from '@/lib/utils';
+import { formatRupiah, getUserDisplayName } from '@/lib/utils';
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
 import {
     ArrowRightLeft,
@@ -90,8 +90,9 @@ const FIELD_LABELS: Record<PivotField, string> = {
 const TRANSACTION_TYPES = ['Tunai', 'Kredit', 'Retur', 'Promo'];
 
 export default function AnalisaPivot() {
-    const { penjualan, barang, kategori: kategoriList, pelanggan, kategoriPelanggan: kategoriPelangganList, users, cabang, viewMode } = useDatabase();
+    const { penjualan, barang, kategori: kategoriList, pelanggan, kategoriPelanggan: kategoriPelangganList, users, cabang, viewMode, profilPerusahaan } = useDatabase();
     const { user: currentUser } = useAuth();
+    const tampilNama = profilPerusahaan?.config?.tampilNama || 'nama';
 
     // Configuration State
     const [rowFields, setRowFields] = useState<PivotField[]>(['tanggal', 'cabang', 'sales', 'kategoriPelanggan', 'pelanggan', 'jenisTransaksi']);
@@ -321,7 +322,7 @@ export default function AnalisaPivot() {
 
                 const sId = p.salesId || p.createdBy;
                 const u = users.find(u => u.id === sId);
-                const salesName = u?.nama || 'Unknown';
+                const salesName = u ? getUserDisplayName(u, tampilNama) : 'Unknown';
                 const cabangName = cabang.find(c => c.id === p.cabangId)?.nama || 'Unknown';
 
                 p.items.forEach(item => {
@@ -367,7 +368,7 @@ export default function AnalisaPivot() {
                 });
             });
         return data;
-    }, [penjualan, barang, kategoriList, pelanggan, kategoriPelangganList, users, cabang, selectedCabangIds, selectedUserIds, selectedKategoriIds, selectedKategoriPelangganIds, selectedBarangIds, isSingleDate, singleDate, startDate, endDate, viewMode, currentUser]);
+    }, [penjualan, barang, kategoriList, pelanggan, kategoriPelangganList, users, cabang, selectedCabangIds, selectedUserIds, selectedKategoriIds, selectedKategoriPelangganIds, selectedBarangIds, isSingleDate, singleDate, startDate, endDate, viewMode, currentUser, tampilNama]);
 
     // 2. Pivot Engine
     const pivotTable = useMemo(() => {
@@ -750,7 +751,10 @@ export default function AnalisaPivot() {
             filters.push(`Cabang: ${names}`);
         }
         if (selectedUserIds.length > 0) {
-            const names = selectedUserIds.map(id => users.find(u => u.id === id)?.nama).join(', ');
+            const names = selectedUserIds.map(id => {
+                const u = users.find(u => u.id === id);
+                return u ? getUserDisplayName(u, tampilNama) : 'Unknown';
+            }).join(', ');
             filters.push(`Sales: ${names}`);
         }
         if (selectedKategoriIds.length > 0) {

@@ -12,6 +12,7 @@ import { useRouter } from 'next/navigation';
 import { useDatabase } from '@/contexts/DatabaseContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
+import { getUserDisplayName } from '@/lib/utils';
 import { Switch } from '@/components/ui/switch';
 
 
@@ -22,7 +23,8 @@ import { Setoran } from '@/types';
 export default function TambahSetoran() {
   const router = useRouter();
   const { user } = useAuth();
-  const { addSetoran, addPersetujuan, addNotifikasi, rekeningBank, users, saldoPengguna, cabang } = useDatabase();
+  const { addSetoran, addPersetujuan, addNotifikasi, rekeningBank, users, saldoPengguna, cabang, profilPerusahaan } = useDatabase();
+  const tampilNama = profilPerusahaan?.config?.tampilNama || 'nama';
   
   const currentUserSaldo = saldoPengguna.find(s => s.userId === user?.id)?.saldo || 0;
 
@@ -123,7 +125,8 @@ export default function TambahSetoran() {
     if (matchedAccount) {
         destinationRekeningId = matchedAccount.id;
     } else {
-        const recipientName = formData.recipientUserId === 'admin_pusat' ? 'Pusat' : (users.find(u => u.id === formData.recipientUserId)?.nama || 'Penerima');
+        const recipient = users.find(u => u.id === formData.recipientUserId);
+        const recipientName = formData.recipientUserId === 'admin_pusat' ? 'Pusat' : (recipient ? getUserDisplayName(recipient, tampilNama) : 'Penerima');
         toast.error(`${recipientName} tidak memiliki akun ${isTunaiMethod ? 'Kas Tunai' : 'Bank'} yang terdaftar.`);
         return;
     }
@@ -238,7 +241,7 @@ export default function TambahSetoran() {
         // Send to each target
         const amountFormatted = new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR' }).format(amount);
 
-        const senderName = user?.nama || 'Seseorang';
+        const senderName = getUserDisplayName(user, tampilNama) || 'Seseorang';
         
         // We need to use addNotifikasi from context, but we can't await inside loop if we want speed, 
         // but here it's fine.
@@ -360,7 +363,7 @@ export default function TambahSetoran() {
                       return !user?.cabangId || u.cabangId === user.cabangId;
                     })
                     .sort((a, b) => a.nama.localeCompare(b.nama))
-                    .map(u => ({ value: u.id, label: u.nama }))
+                    .map(u => ({ value: u.id, label: getUserDisplayName(u, tampilNama) }))
                   }
                   value={formData.recipientUserId}
                   onChange={(val) => setFormData(prev => ({ ...prev, recipientUserId: val }))}

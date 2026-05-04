@@ -6,7 +6,7 @@ import { Input } from '@/components/ui/input';
 import { useDatabase } from '@/contexts/DatabaseContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
-import { formatRupiah, formatNumber } from '@/lib/utils';
+import { formatRupiah, formatNumber, getUserDisplayName } from '@/lib/utils';
 import {
     ArrowLeft,
     Printer,
@@ -94,6 +94,7 @@ export default function LaporanHarian() {
         cabang, stokPengguna, persetujuan, setoran, saldoPengguna, satuan,
         mutasiBarang, penyesuaianStok, pelanggan, kategoriPelanggan, stokHarian
     } = useDatabase();
+    const tampilNama = profilPerusahaan?.config?.tampilNama || 'nama';
 
     const [pembayaran, setPembayaran] = useState<Record<string, unknown>[]>([]);
     const [isRefreshingPayments, setIsRefreshingPayments] = useState(false);
@@ -399,7 +400,7 @@ export default function LaporanHarian() {
             .map(s => ({
                 id: s.id,
                 waktu: format(s.tanggal, 'HH:mm'),
-                salesName: users.find(u => u.id === (s.salesId || s.userId))?.nama || 'Unknown',
+                salesName: (() => { const u = users.find(u => u.id === (s.salesId || s.userId)); return u ? getUserDisplayName(u, tampilNama) : 'Unknown'; })(),
                 jumlah: s.jumlah,
                 status: s.status,
                 sumber: s.sumber,
@@ -486,6 +487,7 @@ export default function LaporanHarian() {
         // 5. Detailed Summaries
         const productSummaryMap = new Map<string, { nama: string; qty: number; total: number; satuan: string }>();
         const salesSummaryMap = new Map<string, {
+            id: string;
             nama: string;
             qty: number;
             total: number;
@@ -506,7 +508,8 @@ export default function LaporanHarian() {
             // Per Sales
             const sId = p.salesId;
             const existingSales = salesSummaryMap.get(sId) || {
-                nama: users.find(u => u.id === sId)?.nama || 'Unknown',
+                id: sId,
+                nama: (() => { const u = users.find(u => u.id === sId); return u ? getUserDisplayName(u, tampilNama) : 'Unknown'; })(),
                 qty: 0,
                 total: 0,
                 cash: 0,
@@ -540,7 +543,7 @@ export default function LaporanHarian() {
 
         // Add cash & setoran to sales summary
         const salesSummaryList = Array.from(salesSummaryMap.values()).map(s => {
-            const userId = users.find(u => u.nama === s.nama)?.id;
+            const userId = s.id;
 
             // Cash from this salesman's Tunai Sales (bayar - kembalian)
             const userCashFromSales = userId ? filteredSales

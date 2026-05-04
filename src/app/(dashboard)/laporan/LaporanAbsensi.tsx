@@ -4,7 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { useDatabase } from '@/contexts/DatabaseContext';
 import { useAuth } from '@/contexts/AuthContext';
-import { formatTanggal, formatWaktu } from '@/lib/utils';
+import { formatTanggal, formatWaktu, getUserDisplayName } from '@/lib/utils';
 import { ArrowLeft, MapPin, ChevronLeft, ChevronRight, FileSpreadsheet } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import * as XLSX from 'xlsx';
@@ -34,7 +34,8 @@ import { id } from 'date-fns/locale';
 export default function LaporanAbsensi() {
     const router = useRouter();
     const { user: currentUser } = useAuth();
-    const { absensi, users, cabang, penjualan } = useDatabase();
+    const { absensi, users, cabang, penjualan, profilPerusahaan } = useDatabase();
+    const tampilNama = profilPerusahaan?.config?.tampilNama || 'nama';
 
     if (!currentUser) return null;
     const [filterCabang, setFilterCabang] = useState<string>('none');
@@ -225,7 +226,7 @@ export default function LaporanAbsensi() {
             const headers = ["Nama Pengguna", ...daysOfWeek.map(d => format(d, 'EEEE, dd MMM', { locale: id })), "Total"];
             const rows = validRows.map(row => {
                 const attStatuses = row.attendance.map(a => a.status === '-' ? '' : a.status);
-                return [row.user.nama, ...attStatuses, row.total];
+                return [getUserDisplayName(row.user, tampilNama), ...attStatuses, row.total];
             });
 
             // Add daily totals row
@@ -244,7 +245,7 @@ export default function LaporanAbsensi() {
                 const user = users.find(u => u.id === item.userId);
                 return {
                     "Tanggal": format(new Date(item.tanggal), 'yyyy-MM-dd'),
-                    "Nama": user?.nama || 'Unknown',
+                    "Nama": user ? getUserDisplayName(user, tampilNama) : 'Unknown',
                     "Status": item.status,
                     "Check In": item.checkIn ? formatWaktu(new Date(item.checkIn)) : '-',
                     "Lokasi": item.lokasiCheckIn?.alamat || `${item.lokasiCheckIn?.latitude}, ${item.lokasiCheckIn?.longitude}` || '-'
@@ -359,7 +360,7 @@ export default function LaporanAbsensi() {
                                         <>
                                             {displayData.map((row) => (
                                                 <tr key={row.user.id} className="hover:bg-muted/50">
-                                                    <td className="p-2 border-r font-medium">{row.user.nama}</td>
+                                                    <td className="p-2 border-r font-medium">{getUserDisplayName(row.user, tampilNama)}</td>
                                                     {row.attendance.map((att, idx) => (
                                                         <td key={idx} className={`p-2 border-r text-center font-bold ${att.status === 'M' ? '' :
                                                                 att.status === 'I' ? 'bg-red-200 text-red-700' :
@@ -400,7 +401,7 @@ export default function LaporanAbsensi() {
                                     <div key={item.id} className="p-3 border rounded-lg hover:bg-muted/50 space-y-2">
                                         <div className="flex justify-between items-start">
                                             <div>
-                                                <p className="font-semibold text-sm">{user?.nama}</p>
+                                                <p className="font-semibold text-sm">{user ? getUserDisplayName(user, tampilNama) : 'Unknown'}</p>
                                                 <div className={`inline-flex px-2 py-0.5 rounded text-[10px] font-medium uppercase mt-1 ${item.status === 'hadir' ? 'bg-success/10 text-success' : 'bg-destructive/10 text-destructive'
                                                     }`}>
                                                     {item.status}

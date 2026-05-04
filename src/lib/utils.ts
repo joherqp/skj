@@ -139,3 +139,34 @@ export const sanitizeUUIDFilters = (ids: string[]): string[] => {
   }
   return ids;
 };
+
+/**
+ * Converts a string to Proper Case (Title Case)
+ */
+export const toProperCase = (text: string): string => {
+  if (!text) return '';
+  return text
+    .toLowerCase()
+    .split(' ')
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(' ');
+};
+
+/**
+ * Returns the appropriate display name for a user based on the global config.
+ * When mode is 'panggilan' and the user has a namaPanggilan, it returns the nickname.
+ * Otherwise it falls back to the full name (nama).
+ * Returns name in Proper Case.
+ */
+export const getUserDisplayName = (
+  user?: { nama: string; namaPanggilan?: string } | null,
+  mode: 'nama' | 'panggilan' = 'nama'
+): string => {
+  if (!user) return '';
+  const displayName = (mode === 'panggilan' && user.namaPanggilan)
+    ? user.namaPanggilan
+    : user.nama || '';
+  
+  return toProperCase(displayName);
+};
+

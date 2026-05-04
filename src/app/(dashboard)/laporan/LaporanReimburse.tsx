@@ -8,7 +8,7 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
-import { formatRupiah, formatTanggal } from '@/lib/utils';
+import { formatRupiah, formatTanggal, getUserDisplayName } from '@/lib/utils';
 import { startOfWeek, endOfWeek, format, addWeeks, subWeeks, isSameDay, getISOWeek, eachDayOfInterval } from 'date-fns';
 import { id } from 'date-fns/locale';
 import { FileText, Download, Wallet, Clock, CheckCircle, XCircle, Search, ChevronLeft, ChevronRight, Calendar as CalendarIcon, ArrowLeft, Image as ImageIcon } from 'lucide-react';
@@ -24,7 +24,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 export default function LaporanReimburse() {
     const router = useRouter();
     const { user: currentUser } = useAuth();
-    const { reimburse, users } = useDatabase();
+    const { reimburse, users, profilPerusahaan } = useDatabase();
+    const tampilNama = profilPerusahaan?.config?.tampilNama || 'nama';
 
     if (!currentUser) return null;
     const [searchTerm, setSearchTerm] = useState('');
@@ -120,7 +121,7 @@ export default function LaporanReimburse() {
     const formatUserDetail = (userId: string | undefined) => {
         if (!userId) return '-';
         const user = users.find(u => u.id === userId);
-        return user ? user.nama : 'Unknown';
+        return user ? getUserDisplayName(user, tampilNama) : 'Unknown';
     };
 
     // Role-Based Filtering
@@ -460,7 +461,7 @@ export default function LaporanReimburse() {
                                         </tr>
                                     ) : weeklyData.map((row) => (
                                         <tr key={row.user.id} className="hover:bg-muted/50">
-                                            <td className="p-2 border-r font-medium">{row.user.nama}</td>
+                                            <td className="p-2 border-r font-medium">{getUserDisplayName(row.user, tampilNama)}</td>
                                             {row.dailyAmounts.map((d, idx) => (
                                                 <td key={idx} className="p-2 border-r text-right text-xs">
                                                     {d.amount > 0 ? (

@@ -12,6 +12,7 @@ import { useRouter } from 'next/navigation';
 import { Badge } from '@/components/ui/badge';
 import { useDatabase } from '@/contexts/DatabaseContext';
 import { useAuth } from '@/contexts/AuthContext';
+import { getUserDisplayName } from '@/lib/utils';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -31,7 +32,8 @@ interface MutasiBarangFormProps {
 
 export function MutasiBarangForm({ embedded, onSuccess, onCancel }: MutasiBarangFormProps) {
   const { user } = useAuth();
-  const { barang, addMutasiBarang, addPersetujuan, addNotifikasi, users, satuan, stokPengguna, persetujuan } = useDatabase();
+  const { barang, addMutasiBarang, addPersetujuan, addNotifikasi, users, satuan, stokPengguna, persetujuan, profilPerusahaan } = useDatabase();
+  const tampilNama = profilPerusahaan?.config?.tampilNama || 'nama';
   
   const [isConfirmOpen, setIsConfirmOpen] = useState(false);
   const [formData, setFormData] = useState({
@@ -56,7 +58,7 @@ export function MutasiBarangForm({ embedded, onSuccess, onCancel }: MutasiBarang
 
       // Allow ALL roles in same branch
       return isCabangMatch && isNotSelf && u.isActive !== false;
-  }).sort((a, b) => a.nama.localeCompare(b.nama));
+  }).sort((a, b) => getUserDisplayName(a, tampilNama).localeCompare(getUserDisplayName(b, tampilNama)));
 
   const [cart, setCart] = useState<{ barangId: string; jumlah: number; satuanId: string; konversi: number }[]>([]);
 
@@ -197,7 +199,7 @@ export function MutasiBarangForm({ embedded, onSuccess, onCancel }: MutasiBarang
       addNotifikasi({
         userId: targetUser.id,
         judul: 'Ada Kiriman Barang!',
-        pesan: `${user?.nama || 'Seseorang'} ngirim ${itemDetails} ke kamu nih. Yuk dicek di menu persetujuan.`,
+        pesan: `${getUserDisplayName(user, tampilNama) || 'Seseorang'} ngirim ${itemDetails} ke kamu nih. Yuk dicek di menu persetujuan.`,
         jenis: 'warning',
         dibaca: false,
         tanggal: new Date(),
@@ -249,7 +251,7 @@ export function MutasiBarangForm({ embedded, onSuccess, onCancel }: MutasiBarang
                             onChange={(val) => setFormData(prev => ({ ...prev, receiverId: val }))}
                             options={potentialReceivers.map(u => ({
                                 value: u.id,
-                                label: `${u.nama} (${u.roles.join(', ')})`
+                                label: `${getUserDisplayName(u, tampilNama)} (${(u.roles || []).join(', ')})`
                             }))}
                             placeholder="Pilih penerima barang..."
                         />
@@ -425,7 +427,7 @@ export function MutasiBarangForm({ embedded, onSuccess, onCancel }: MutasiBarang
             </AlertDialogHeader>
             <div className="py-4 space-y-4 max-h-[60vh] overflow-y-auto">
                 <div className="text-sm bg-muted/50 p-3 rounded-md space-y-2">
-                    <p><strong>Penerima:</strong> {users.find(u => u.id === formData.receiverId)?.nama || '-'}</p>
+                    <p><strong>Penerima:</strong> {getUserDisplayName(users.find(u => u.id === formData.receiverId), tampilNama) || '-'}</p>
                     <p><strong>Keterangan:</strong> {formData.keterangan || '-'}</p>
                 </div>
                 <div className="border rounded-md">

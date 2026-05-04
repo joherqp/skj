@@ -599,6 +599,7 @@ export interface ProfilPerusahaan {
     radiusKunjungan?: number;
     radiusBehavior?: 'allow' | 'reject';
     enableAIChat?: boolean;
+    tampilNama?: 'nama' | 'panggilan';
     databaseType?: 'supabase' | 'firestore' | 'server';
     databaseConfig?: {
       supabaseUrl?: string;

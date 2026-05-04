@@ -14,11 +14,13 @@ import { useDatabase } from '@/contexts/DatabaseContext';
 
 import { useAuth } from '@/contexts/AuthContext';
 import { SearchableSelect } from '@/components/ui/searchable-select';
+import { getUserDisplayName } from '@/lib/utils';
 
 export default function MutasiPelanggan() {
   const router = useRouter();
   const { user } = useAuth();
-  const { pelanggan, users, addPersetujuan, updatePelanggan, addRiwayatPelanggan, cabang } = useDatabase();
+  const { pelanggan, users, addPersetujuan, updatePelanggan, addRiwayatPelanggan, cabang, profilPerusahaan } = useDatabase();
+  const tampilNama = profilPerusahaan?.config?.tampilNama || 'nama';
   
   const [selectedPelangganIds, setSelectedPelangganIds] = useState<string[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
@@ -233,13 +235,11 @@ export default function MutasiPelanggan() {
                   placeholder="Pilih sales..."
                   searchPlaceholder="Cari sales..."
                   options={salesUsers.map(sales => {
-                      const linkedEmp = users.find(u => u.id === sales.id);
-                      const displayName = linkedEmp?.nama || sales.nama || sales.username;
-                      const branchName = cabang.find(c => c.id === sales.cabangId)?.nama || 'Unknown Branch';
+                      const br = cabang.find(c => c.id === sales.cabangId);
                       return {
-                          label: displayName,
+                          label: getUserDisplayName(sales, tampilNama),
                           value: sales.id,
-                          description: branchName
+                          description: br?.nama || 'No Branch'
                       };
                   })}
                 />

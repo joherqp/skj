@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useDatabase } from '@/contexts/DatabaseContext';
 import { useAuth } from '@/contexts/AuthContext';
-import { formatRupiah } from '@/lib/utils';
+import { formatRupiah, getUserDisplayName } from '@/lib/utils';
 import { ArrowLeft, Download, Search, FileSpreadsheet, FileText, ArrowUp, ArrowDown, Building, Calendar } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { Barang, User, MutasiItem } from '@/types';
@@ -60,8 +60,10 @@ export default function LaporanStok() {
         penjualan,
         mutasiBarang,
         persetujuan, // For Restock
-        penyesuaianStok
+        penyesuaianStok,
+        profilPerusahaan
     } = useDatabase();
+    const tampilNama = profilPerusahaan?.config?.tampilNama || 'nama';
 
     // Filters
     const [selectedCabangIds, setSelectedCabangIds] = useState<string[]>([]);
@@ -719,7 +721,7 @@ export default function LaporanStok() {
                 "Satuan",
                 ...relevantUsers.map(u => {
                     const userCabang = cabang.find(c => c.id === u.cabangId);
-                    return `${u.nama}\n(${userCabang ? userCabang.nama : 'Pusat'})`;
+                    return `${getUserDisplayName(u, tampilNama)}\n(${userCabang ? userCabang.nama : 'Pusat'})`;
                 }),
                 "Total"
             ];

@@ -13,12 +13,13 @@ import { useDatabase } from '@/contexts/DatabaseContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
 import { compressImage } from '@/lib/imageCompression';
-import { formatCurrency } from '@/lib/utils';
+import { formatCurrency, getUserDisplayName } from '@/lib/utils';
 
 export default function TambahReimburse() {
   const router = useRouter();
   const { user } = useAuth();
-  const { addReimburse, addPersetujuan, users, addNotifikasi } = useDatabase();
+  const { addReimburse, addPersetujuan, users, addNotifikasi, profilPerusahaan } = useDatabase();
+  const tampilNama = profilPerusahaan?.config?.tampilNama || 'nama';
   
   const [formData, setFormData] = useState({
     keterangan: '',
@@ -131,7 +132,7 @@ export default function TambahReimburse() {
                 addNotifikasi({
                     userId: tUser.id,
                     judul: 'Pengajuan Reimburse Baru',
-                    pesan: `${user.nama} mengajukan reimburse senilai ${formatCurrency(rawAmount)} untuk ${formData.keterangan}. Mohon segera diproses.`,
+                    pesan: `${getUserDisplayName(user, tampilNama)} mengajukan reimburse senilai ${formatCurrency(rawAmount)} untuk ${formData.keterangan}. Mohon segera diproses.`,
                     jenis: 'info',
                     tanggal: new Date(),
                     dibaca: false,

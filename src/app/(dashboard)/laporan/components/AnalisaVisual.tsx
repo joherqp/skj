@@ -10,7 +10,7 @@ import {
     LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer,
     BarChart, Bar, PieChart, Pie, Cell, Legend, AreaChart, Area
 } from 'recharts';
-import { formatRupiah, cn } from '@/lib/utils';
+import { formatRupiah, cn, getUserDisplayName } from '@/lib/utils';
 import { format, subDays, startOfMonth, endOfMonth, startOfYear, startOfWeek, startOfDay, endOfDay } from 'date-fns';
 import { motion, AnimatePresence } from 'framer-motion';
 // Removed CalendarComponent import
@@ -57,7 +57,8 @@ const DEFAULT_WIDGETS: WidgetConfig[] = [
 
 export default function AnalisaVisual() {
     const { user: currentUser } = useAuth();
-    const { penjualan, barang, kategori: listKategori, users, pelanggan, cabang: listCabang, viewMode } = useDatabase();
+    const { penjualan, barang, kategori: listKategori, users, pelanggan, cabang: listCabang, viewMode, profilPerusahaan } = useDatabase();
+    const tampilNama = profilPerusahaan?.config?.tampilNama || 'nama';
     const [dateRange, setDateRange] = useState<'7d' | '30d' | '90d' | 'year' | 'custom'>('30d');
     const [isSingleDate, setIsSingleDate] = useState(false);
     const [singleDate, setSingleDate] = useState(() => format(new Date(), 'yyyy-MM-dd'));
@@ -261,7 +262,8 @@ export default function AnalisaVisual() {
                         map.set(monthKey, (map.get(monthKey) || 0) + val);
                     }
                 } else if (w.source === 'sales') {
-                    const name = users.find(u => u.id === pSalesId)?.nama || 'Unknown';
+                    const u = users.find(usr => usr.id === pSalesId);
+                    const name = u ? getUserDisplayName(u, tampilNama) : 'Unknown';
                     map.set(name, (map.get(name) || 0) + val);
                 } else if (w.source === 'pelanggan') {
                     const name = pelanggan.find(c => c.id === p.pelangganId)?.nama || 'Umum';
@@ -918,7 +920,7 @@ export default function AnalisaVisual() {
                                             </div>
                                             <div className="max-h-[250px] overflow-y-auto custom-scrollbar p-1">
                                                 {users
-                                                    .filter(u => u.nama.toLowerCase().includes(searchQuery.user.toLowerCase()))
+                                                    .filter(u => getUserDisplayName(u, tampilNama).toLowerCase().includes(searchQuery.user.toLowerCase()))
                                                     .map(u => {
                                                         const isAllSelected = selectedUserIds.length === 0;
                                                         const isChecked = !selectedUserIds.includes('__none__') && (isAllSelected || selectedUserIds.includes(u.id));
@@ -946,7 +948,7 @@ export default function AnalisaVisual() {
                                                                 }}
                                                                 className="rounded-xl text-xs py-3.5 pl-10 pr-5 font-medium"
                                                             >
-                                                                {u.nama}
+                                                                {getUserDisplayName(u, tampilNama)}
                                                             </DropdownMenuCheckboxItem>
                                                         );
                                                     })
