@@ -56,6 +56,7 @@ interface MappingResult {
   id?: string;
   name: string;
   satuanId?: string;
+  kodeUnik?: string;
 }
 
 // 1. Clean name for display/creation
@@ -307,7 +308,7 @@ export default function ImportPenjualan() {
         if (sKey && !newMappings.salesman[sKey]) {
           const found = dbUsers.find(u => u.nama.toLowerCase() === sKey || (u.username && u.username.toLowerCase() === sKey)) ||
             dbUsers.find(u => isSimilar(u.nama, sKey));
-          newMappings.salesman[sKey] = { existing: !!found, id: found?.id, name: found?.nama || row.salesman };
+          newMappings.salesman[sKey] = { existing: !!found, id: found?.id, name: found?.nama || row.salesman, kodeUnik: (found as any)?.kode_unik };
         }
         const pKey = row.produk.toLowerCase();
         if (pKey && !newMappings.produk[pKey]) {
@@ -327,7 +328,7 @@ export default function ImportPenjualan() {
         const sKey = row.holder.toLowerCase();
         if (sKey && !newMappings.salesman[sKey]) {
           const found = dbUsers.find(u => u.nama.toLowerCase() === sKey) || dbUsers.find(u => isSimilar(u.nama, sKey));
-          newMappings.salesman[sKey] = { existing: !!found, id: found?.id, name: found?.nama || row.holder };
+          newMappings.salesman[sKey] = { existing: !!found, id: found?.id, name: found?.nama || row.holder, kodeUnik: (found as any)?.kode_unik };
         }
         const pKey = row.product.toLowerCase();
         if (pKey && !newMappings.produk[pKey]) {
@@ -429,11 +430,12 @@ export default function ImportPenjualan() {
         const row = firstRowPerSales[n];
         const cId = finalMappings.cabang[row?.cabang?.toLowerCase()]?.id || defaultCabangId;
         const username = n.toLowerCase().replace(/\s+/g, '_') + '_' + Math.random().toString(36).substring(2, 5);
-        return { nama: finalMappings.salesman[n].name, username, email: username + '@skj.com', roles: ['sales'], cabang_id: cId, is_active: false };
+        const kode_unik = n.substring(0, 3).toUpperCase() + Math.random().toString(36).substring(2, 5).toUpperCase();
+        return { nama: finalMappings.salesman[n].name, username, email: username + '@skj.com', roles: ['sales'], cabang_id: cId, is_active: false, kode_unik };
       });
       const { data: res, error } = await supabase.from('users').insert(salesPayload).select();
       if (error) throw error;
-      res?.forEach(u => finalMappings.salesman[u.nama.toLowerCase()] = { existing: true, id: u.id, name: u.nama });
+      res?.forEach(u => finalMappings.salesman[u.nama.toLowerCase()] = { existing: true, id: u.id, name: u.nama, kodeUnik: u.kode_unik });
     }
 
     // 3. Produk
@@ -463,16 +465,22 @@ export default function ImportPenjualan() {
         const pelPayload = chunk.map(n => {
           const row = firstRowPerPelanggan[n];
           const cId = finalMappings.cabang[row?.cabang?.toLowerCase()]?.id || defaultCabangId;
-          const sId = finalMappings.salesman[row?.salesman?.toLowerCase()]?.id || defaultSalesId;
+          const sInfo = finalMappings.salesman[row?.salesman?.toLowerCase()] || {};
+          const sKode = sInfo.kodeUnik || 'GEN';
           const catId = dbKategoriPelanggan.find(c => c.nama.toLowerCase() === row?.kategori_pelanggan?.toLowerCase())?.id || defaultKategoriPelangganId;
           return {
             nama: finalMappings.pelanggan[n].name,
             cabang_id: cId,
-            sales_id: sId,
+            sales_id: sInfo.id || defaultSalesId,
             kategori_id: catId,
-            kode: n.substring(0, 5).toUpperCase().replace(/\s/g, '') + Math.random().toString(36).substring(2, 7).toUpperCase(),
+            kode: `${sKode}-${n.substring(0, 4).toUpperCase()}${Math.random().toString(36).substring(2, 5).toUpperCase()}`,
             alamat: row?.alamat || '-',
             telepon: row?.telp?.toString().replace(/\D/g, '') || '-',
+            lokasi: {
+              latitude: Number(row?.lat) || 0,
+              longitude: Number(row?.long) || 0,
+              alamat: row?.alamat || '-'
+            },
             is_active: true,
             created_at: parseCSVDate(row?.pelanggan_created_at || row?.tanggal).toISOString()
           };
@@ -536,7 +544,12 @@ export default function ImportPenjualan() {
           metode_pembayaran: first.transaksi?.toLowerCase() === 'tunai' ? 'tunai' : (first.transaksi?.toLowerCase() === 'tempo' ? 'tempo' : 'transfer'),
           items,
           nomor_nota: `INV/${parseCSVDate(first.tanggal).toISOString().split('T')[0].replace(/-/g, '')}-${i + idx + 1}`,
-          catatan: 'Import Bulk'
+          catatan: 'Import Bulk',
+          lokasi: {
+            latitude: Number(first.lat) || 0,
+            longitude: Number(first.long) || 0,
+            alamat: first.alamat || '-'
+          }
         });
 
         if (isLunas && tot > 0) {
@@ -594,6 +607,45 @@ export default function ImportPenjualan() {
     setProgress(95);
   };
 
+  const performImportAbsensi = async (m: any) => {
+    if (data.length === 0) return;
+    setStatus('Menyiapkan data absensi sales...');
+    
+    // Group to ensure unique combination of Salesman + Date
+    const absMap = new Map<string, any>();
+    data.forEach(row => {
+      const uId = m.salesman[row.salesman.toLowerCase()]?.id;
+      if (!uId) return;
+      const d = parseCSVDate(row.tanggal).toISOString().split('T')[0];
+      const key = `${uId}_${d}`;
+      if (!absMap.has(key)) {
+        absMap.set(key, { uId, d, lat: row.lat, long: row.long, alamat: row.alamat });
+      }
+    });
+
+    const entries = Array.from(absMap.values());
+    for (let i = 0; i < entries.length; i++) {
+      const v = entries[i];
+      setStatus(`Memverifikasi absensi: ${v.d} (${i + 1}/${entries.length})`);
+      
+      // Strictly one record per sales per date
+      const { data: ex } = await supabase.from('absensi').select('id').eq('user_id', v.uId)
+        .gte('tanggal', `${v.d}T00:00:00Z`).lte('tanggal', `${v.d}T23:59:59Z`).maybeSingle();
+      
+      if (!ex) {
+        await supabase.from('absensi').insert({
+          user_id: v.uId,
+          tanggal: `${v.d}T00:00:00Z`,
+          check_in: `${v.d}T08:00:00Z`,
+          lokasi_check_in: { latitude: Number(v.lat) || 0, longitude: Number(v.long) || 0, alamat: v.alamat || 'Import' },
+          status: 'hadir',
+          keterangan: 'Import Bulk'
+        });
+      }
+      if (i % 10 === 0) setProgress(70 + Math.round((i / entries.length) * 10));
+    }
+  };
+
   const executeBulkImport = async () => {
     setIsProcessing(true);
     setStep(3);
@@ -601,6 +653,7 @@ export default function ImportPenjualan() {
     try {
       const m = await createMasterData(mappings);
       await performImportPenjualan(m);
+      await performImportAbsensi(m);
       await performImportStok(m);
       await performImportSaldo(m);
       setProgress(100);

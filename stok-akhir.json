@@ -1,0 +1,341 @@
+[
+  {
+    "op": "core/mass-edit",
+    "engineConfig": {
+      "facets": [
+        {
+          "type": "list",
+          "name": "_ - qty",
+          "expression": "grel:value>0",
+          "columnName": "_ - qty",
+          "invert": false,
+          "omitBlank": false,
+          "omitError": false,
+          "selection": [
+            {
+              "v": {
+                "v": true,
+                "l": "true"
+              }
+            }
+          ],
+          "selectBlank": false,
+          "selectError": false
+        }
+      ],
+      "mode": "row-based"
+    },
+    "columnName": "_ - productName",
+    "expression": "value",
+    "edits": [
+      {
+        "from": [
+          "Korek Gas"
+        ],
+        "fromBlank": false,
+        "fromError": false,
+        "to": "KOREK"
+      }
+    ],
+    "description": "Mass edit cells in column _ - productName"
+  },
+  {
+    "op": "core/mass-edit",
+    "engineConfig": {
+      "facets": [
+        {
+          "type": "list",
+          "name": "_ - qty",
+          "expression": "grel:value>0",
+          "columnName": "_ - qty",
+          "invert": false,
+          "omitBlank": false,
+          "omitError": false,
+          "selection": [
+            {
+              "v": {
+                "v": true,
+                "l": "true"
+              }
+            }
+          ],
+          "selectBlank": false,
+          "selectError": false
+        }
+      ],
+      "mode": "row-based"
+    },
+    "columnName": "_ - productName",
+    "expression": "value",
+    "edits": [
+      {
+        "from": [
+          "SKY RED (R)"
+        ],
+        "fromBlank": false,
+        "fromError": false,
+        "to": "SKY RED SKT"
+      }
+    ],
+    "description": "Mass edit cells in column _ - productName"
+  },
+  {
+    "op": "core/column-removal",
+    "columnName": "_ - id",
+    "description": "Remove column _ - id"
+  },
+  {
+    "op": "core/column-removal",
+    "columnName": "_ - productId",
+    "description": "Remove column _ - productId"
+  },
+  {
+    "op": "core/column-removal",
+    "columnName": "_ - holderId",
+    "description": "Remove column _ - holderId"
+  },
+  {
+    "op": "core/column-removal",
+    "columnName": "_ - registered",
+    "description": "Remove column _ - registered"
+  },
+  {
+    "op": "core/column-removal",
+    "columnName": "_ - modificated",
+    "description": "Remove column _ - modificated"
+  },
+  {
+    "op": "core/column-removal",
+    "columnName": "_ - warehouseId",
+    "description": "Remove column _ - warehouseId"
+  },
+  {
+    "op": "core/column-removal",
+    "columnName": "_ - branchId",
+    "description": "Remove column _ - branchId"
+  },
+  {
+    "op": "core/column-rename",
+    "oldColumnName": "_ - productName",
+    "newColumnName": "productName",
+    "description": "Rename column _ - productName to productName"
+  },
+  {
+    "op": "core/column-rename",
+    "oldColumnName": "_ - holderName",
+    "newColumnName": "holderName",
+    "description": "Rename column _ - holderName to holderName"
+  },
+  {
+    "op": "core/column-rename",
+    "oldColumnName": "_ - qty",
+    "newColumnName": "qty",
+    "description": "Rename column _ - qty to qty"
+  },
+  {
+    "op": "core/column-rename",
+    "oldColumnName": "_ - unit",
+    "newColumnName": "unit",
+    "description": "Rename column _ - unit to unit"
+  },
+  {
+    "op": "core/mass-edit",
+    "engineConfig": {
+      "facets": [
+        {
+          "type": "list",
+          "name": "qty",
+          "expression": "grel:value > 0",
+          "columnName": "qty",
+          "invert": false,
+          "omitBlank": false,
+          "omitError": false,
+          "selection": [
+            {
+              "v": {
+                "v": true,
+                "l": "true"
+              }
+            }
+          ],
+          "selectBlank": false,
+          "selectError": false
+        }
+      ],
+      "mode": "row-based"
+    },
+    "columnName": "holderName",
+    "expression": "value",
+    "edits": [
+      {
+        "from": [
+          "Gudang Bogor"
+        ],
+        "fromBlank": false,
+        "fromError": false,
+        "to": "Nabila"
+      }
+    ],
+    "description": "Mass edit cells in column holderName"
+  },
+  {
+    "op": "core/mass-edit",
+    "engineConfig": {
+      "facets": [
+        {
+          "type": "list",
+          "name": "qty",
+          "expression": "grel:value > 0",
+          "columnName": "qty",
+          "invert": false,
+          "omitBlank": false,
+          "omitError": false,
+          "selection": [
+            {
+              "v": {
+                "v": true,
+                "l": "true"
+              }
+            }
+          ],
+          "selectBlank": false,
+          "selectError": false
+        }
+      ],
+      "mode": "row-based"
+    },
+    "columnName": "holderName",
+    "expression": "value",
+    "edits": [
+      {
+        "from": [
+          "Wilayah Bogor"
+        ],
+        "fromBlank": false,
+        "fromError": false,
+        "to": "Irfan"
+      }
+    ],
+    "description": "Mass edit cells in column holderName"
+  },
+  {
+    "op": "core/mass-edit",
+    "engineConfig": {
+      "facets": [
+        {
+          "type": "list",
+          "name": "qty",
+          "expression": "grel:value > 0",
+          "columnName": "qty",
+          "invert": false,
+          "omitBlank": false,
+          "omitError": false,
+          "selection": [
+            {
+              "v": {
+                "v": true,
+                "l": "true"
+              }
+            }
+          ],
+          "selectBlank": false,
+          "selectError": false
+        }
+      ],
+      "mode": "row-based"
+    },
+    "columnName": "holderName",
+    "expression": "value",
+    "edits": [
+      {
+        "from": [
+          "Wilayah Cikupa"
+        ],
+        "fromBlank": false,
+        "fromError": false,
+        "to": "Taryono"
+      }
+    ],
+    "description": "Mass edit cells in column holderName"
+  },
+  {
+    "op": "core/mass-edit",
+    "engineConfig": {
+      "facets": [
+        {
+          "type": "list",
+          "name": "qty",
+          "expression": "grel:value > 0",
+          "columnName": "qty",
+          "invert": false,
+          "omitBlank": false,
+          "omitError": false,
+          "selection": [
+            {
+              "v": {
+                "v": true,
+                "l": "true"
+              }
+            }
+          ],
+          "selectBlank": false,
+          "selectError": false
+        }
+      ],
+      "mode": "row-based"
+    },
+    "columnName": "holderName",
+    "expression": "value",
+    "edits": [
+      {
+        "from": [
+          "Wilayah Karawaci"
+        ],
+        "fromBlank": false,
+        "fromError": false,
+        "to": "Heri Sethiono"
+      }
+    ],
+    "description": "Mass edit cells in column holderName"
+  },
+  {
+    "op": "core/mass-edit",
+    "engineConfig": {
+      "facets": [
+        {
+          "type": "list",
+          "name": "qty",
+          "expression": "grel:value > 0",
+          "columnName": "qty",
+          "invert": false,
+          "omitBlank": false,
+          "omitError": false,
+          "selection": [
+            {
+              "v": {
+                "v": true,
+                "l": "true"
+              }
+            }
+          ],
+          "selectBlank": false,
+          "selectError": false
+        }
+      ],
+      "mode": "row-based"
+    },
+    "columnName": "holderName",
+    "expression": "value",
+    "edits": [
+      {
+        "from": [
+          "Wilayah Serang"
+        ],
+        "fromBlank": false,
+        "fromError": false,
+        "to": "Jaka Siswanta"
+      }
+    ],
+    "description": "Mass edit cells in column holderName"
+  }
+]

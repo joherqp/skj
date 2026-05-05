@@ -20,6 +20,17 @@ function normalizeName(name) {
   return String(name || '').trim().toLowerCase().replace(/[^a-z0-9]/g, '');
 }
 
+function normalizeProduct(name) {
+  if (!name) return '';
+  let n = name.toString().toUpperCase().trim();
+  n = n.replace(/\(R\)|\(B\)/g, '').trim();
+  if (n === 'SKY RED') return 'SKY RED SKT';
+  if (n === 'SKY KLIK') return 'SKY KLIK SKT';
+  if (n === 'VANBOLD') return 'VANBOLD SKT';
+  if (n === 'KOREK GAS') return 'KOREK';
+  return n;
+}
+
 function validatePhone(phone) {
   if (!phone) return '';
   const s = String(phone).trim();
@@ -247,7 +258,7 @@ try {
       long: long,
       telp: telp,
       note: row.catatan || '',
-      produk: row.produk,
+      produk: normalizeProduct(row.produk),
       qty: qty,
       harga: harga,
       promo: diskon,

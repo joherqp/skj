@@ -8,6 +8,11 @@ if [ -f "supabase/datalama/excel/BQ.xlsx" ] && [ -f "supabase/datalama/excel/cus
     echo "Ditemukan file PO data (po-data.xlsx). Mengekstrak mutasi barang..."
     node scripts/process_po_to_csv.cjs
   fi
+
+  if [ -f "supabase/datalama/excel/Stok_akhir.xlsx" ]; then
+    echo "Ditemukan file Stok akhir (Stok_akhir.xlsx). Mengekstrak data stok..."
+    node scripts/process_stok_to_csv.cjs
+  fi
 else
   echo "Menggunakan sumber data SQL dump..."
   echo "Membuat database SQLite sementara..."
@@ -141,4 +146,7 @@ EOF
   # rm temp_import.db
 fi
 
-echo "Selesai! File import_penjualan.csv siap digunakan."
+echo "Selesai! File CSV berikut siap digunakan:"
+echo "- import_penjualan.csv"
+echo "- import_mutasi.csv"
+echo "- stok-akhir.csv"

@@ -8,6 +8,17 @@ function normalizeName(name) {
   return String(name || '').trim().toLowerCase().replace(/[^a-z0-9]/g, '');
 }
 
+function normalizeProduct(name) {
+  if (!name) return '';
+  let n = name.toString().toUpperCase().trim();
+  n = n.replace(/\(R\)|\(B\)/g, '').trim();
+  if (n === 'SKY RED') return 'SKY RED SKT';
+  if (n === 'SKY KLIK') return 'SKY KLIK SKT';
+  if (n === 'VANBOLD') return 'VANBOLD SKT';
+  if (n === 'KOREK GAS') return 'KOREK';
+  return n;
+}
+
 console.log('Reading PO data...');
 
 try {
@@ -104,7 +115,7 @@ try {
         penerima: mapLocationToPerson(row.beneficiaryName),
         jenis: jenis,
         keterangan: row.note || '',
-        produk: move.name,
+        produk: normalizeProduct(move.name),
         qty: move.qty,
         unit: move.unit
       });
