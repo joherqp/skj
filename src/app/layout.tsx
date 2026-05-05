@@ -12,6 +12,9 @@ export const metadata: Metadata = {
         statusBarStyle: 'default',
         title: 'CVSKJ',
     },
+    other: {
+        google: 'notranslate',
+    },
 };
 
 export const viewport: Viewport = {
@@ -24,7 +27,7 @@ export default function RootLayout({
     children: React.ReactNode;
 }) {
     return (
-        <html lang="en">
+        <html lang="en" translate="no">
             <body className="antialiased">
                 <HydrationBoundary>
                     <Providers>

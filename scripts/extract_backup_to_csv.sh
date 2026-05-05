@@ -9,8 +9,8 @@ if [ -f "supabase/datalama/excel/BQ.xlsx" ] && [ -f "supabase/datalama/excel/cus
     node scripts/process_po_to_csv.cjs
   fi
 
-  if [ -f "supabase/datalama/excel/Stok_akhir.xlsx" ]; then
-    echo "Ditemukan file Stok akhir (Stok_akhir.xlsx). Mengekstrak data stok..."
+  if [ -f "supabase/datalama/excel/inventory.json" ]; then
+    echo "Ditemukan file Inventory JSON (inventory.json). Mengekstrak data stok..."
     node scripts/process_stok_to_csv.cjs
   fi
 else
