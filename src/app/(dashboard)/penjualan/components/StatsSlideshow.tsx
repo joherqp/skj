@@ -105,7 +105,7 @@ export const StatsSlideshow = ({ data, pelanggan, barang, satuan }: { data: Penj
                                 <span className="truncate flex-1 font-medium text-muted-foreground mr-2">
                                     {idx + 1}. <span className={b ? "text-foreground font-semibold" : "text-destructive italic"}>{b?.nama || `(Item Terhapus: ${item.id.substring(0, 8)}...)`}</span>
                                 </span>
-                                <span className="font-bold whitespace-nowrap">{item.qty} {unitName}</span>
+                                <span className="font-bold whitespace-nowrap">{formatNumber(item.qty)} {unitName}</span>
                             </div>
                         )
                     })}

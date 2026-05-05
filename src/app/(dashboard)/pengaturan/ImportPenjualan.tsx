@@ -37,14 +37,18 @@ interface ImportRow {
   promo?: number;
   total?: number;
   pelanggan_created_at?: string;
+}
 
-  // Mutasi specific
-  id?: string;
-  operator?: string;
-  cabang_asal?: string;
-  penerima?: string;
-  unit?: string;
-  jenis?: string;
+interface StokRow {
+  product: string;
+  holder: string;
+  qty: number;
+  unit: string;
+}
+
+interface SaldoRow {
+  karyawan: string;
+  belumDibayar: number;
 }
 
 interface MappingResult {
@@ -121,9 +125,20 @@ export default function ImportPenjualan() {
     refresh
   } = useDatabase();
 
-  const [importType, setImportType] = useState<'penjualan' | 'mutasi'>('penjualan');
-  const [file, setFile] = useState<File | null>(null);
+
+  const [files, setFiles] = useState<{
+    penjualan: File | null;
+    stok: File | null;
+    saldo: File | null;
+  }>({
+    penjualan: null,
+    stok: null,
+    saldo: null
+  });
+
   const [data, setData] = useState<ImportRow[]>([]);
+  const [stokData, setStokData] = useState<StokRow[]>([]);
+  const [saldoData, setSaldoData] = useState<SaldoRow[]>([]);
   const [step, setStep] = useState(1);
   const [isProcessing, setIsProcessing] = useState(false);
   const [progress, setProgress] = useState(0);
@@ -134,47 +149,32 @@ export default function ImportPenjualan() {
     salesman: Record<string, MappingResult>;
     pelanggan: Record<string, MappingResult>;
     produk: Record<string, MappingResult>;
-    penerima: Record<string, MappingResult>;
   }>({
     cabang: {},
     salesman: {},
     pelanggan: {},
-    produk: {},
-    penerima: {}
+    produk: {}
   });
 
-  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const uploadedFile = e.target.files?.[0];
-    if (!uploadedFile) return;
+  const parseFile = async (file: File, type: 'penjualan' | 'stok' | 'saldo') => {
+    const buffer = await file.arrayBuffer();
+    const wb = XLSX.read(buffer, { type: 'array', cellDates: false });
+    const ws = wb.Sheets[wb.SheetNames[0]];
+    const rawRows = XLSX.utils.sheet_to_json(ws, { header: 1 }) as any[][];
 
-    setFile(uploadedFile);
-    setIsProcessing(true);
-    setStatus('Membaca file...');
+    if (rawRows.length < 2) return [];
 
-    try {
-      const buffer = await uploadedFile.arrayBuffer();
-      const wb = XLSX.read(buffer, { type: 'array', cellDates: false });
-      const ws = wb.Sheets[wb.SheetNames[0]];
-      const rawRows = XLSX.utils.sheet_to_json(ws, { header: 1 }) as any[][];
+    const headers = rawRows[0].map(h => String(h || '').trim().toLowerCase());
+    const getIdx = (keys: string[]) => headers.findIndex(h => keys.includes(h));
 
-      if (rawRows.length < 2) {
-        throw new Error('File kosong atau format tidak sesuai');
-      }
-
-      // Identify column indices from header
-      const headers = rawRows[0].map(h => String(h || '').trim().toLowerCase());
-      const getIdx = (keys: string[]) => headers.findIndex(h => keys.includes(h));
-
+    if (type === 'penjualan') {
       const idxMap = {
-        // Common
         tanggal: getIdx(['tanggal', 'date', 'waktu']),
         created_at: getIdx(['created_at', 'registered', 'waktu']),
         cabang: getIdx(['cabang', 'branch', 'divisi', 'cabang_asal']),
         note: getIdx(['note', 'catatan', 'keterangan']),
         produk: getIdx(['produk', 'item', 'barang']),
         qty: getIdx(['qty', 'jumlah', 'quantity']),
-        
-        // Penjualan
         pelanggan_created_at: getIdx(['pelanggan_created_at', 'p_registered', 'pelanggan_create_at']),
         salesman: getIdx(['salesman', 'sales', 'nama', 'operator']),
         transaksi: getIdx(['transaksi', 'type', 'skema']),
@@ -187,28 +187,18 @@ export default function ImportPenjualan() {
         harga: getIdx(['harga', 'price']),
         promo: getIdx(['promo', 'diskon', 'discount']),
         total: getIdx(['total', 'subtotal']),
-
-        // Mutasi
-        id: getIdx(['id', 'nomor', 'no']),
-        operator: getIdx(['operator', 'salesman', 'nama']),
-        penerima: getIdx(['penerima', 'beneficiary', 'tujuan']),
-        unit: getIdx(['unit', 'satuan']),
-        jenis: getIdx(['jenis', 'type', 'kategori'])
       };
 
-      const normalizedData: ImportRow[] = rawRows.slice(1).map((row: any[]) => {
+      return rawRows.slice(1).map((row: any[]) => {
         const getVal = (idx: number) => (idx !== -1 ? row[idx] : undefined);
-
         const formatExcelDate = (val: any) => {
           if (val === undefined || val === null || val === '') return '';
           if (typeof val === 'number' && val > 40000) {
-            // Basic Excel serial date to ISO-like string
             const d = new Date(Math.round((val - 25569) * 86400 * 1000));
             return d.toISOString().replace('T', ' ').split('.')[0];
           }
           return String(val);
         };
-
         const qty = Number(getVal(idxMap.qty)) || 0;
         const harga = Number(getVal(idxMap.harga)) || 0;
         const promo = Number(getVal(idxMap.promo)) || 0;
@@ -220,13 +210,11 @@ export default function ImportPenjualan() {
           note: String(getVal(idxMap.note) || '').trim(),
           produk: String(getVal(idxMap.produk) || '').trim(),
           qty: qty,
-
-          // Penjualan
           pelanggan_created_at: formatExcelDate(getVal(idxMap.pelanggan_created_at)),
           salesman: String(getVal(idxMap.salesman) || '').trim(),
-          transaksi: String(getVal(idxMap.transaksi) || '').trim(),
+          transaksi: String(getVal(idxMap.transaksi) || 'Cash').trim(),
           pelanggan: String(getVal(idxMap.pelanggan) || '').trim(),
-          kategori_pelanggan: String(getVal(idxMap.kategori_pelanggan) || '').trim(),
+          kategori_pelanggan: String(getVal(idxMap.kategori_pelanggan) || 'Personal').trim(),
           alamat: String(getVal(idxMap.alamat) || '').trim(),
           lat: getVal(idxMap.lat),
           long: getVal(idxMap.long),
@@ -234,721 +222,400 @@ export default function ImportPenjualan() {
           harga: harga,
           promo: promo,
           total: Number(getVal(idxMap.total)) || (qty * harga - promo) || 0,
-
-          // Mutasi
-          id: String(getVal(idxMap.id) || ''),
-          operator: String(getVal(idxMap.operator) || '').trim(),
-          penerima: String(getVal(idxMap.penerima) || '').trim(),
-          unit: String(getVal(idxMap.unit) || '').trim(),
-          jenis: String(getVal(idxMap.jenis) || '').trim(),
         };
       });
-
-      setData(normalizedData);
-      analyzeMappings(normalizedData);
-      setStep(2);
-    } catch (err: any) {
-      toast.error(err.message || 'Gagal membaca file');
-    } finally {
-      setIsProcessing(false);
+    } else if (type === 'stok') {
+      const idxMap = {
+        product: getIdx(['product', 'produk', 'item', 'barang']),
+        holder: getIdx(['holder', 'pemegang', 'karyawan', 'salesman', 'sales']),
+        qty: getIdx(['qty', 'jumlah', 'stok']),
+        unit: getIdx(['unit', 'satuan'])
+      };
+      return rawRows.slice(1).map((row: any[]) => ({
+        product: String(row[idxMap.product] || '').trim(),
+        holder: String(row[idxMap.holder] || '').trim(),
+        qty: Number(row[idxMap.qty]) || 0,
+        unit: String(row[idxMap.unit] || '').trim()
+      }));
+    } else if (type === 'saldo') {
+      const idxMap = {
+        karyawan: getIdx(['karyawan', 'salesman', 'sales', 'user', 'name', 'nama']),
+        belumDibayar: getIdx(['belum dibayar', 'saldo', 'balance', 'hutang'])
+      };
+      return rawRows.slice(1).map((row: any[]) => ({
+        karyawan: String(row[idxMap.karyawan] || '').trim(),
+        belumDibayar: Number(row[idxMap.belumDibayar]) || 0
+      }));
     }
+    return [];
   };
 
-  const analyzeMappings = (rows: ImportRow[]) => {
-    const isSimilar = (a: string, b: string, strict = false) => {
-      if (!a || !b) return false;
-      const cleanA = a.toLowerCase().replace(/[^a-z0-9]/g, '');
-      const cleanB = b.toLowerCase().replace(/[^a-z0-9]/g, '');
-      if (cleanA === cleanB) return true;
-      
-      if (!strict && cleanA.length > 3 && cleanB.length > 3) {
-        return cleanA.includes(cleanB) || cleanB.includes(cleanA);
-      }
-      return false;
-    };
+  const handleProcessAll = async () => {
+    if (!files.penjualan) {
+      toast.error('File Penjualan wajib diunggah untuk inisialisasi data master');
+      return;
+    }
 
-    const newMappings = {
-      cabang: {} as Record<string, MappingResult>,
-      salesman: {} as Record<string, MappingResult>,
-      pelanggan: {} as Record<string, MappingResult>,
-      produk: {} as Record<string, MappingResult>,
-      penerima: {} as Record<string, MappingResult>
-    };
-
-    // Pre-normalize DB customers for faster lookup
-    const dbPelangganMap = new Map();
-    dbPelanggan.forEach(p => {
-      const key = normalizeCustomer(p.nama);
-      if (!dbPelangganMap.has(key)) dbPelangganMap.set(key, p);
-    });
-
-    rows.forEach(row => {
-      // Cabang
-      const cabangName = row.cabang?.trim();
-      if (cabangName) {
-        const lowerCabang = cabangName.toLowerCase();
-        if (!newMappings.cabang[lowerCabang]) {
-          const found = dbCabang.find(c => c.nama.toLowerCase() === lowerCabang) ||
-            dbCabang.find(c => isSimilar(c.nama, lowerCabang));
-          newMappings.cabang[lowerCabang] = {
-            existing: !!found,
-            id: found?.id,
-            name: found?.nama || cabangName
-          };
-        }
-      }
-
-      // Salesman
-      const salesmanName = row.salesman?.trim();
-      if (salesmanName) {
-        const lowerSales = salesmanName.toLowerCase();
-        if (!newMappings.salesman[lowerSales]) {
-          const found = dbUsers.find(u => 
-            u.nama.toLowerCase() === lowerSales || 
-            (u.username && u.username.toLowerCase() === lowerSales)
-          ) || dbUsers.find(u => 
-            isSimilar(u.nama, lowerSales) || 
-            (u.username && isSimilar(u.username, lowerSales))
-          );
-          newMappings.salesman[lowerSales] = {
-            existing: !!found,
-            id: found?.id,
-            name: found?.nama || salesmanName
-          };
-        }
-      }
-
-      // Pelanggan - Smarter mapping to prevent duplicates from CSV
-      const pelangganName = row.pelanggan?.trim();
-      if (pelangganName) {
-        const normKey = normalizeCustomer(pelangganName);
-        if (!newMappings.pelanggan[normKey]) {
-          // Try exact match first, then normalized match
-          const found = dbPelanggan.find(p => p.nama.toLowerCase() === pelangganName.toLowerCase()) ||
-            dbPelangganMap.get(normKey);
-
-          newMappings.pelanggan[normKey] = {
-            existing: !!found,
-            id: found?.id,
-            name: found?.nama || cleanCustomerName(pelangganName)
-          };
-        }
-      }
-
-      // Produk - Stricter matching to avoid merging variants like "VANBOLD" and "VANBOLD SKT"
-      const produkName = row.produk?.trim();
-      if (produkName) {
-        const lowerProd = produkName.toLowerCase();
-        if (!newMappings.produk[lowerProd]) {
-          const found = dbBarang.find(b =>
-            b.nama.toLowerCase() === lowerProd ||
-            b.kode?.toLowerCase() === lowerProd
-          ) || dbBarang.find(b => isSimilar(b.nama, lowerProd, true)); // Use strict matching for products
-
-          newMappings.produk[lowerProd] = {
-            existing: !!found,
-            id: found?.id,
-            name: found?.nama || produkName,
-            satuanId: found?.satuanId
-          };
-        }
-      }
-
-      // Mutasi Specific: Operator & Penerima (mapping to Users)
-      if (importType === 'mutasi') {
-        const operatorName = (row.operator || row.salesman)?.trim();
-        if (operatorName) {
-          const lowerOp = operatorName.toLowerCase();
-          if (!newMappings.salesman[lowerOp]) {
-            const found = dbUsers.find(u => 
-              u.nama.toLowerCase() === lowerOp || 
-              (u.username && u.username.toLowerCase() === lowerOp)
-            ) || dbUsers.find(u => isSimilar(u.nama, lowerOp));
-            newMappings.salesman[lowerOp] = {
-              existing: !!found,
-              id: found?.id,
-              name: found?.nama || operatorName
-            };
-          }
-        }
-
-        const penerimaName = row.penerima?.trim();
-        if (penerimaName) {
-          const lowerPen = penerimaName.toLowerCase();
-          if (!newMappings.penerima[lowerPen]) {
-            const found = dbUsers.find(u => 
-              u.nama.toLowerCase() === lowerPen || 
-              (u.username && u.username.toLowerCase() === lowerPen)
-            ) || dbUsers.find(u => isSimilar(u.nama, lowerPen));
-            newMappings.penerima[lowerPen] = {
-              existing: !!found,
-              id: found?.id,
-              name: found?.nama || penerimaName
-            };
-          }
-        }
-      }
-    });
-
-    setMappings(newMappings);
-  };
-
-  const executeImport = async () => {
     setIsProcessing(true);
-    setStep(3);
-    setProgress(0);
-    setStatus('Menyiapkan data master...');
+    setStatus('Menganalisa semua file...');
+    setProgress(10);
 
     try {
-      // 1. Create missing master data
-      const finalMappings = JSON.parse(JSON.stringify(mappings));
+      const pData = await parseFile(files.penjualan, 'penjualan') as ImportRow[];
+      setProgress(40);
+      const sData = files.stok ? await parseFile(files.stok, 'stok') as StokRow[] : [];
+      setProgress(60);
+      const salData = files.saldo ? await parseFile(files.saldo, 'saldo') as SaldoRow[] : [];
+      setProgress(80);
 
-      // Create a lookup map for the first occurrence of each entity in CSV data
-      // This avoids O(N^2) data.find() calls inside the batch loops
-      const firstRowPerCabang: Record<string, any> = {};
-      const firstRowPerSales: Record<string, any> = {};
-      const firstRowPerProduk: Record<string, any> = {};
-      const firstRowPerPelanggan: Record<string, any> = {};
+      setData(pData);
+      setStokData(sData);
+      setSaldoData(salData);
 
-      data.forEach(row => {
-        if (row.cabang) {
-          const key = row.cabang.toLowerCase();
-          if (!firstRowPerCabang[key]) firstRowPerCabang[key] = row;
-        }
-        if (row.salesman) {
-          const key = row.salesman.toLowerCase();
-          if (!firstRowPerSales[key]) firstRowPerSales[key] = row;
-        }
-        if (row.produk) {
-          const key = row.produk.toLowerCase();
-          if (!firstRowPerProduk[key]) firstRowPerProduk[key] = row;
-        }
-        if (row.pelanggan) {
-          const key = normalizeCustomer(row.pelanggan);
-          if (!firstRowPerPelanggan[key]) firstRowPerPelanggan[key] = row;
-        }
-      });
-
-      // Get defaults
-      const defaultSatuanId = dbSatuan[0]?.id || crypto.randomUUID();
-      const defaultKategoriId = dbKategori[0]?.id || crypto.randomUUID();
-      const defaultKategoriPelangganId = dbKategoriPelanggan[0]?.id || crypto.randomUUID();
-      const defaultAreaId = dbArea[0]?.id || crypto.randomUUID();
-      const defaultCabangId = dbCabang[0]?.id || crypto.randomUUID();
-      const defaultSalesId = dbUsers.find(u => u.roles.includes('sales'))?.id || dbUsers[0]?.id || crypto.randomUUID();
-      const defaultPelangganId = dbPelanggan[0]?.id || crypto.randomUUID();
-      const defaultBarangId = dbBarang[0]?.id || crypto.randomUUID();
-
-      // Progress allocation: 
-      // 0-5%: Cabang, Sales, Produk
-      // 5-25%: Pelanggan (can be many)
-      // 25-100%: Transactions
-
-      // ... (existing batch creation logic) ...
-
-      // --- 1a. Create missing Cabang (Batch) ---
-      setStatus('Membuat data Cabang baru...');
-      setProgress(2);
-      const newCabangList = Object.keys(finalMappings.cabang)
-        .filter(name => !finalMappings.cabang[name].existing);
-
-      if (newCabangList.length > 0) {
-        const cabData = newCabangList.map(name => ({
-          nama: name,
-          alamat: '-',
-          kota: '-',
-          telepon: '-',
-          area_id: defaultAreaId
-        }));
-        const { data: res, error } = await supabase.from('cabang').insert(cabData).select();
-        if (error) throw error;
-        res?.forEach(c => {
-          finalMappings.cabang[c.nama] = { existing: true, id: c.id, name: c.nama };
-        });
-      }
-
-      // --- 1b. Create missing Salesman (Batch) ---
-      setStatus('Membuat data Salesman baru...');
-      setProgress(3);
-      const newSalesList = Object.keys(finalMappings.salesman)
-        .filter(name => !finalMappings.salesman[name].existing);
-
-      if (newSalesList.length > 0) {
-        const salesData = newSalesList.map(name => {
-          const salesmanRow = firstRowPerSales[name];
-          const cabangId = finalMappings.cabang[salesmanRow?.cabang?.toLowerCase() || '']?.id || defaultCabangId;
-          const username = name.toLowerCase().replace(/\s+/g, '_') + '_' + Math.random().toString(36).substring(2, 5);
-          return {
-            nama: finalMappings.salesman[name].name,
-            username,
-            email: username + '@skj.com',
-            telepon: '-',
-            roles: ['sales'],
-            cabang_id: cabangId,
-            is_active: false
-          };
-        });
-        const { data: res, error } = await supabase.from('users').insert(salesData).select();
-        if (error) throw error;
-        res?.forEach(u => {
-          finalMappings.salesman[u.nama.toLowerCase()] = { existing: true, id: u.id, name: u.nama };
-        });
-      }
-
-      // --- 1c. Create missing Produk (Batch) ---
-      setStatus('Membuat data Produk baru...');
-      setProgress(4);
-      const newProdList = Object.keys(finalMappings.produk)
-        .filter(name => !finalMappings.produk[name].existing);
-
-      if (newProdList.length > 0) {
-        const prodData = newProdList.map(name => ({
-          nama: finalMappings.produk[name].name,
-          kode: name.substring(0, 10).toUpperCase() + Math.random().toString(36).substring(2, 5).toUpperCase(),
-          kategori_id: defaultKategoriId,
-          satuan_id: defaultSatuanId,
-          harga_beli: 0,
-          harga_jual: firstRowPerProduk[name]?.harga || 0,
-          is_active: true
-        }));
-        const { data: res, error } = await supabase.from('barang').insert(prodData).select();
-        if (error) throw error;
-        res?.forEach(p => {
-          finalMappings.produk[p.nama.toLowerCase()] = {
-            existing: true,
-            id: p.id,
-            name: p.nama,
-            satuanId: p.satuan_id
-          };
-        });
-      }
-
-      // --- 1d. Create missing Pelanggan (Batch in chunks) ---
-      setStatus('Membuat data Pelanggan baru...');
-      const newPelList = Object.keys(finalMappings.pelanggan)
-        .filter(name => !finalMappings.pelanggan[name].existing);
-
-      if (newPelList.length > 0) {
-        const chunkSize = 200;
-        for (let i = 0; i < newPelList.length; i += chunkSize) {
-          const chunk = newPelList.slice(i, i + chunkSize);
-          const pelData = chunk.map(name => {
-            const row = firstRowPerPelanggan[name];
-            const originalName = finalMappings.pelanggan[name].name;
-            const cabangId = finalMappings.cabang[row?.cabang?.toLowerCase() || '']?.id || defaultCabangId;
-            const salesId = finalMappings.salesman[row?.salesman?.toLowerCase() || '']?.id || defaultSalesId;
-
-            // Normalize phone: only digits, min 7
-            let cleanPhone = row?.telp?.toString().replace(/\D/g, '') || '';
-            if (cleanPhone.length < 7) cleanPhone = '-';
-
-            // Date handling for pelanggan
-            let pelCreatedAt = new Date().toISOString();
-            const rawPelDate = row?.pelanggan_created_at || row?.created_at;
-            if (rawPelDate) {
-              const d = new Date(rawPelDate);
-              if (!isNaN(d.getTime())) pelCreatedAt = d.toISOString();
-            }
-
-            const catName = row?.kategori_pelanggan;
-            const catId = dbKategoriPelanggan.find(c => 
-              c.nama.toLowerCase() === catName?.toLowerCase() || 
-              (catName === 'Retail' && c.nama === 'Umum')
-            )?.id || defaultKategoriPelangganId;
-
-            return {
-              nama: originalName,
-              alamat: row?.alamat || '-',
-              telepon: cleanPhone,
-              cabang_id: cabangId,
-              sales_id: salesId,
-              kategori_id: catId,
-              kode: originalName.substring(0, 5).toUpperCase() + Math.random().toString(36).substring(2, 5).toUpperCase(),
-              lokasi: {
-                alamat: row?.alamat || '-',
-                latitude: Number(row?.lat) || 0,
-                longitude: Number(row?.long) || 0
-              },
-              is_active: true,
-              sisa_kredit: 0,
-              created_at: pelCreatedAt
-            };
-          });
-          const { data: res, error } = await supabase.from('pelanggan').insert(pelData).select();
-          if (error) throw error;
-          res?.forEach(p => {
-            const normKey = normalizeCustomer(p.nama);
-            finalMappings.pelanggan[normKey] = { existing: true, id: p.id, name: p.nama };
-          });
-
-          const pelProgress = Math.min(5 + Math.round(((i + chunk.length) / newPelList.length) * 20), 25);
-          setProgress(pelProgress);
-          setStatus(`Membuat data Pelanggan baru (${Math.min(i + chunk.length, newPelList.length)} / ${newPelList.length})...`);
-        }
-      }
-      setProgress(25);
-
-      // Fetch Promos for mapping "transaksi" to "skema/promo"
-      const { data: promos } = await supabase.from('promo').select('*');
-
-      // Helper to parse DD/MM/YYYY as UTC to prevent timezone shifts
-      // Helper to parse dates as UTC to prevent timezone shifts
-      const parseCSVDate = (val: any) => {
-        if (!val) return new Date();
-
-        // If XLSX already parsed it as a Date object, use its components directly
-        if (val instanceof Date) {
-          return new Date(Date.UTC(val.getFullYear(), val.getMonth(), val.getDate()));
-        }
-
-        const dateStr = String(val).trim();
-        if (!dateStr) return new Date();
-
-        // Handle Excel numeric dates (serial numbers)
-        if (!isNaN(Number(dateStr)) && Number(dateStr) > 40000) {
-          const excelDate = new Date((Number(dateStr) - 25569) * 86400 * 1000);
-          return new Date(Date.UTC(excelDate.getFullYear(), excelDate.getMonth(), excelDate.getDate()));
-        }
-
-        // Handle string formats: prioritizing DD/MM/YYYY
-        // Supported delimiters: / - .
-        const parts = dateStr.split(/[/\-.\s]/);
-        if (parts.length >= 3) {
-          let p0 = parseInt(parts[0], 10);
-          let p1 = parseInt(parts[1], 10);
-          let p2 = parseInt(parts[2], 10);
-
-          let day, month, year;
-
-          if (p2 > 1000) { // Format: DD/MM/YYYY or MM/DD/YYYY
-            year = p2;
-            // Always assume DD/MM/YYYY for the user's data
-            day = p0;
-            month = p1 - 1;
-          } else if (p0 > 1000) { // Format: YYYY/MM/DD
-            year = p0;
-            month = p1 - 1;
-            day = p2;
-          } else { // Format: DD/MM/YY
-            year = p2 < 50 ? 2000 + p2 : 1900 + p2;
-            day = p0;
-            month = p1 - 1;
-          }
-
-          // Validate date components
-          if (!isNaN(day) && !isNaN(month) && !isNaN(year) && month >= 0 && month < 12 && day > 0 && day <= 31) {
-            const result = new Date(Date.UTC(year, month, day));
-            return result;
-          }
-        }
-
-        // Final fallback: native Date parser
-        const d = new Date(dateStr);
-        if (!isNaN(d.getTime())) {
-          return new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
-        }
-
-        console.error('Failed to parse date:', dateStr);
-        return new Date();
+      const newMappings = {
+        cabang: {} as Record<string, MappingResult>,
+        salesman: {} as Record<string, MappingResult>,
+        pelanggan: {} as Record<string, MappingResult>,
+        produk: {} as Record<string, MappingResult>,
       };
 
-      // 2. Import Penjualan in batches
-      setStatus('Mengimport transaksi penjualan...');
-
-      // Filter out rows with missing critical data
-      const validRows = data.filter(row => row.pelanggan?.trim() && row.produk?.trim());
-
-      // Grouping: combine multiple rows for the same customer + date + salesman + branch + skema into one invoice
-      const groupedMap = new Map<string, ImportRow[]>();
-      validRows.forEach(row => {
-        const rowDate = parseCSVDate(row.tanggal);
-        const dateKey = rowDate.toISOString().split('T')[0];
-        const custKey = normalizeCustomer(row.pelanggan || '');
-        const salesKey = row.salesman?.trim()?.toLowerCase() || '';
-        const cabKey = row.cabang?.trim()?.toLowerCase() || '';
-        const transKey = row.transaksi?.trim()?.toLowerCase() || '';
-        
-        const key = `${dateKey}|${custKey}|${salesKey}|${cabKey}|${transKey}`;
-        if (!groupedMap.has(key)) {
-          groupedMap.set(key, []);
+      const isSimilar = (a: string, b: string, strict = false) => {
+        if (!a || !b) return false;
+        const cleanA = a.toLowerCase().replace(/[^a-z0-9]/g, '');
+        const cleanB = b.toLowerCase().replace(/[^a-z0-9]/g, '');
+        if (cleanA === cleanB) return true;
+        if (!strict && cleanA.length > 3 && cleanB.length > 3) {
+          return cleanA.includes(cleanB) || cleanB.includes(cleanA);
         }
-        groupedMap.get(key)!.push(row);
+        return false;
+      };
+
+      const dbPelangganMap = new Map();
+      dbPelanggan.forEach(p => {
+        const key = normalizeCustomer(p.nama);
+        if (!dbPelangganMap.has(key)) dbPelangganMap.set(key, p);
       });
 
-      const groupedKeys = Array.from(groupedMap.keys());
-      const batchSize = 100;
-
-      for (let i = 0; i < groupedKeys.length; i += batchSize) {
-        const keys = groupedKeys.slice(i, i + batchSize);
-        const penjualanBatch: any[] = [];
-        const pembayaranBatch: any[] = [];
-
-        keys.forEach((key, groupIdx) => {
-          const groupRows = groupedMap.get(key)!;
-          const firstRow = groupRows[0];
-          
-          const items: any[] = [];
-          let totalSubtotal = 0;
-          let totalDiskon = 0;
-          let totalTotal = 0;
-          const notes: string[] = [];
-
-          groupRows.forEach(row => {
-            const pKey = row.produk?.trim()?.toLowerCase();
-            const transaksiClean = row.transaksi?.trim()?.toLowerCase();
-            const matchingPromo = promos?.find(p =>
-              p.nama.toLowerCase() === transaksiClean ||
-              p.kode?.toLowerCase() === transaksiClean
-            );
-
-            items.push({
-              id: crypto.randomUUID(),
-              barangId: finalMappings.produk[pKey]?.id || defaultBarangId,
-              jumlah: row.qty || 0,
-              satuanId: finalMappings.produk[pKey]?.satuanId || defaultSatuanId,
-              harga: row.harga || 0,
-              diskon: row.promo || 0,
-              subtotal: row.total || 0,
-              promoId: matchingPromo?.id || null
-            });
-
-            totalSubtotal += (row.total || 0) + (row.promo || 0);
-            totalDiskon += row.promo || 0;
-            totalTotal += row.total || 0;
-            if (row.note && !notes.includes(row.note)) notes.push(row.note);
-          });
-
-          const transaksiClean = firstRow.transaksi?.trim()?.toLowerCase();
-          const isLunas = transaksiClean !== 'tempo';
-          const normCustKey = normalizeCustomer(firstRow.pelanggan || '');
-          const rowDate = parseCSVDate(firstRow.tanggal);
-          const dateStr = rowDate.toISOString().split('T')[0].replace(/-/g, '');
-
-          let createdAtDate = rowDate;
-          if (firstRow.created_at) {
-            const d = new Date(firstRow.created_at);
-            if (!isNaN(d.getTime())) createdAtDate = d;
-          }
-
-          const penjualanId = crypto.randomUUID();
-          const metodePembayaran = transaksiClean === 'tunai' ? 'tunai' : (transaksiClean === 'tempo' ? 'tempo' : 'transfer');
-
-          penjualanBatch.push({
-            id: penjualanId,
-            tanggal: rowDate.toISOString(),
-            created_at: createdAtDate.toISOString(),
-            pelanggan_id: finalMappings.pelanggan[normCustKey]?.id || defaultPelangganId,
-            sales_id: finalMappings.salesman[firstRow.salesman?.trim()?.toLowerCase()]?.id || defaultSalesId,
-            cabang_id: finalMappings.cabang[firstRow.cabang?.trim()?.toLowerCase()]?.id || defaultCabangId,
-            status: isLunas ? 'lunas' : 'tempo',
-            subtotal: totalSubtotal,
-            diskon: totalDiskon,
-            total: totalTotal,
-            bayar: isLunas ? totalTotal : 0,
-            kembalian: 0,
-            is_lunas: isLunas,
-            metode_pembayaran: metodePembayaran,
-            items: items,
-            nomor_nota: `INV/${dateStr}-${i + groupIdx + 1}`,
-            catatan: notes.length > 0 ? notes.join('; ') : 'Import data (Grouped)',
-            lokasi: {
-              alamat: firstRow.alamat || '-',
-              latitude: Number(firstRow.lat) || 0,
-              longitude: Number(firstRow.long) || 0
-            }
-          });
-
-          if (isLunas && totalTotal > 0) {
-            pembayaranBatch.push({
-              id: crypto.randomUUID(),
-              penjualan_id: penjualanId,
-              jumlah: totalTotal,
-              bayar: totalTotal,
-              kembalian: 0,
-              metode_pembayaran: metodePembayaran,
-              tanggal: rowDate.toISOString(),
-              catatan: 'Pembayaran otomatis (Import Grouped)',
-              lokasi: {
-                alamat: firstRow.alamat || '-',
-                latitude: Number(firstRow.lat) || 0,
-                longitude: Number(firstRow.long) || 0
-              },
-              created_at: createdAtDate.toISOString()
-            });
-          }
-        });
-
-        // Insert Penjualan
-        const { error: errorPenjualan } = await supabase.from('penjualan').insert(penjualanBatch);
-        if (errorPenjualan) throw errorPenjualan;
-
-        // Insert Pembayaran if any
-        if (pembayaranBatch.length > 0) {
-          const { error: errorPembayaran } = await supabase.from('pembayaran_penjualan').insert(pembayaranBatch);
-          if (errorPembayaran) throw errorPembayaran;
+      // 1. Map from Penjualan (Primary Source)
+      pData.forEach(row => {
+        const cKey = row.cabang.toLowerCase();
+        if (cKey && !newMappings.cabang[cKey]) {
+          const found = dbCabang.find(c => c.nama.toLowerCase() === cKey) || dbCabang.find(c => isSimilar(c.nama, cKey));
+          newMappings.cabang[cKey] = { existing: !!found, id: found?.id, name: found?.nama || row.cabang };
         }
+        const sKey = row.salesman.toLowerCase();
+        if (sKey && !newMappings.salesman[sKey]) {
+          const found = dbUsers.find(u => u.nama.toLowerCase() === sKey || (u.username && u.username.toLowerCase() === sKey)) ||
+            dbUsers.find(u => isSimilar(u.nama, sKey));
+          newMappings.salesman[sKey] = { existing: !!found, id: found?.id, name: found?.nama || row.salesman };
+        }
+        const pKey = row.produk.toLowerCase();
+        if (pKey && !newMappings.produk[pKey]) {
+          const found = dbBarang.find(b => b.nama.toLowerCase() === pKey || b.kode?.toLowerCase() === pKey) ||
+            dbBarang.find(b => isSimilar(b.nama, pKey, true));
+          newMappings.produk[pKey] = { existing: !!found, id: found?.id, name: found?.nama || row.produk, satuanId: found?.satuanId };
+        }
+        const custKey = normalizeCustomer(row.pelanggan);
+        if (custKey && !newMappings.pelanggan[custKey]) {
+          const found = dbPelanggan.find(p => p.nama.toLowerCase() === row.pelanggan.toLowerCase()) || dbPelangganMap.get(custKey);
+          newMappings.pelanggan[custKey] = { existing: !!found, id: found?.id, name: found?.nama || cleanCustomerName(row.pelanggan) };
+        }
+      });
 
-        const currentProgress = Math.min(25 + Math.round(((i + keys.length) / groupedKeys.length) * 75), 100);
-        setProgress(currentProgress);
-        setStatus(`Mengimport ${Math.min(i + keys.length, groupedKeys.length)} dari ${groupedKeys.length} invoice...`);
-      }
+      // 2. Map from Stok
+      sData.forEach(row => {
+        const sKey = row.holder.toLowerCase();
+        if (sKey && !newMappings.salesman[sKey]) {
+          const found = dbUsers.find(u => u.nama.toLowerCase() === sKey) || dbUsers.find(u => isSimilar(u.nama, sKey));
+          newMappings.salesman[sKey] = { existing: !!found, id: found?.id, name: found?.nama || row.holder };
+        }
+        const pKey = row.product.toLowerCase();
+        if (pKey && !newMappings.produk[pKey]) {
+          const found = dbBarang.find(b => b.nama.toLowerCase() === pKey) || dbBarang.find(b => isSimilar(b.nama, pKey, true));
+          newMappings.produk[pKey] = { existing: !!found, id: found?.id, name: found?.nama || row.product, satuanId: found?.satuanId };
+        }
+      });
 
-      toast.success('Import berhasil!');
-      setStatus('Import selesai!');
-      await refresh();
+      // 3. Map from Saldo
+      salData.forEach(row => {
+        const sKey = row.karyawan.toLowerCase();
+        if (sKey && !newMappings.salesman[sKey]) {
+          const found = dbUsers.find(u => u.nama.toLowerCase() === sKey) || dbUsers.find(u => isSimilar(u.nama, sKey));
+          newMappings.salesman[sKey] = { existing: !!found, id: found?.id, name: found?.nama || row.karyawan };
+        }
+      });
+
+      setMappings(newMappings);
+      setProgress(100);
+      setStep(2);
     } catch (err: any) {
       console.error(err);
-      toast.error(err.message || 'Terjadi kesalahan saat import');
-      setStatus('Import terhenti karena kesalahan.');
+      toast.error(err.message || 'Gagal menganalisa file');
     } finally {
       setIsProcessing(false);
     }
   };
 
-  const executeImportMutasi = async () => {
-    setIsProcessing(true);
-    setStep(3);
-    setProgress(0);
-    setStatus('Menyiapkan data master mutasi...');
-
-    try {
-      const finalMappings = JSON.parse(JSON.stringify(mappings));
-      const defaultCabangId = dbCabang[0]?.id || crypto.randomUUID();
-      const defaultSalesId = dbUsers[0]?.id || crypto.randomUUID();
-      const defaultBarangId = dbBarang[0]?.id || crypto.randomUUID();
-      const defaultSatuanId = dbSatuan[0]?.id || crypto.randomUUID();
-      const defaultAreaId = dbArea[0]?.id || crypto.randomUUID();
-
-      // 1. Create missing Cabang
-      setStatus('Membuat data Cabang baru...');
-      const newCabangList = Object.keys(finalMappings.cabang).filter(name => !finalMappings.cabang[name].existing);
-      if (newCabangList.length > 0) {
-        const { data: res, error } = await supabase.from('cabang').insert(newCabangList.map(name => ({
-          nama: name, area_id: defaultAreaId, alamat: '-', kota: '-', telepon: '-'
-        }))).select();
-        if (error) throw error;
-        res?.forEach(c => finalMappings.cabang[c.nama] = { existing: true, id: c.id, name: c.nama });
+  const parseCSVDate = (val: any) => {
+    if (!val) return new Date();
+    if (val instanceof Date) {
+      return new Date(Date.UTC(val.getFullYear(), val.getMonth(), val.getDate()));
+    }
+    const dateStr = String(val).trim();
+    if (!dateStr) return new Date();
+    if (!isNaN(Number(dateStr)) && Number(dateStr) > 40000) {
+      const excelDate = new Date((Number(dateStr) - 25569) * 86400 * 1000);
+      return new Date(Date.UTC(excelDate.getFullYear(), excelDate.getMonth(), excelDate.getDate()));
+    }
+    const parts = dateStr.split(/[/\-.\s]/);
+    if (parts.length >= 3) {
+      let p0 = parseInt(parts[0], 10);
+      let p1 = parseInt(parts[1], 10);
+      let p2 = parseInt(parts[2], 10);
+      let day, month, year;
+      if (p2 > 1000) { year = p2; day = p0; month = p1 - 1; }
+      else if (p0 > 1000) { year = p0; month = p1 - 1; day = p2; }
+      else { year = p2 < 50 ? 2000 + p2 : 1900 + p2; day = p0; month = p1 - 1; }
+      if (!isNaN(day) && !isNaN(month) && !isNaN(year) && month >= 0 && month < 12 && day > 0 && day <= 31) {
+        return new Date(Date.UTC(year, month, day));
       }
+    }
+    const d = new Date(dateStr);
+    return !isNaN(d.getTime()) ? new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate())) : new Date();
+  };
 
-      // 2. Create missing Users (Operator & Penerima)
-      setStatus('Membuat data User baru...');
-      const allNewUsers = new Set<string>();
-      Object.keys(finalMappings.salesman).filter(name => !finalMappings.salesman[name].existing).forEach(n => allNewUsers.add(n));
-      Object.keys(finalMappings.penerima).filter(name => !finalMappings.penerima[name].existing).forEach(n => allNewUsers.add(n));
-      
-      if (allNewUsers.size > 0) {
-        const userData = Array.from(allNewUsers).map(name => {
-          const username = name.toLowerCase().replace(/\s+/g, '_') + '_' + Math.random().toString(36).substring(2, 5);
+  const createMasterData = async (currentMappings: any) => {
+    const finalMappings = JSON.parse(JSON.stringify(currentMappings));
+    const firstRowPerCabang: Record<string, any> = {};
+    const firstRowPerSales: Record<string, any> = {};
+    const firstRowPerProduk: Record<string, any> = {};
+    const firstRowPerPelanggan: Record<string, any> = {};
+
+    data.forEach(row => {
+      if (row.cabang) { const k = row.cabang.toLowerCase(); if (!firstRowPerCabang[k]) firstRowPerCabang[k] = row; }
+      if (row.salesman) { const k = row.salesman.toLowerCase(); if (!firstRowPerSales[k]) firstRowPerSales[k] = row; }
+      if (row.produk) { const k = row.produk.toLowerCase(); if (!firstRowPerProduk[k]) firstRowPerProduk[k] = row; }
+      if (row.pelanggan) { const k = normalizeCustomer(row.pelanggan); if (!firstRowPerPelanggan[k]) firstRowPerPelanggan[k] = row; }
+    });
+    stokData.forEach(row => {
+      if (row.holder) { const k = row.holder.toLowerCase(); if (!firstRowPerSales[k]) firstRowPerSales[k] = { ...row, salesman: row.holder }; }
+      if (row.product) { const k = row.product.toLowerCase(); if (!firstRowPerProduk[k]) firstRowPerProduk[k] = { ...row, produk: row.product }; }
+    });
+    saldoData.forEach(row => {
+      if (row.karyawan) { const k = row.karyawan.toLowerCase(); if (!firstRowPerSales[k]) firstRowPerSales[k] = { ...row, salesman: row.karyawan }; }
+    });
+
+    const defaultAreaId = dbArea[0]?.id || crypto.randomUUID();
+    const defaultCabangId = dbCabang[0]?.id || crypto.randomUUID();
+    const defaultKategoriId = dbKategori[0]?.id || crypto.randomUUID();
+    const defaultSatuanId = dbSatuan[0]?.id || crypto.randomUUID();
+    const defaultSalesId = dbUsers.find(u => u.roles.includes('sales'))?.id || dbUsers[0]?.id || crypto.randomUUID();
+    const defaultKategoriPelangganId = dbKategoriPelanggan[0]?.id || crypto.randomUUID();
+
+    // 1. Cabang
+    const newCabangs = Object.keys(finalMappings.cabang).filter(n => !finalMappings.cabang[n].existing);
+    if (newCabangs.length > 0) {
+      setStatus('Membuat data Cabang...');
+      const { data: res, error } = await supabase.from('cabang').insert(newCabangs.map(n => ({ nama: n, area_id: defaultAreaId }))).select();
+      if (error) throw error;
+      res?.forEach(c => finalMappings.cabang[c.nama.toLowerCase()] = { existing: true, id: c.id, name: c.nama });
+    }
+
+    // 2. Salesman
+    const newSales = Object.keys(finalMappings.salesman).filter(n => !finalMappings.salesman[n].existing);
+    if (newSales.length > 0) {
+      setStatus('Membuat data Salesman...');
+      const salesPayload = newSales.map(n => {
+        const row = firstRowPerSales[n];
+        const cId = finalMappings.cabang[row?.cabang?.toLowerCase()]?.id || defaultCabangId;
+        const username = n.toLowerCase().replace(/\s+/g, '_') + '_' + Math.random().toString(36).substring(2, 5);
+        return { nama: finalMappings.salesman[n].name, username, email: username + '@skj.com', roles: ['sales'], cabang_id: cId, is_active: false };
+      });
+      const { data: res, error } = await supabase.from('users').insert(salesPayload).select();
+      if (error) throw error;
+      res?.forEach(u => finalMappings.salesman[u.nama.toLowerCase()] = { existing: true, id: u.id, name: u.nama });
+    }
+
+    // 3. Produk
+    const newProds = Object.keys(finalMappings.produk).filter(n => !finalMappings.produk[n].existing);
+    if (newProds.length > 0) {
+      setStatus('Membuat data Produk...');
+      const prodPayload = newProds.map(n => ({
+        nama: finalMappings.produk[n].name,
+        kode: n.substring(0, 10).toUpperCase() + Math.random().toString(36).substring(2, 5).toUpperCase(),
+        kategori_id: defaultKategoriId,
+        satuan_id: defaultSatuanId,
+        harga_jual: firstRowPerProduk[n]?.harga || 0,
+        is_active: true
+      }));
+      const { data: res, error } = await supabase.from('barang').insert(prodPayload).select();
+      if (error) throw error;
+      res?.forEach(p => finalMappings.produk[p.nama.toLowerCase()] = { existing: true, id: p.id, name: p.nama, satuanId: p.satuan_id });
+    }
+
+    // 4. Pelanggan
+    const newPels = Object.keys(finalMappings.pelanggan).filter(n => !finalMappings.pelanggan[n].existing);
+    if (newPels.length > 0) {
+      setStatus('Membuat data Pelanggan...');
+      const chunkSize = 100;
+      for (let i = 0; i < newPels.length; i += chunkSize) {
+        const chunk = newPels.slice(i, i + chunkSize);
+        const pelPayload = chunk.map(n => {
+          const row = firstRowPerPelanggan[n];
+          const cId = finalMappings.cabang[row?.cabang?.toLowerCase()]?.id || defaultCabangId;
+          const sId = finalMappings.salesman[row?.salesman?.toLowerCase()]?.id || defaultSalesId;
+          const catId = dbKategoriPelanggan.find(c => c.nama.toLowerCase() === row?.kategori_pelanggan?.toLowerCase())?.id || defaultKategoriPelangganId;
           return {
-            nama: name, username, email: username + '@skj.com', roles: ['sales'], cabang_id: defaultCabangId, is_active: false
+            nama: finalMappings.pelanggan[n].name,
+            cabang_id: cId,
+            sales_id: sId,
+            kategori_id: catId,
+            kode: n.substring(0, 5).toUpperCase().replace(/\s/g, '') + Math.random().toString(36).substring(2, 7).toUpperCase(),
+            alamat: row?.alamat || '-',
+            telepon: row?.telp?.toString().replace(/\D/g, '') || '-',
+            is_active: true,
+            created_at: parseCSVDate(row?.pelanggan_created_at || row?.tanggal).toISOString()
           };
         });
-        const { data: res, error } = await supabase.from('users').insert(userData).select();
+        const { data: res, error } = await supabase.from('pelanggan').insert(pelPayload).select();
         if (error) throw error;
-        res?.forEach(u => {
-          const key = u.nama.toLowerCase();
-          if (finalMappings.salesman[key]) finalMappings.salesman[key] = { existing: true, id: u.id, name: u.nama };
-          if (finalMappings.penerima[key]) finalMappings.penerima[key] = { existing: true, id: u.id, name: u.nama };
-        });
+        res?.forEach(p => finalMappings.pelanggan[normalizeCustomer(p.nama)] = { existing: true, id: p.id, name: p.nama });
       }
+    }
+    return finalMappings;
+  };
 
-      // 3. Create missing Products
-      setStatus('Membuat data Produk baru...');
-      const newProdList = Object.keys(finalMappings.produk).filter(name => !finalMappings.produk[name].existing);
-      if (newProdList.length > 0) {
-        const { data: res, error } = await supabase.from('barang').insert(newProdList.map(name => ({
-          nama: finalMappings.produk[name].name, 
-          kode: name.substring(0, 5).toUpperCase() + Math.random().toString(36).substring(2, 5).toUpperCase(),
-          kategori_id: dbKategori[0]?.id || crypto.randomUUID(),
-          satuan_id: defaultSatuanId,
-          is_active: true
-        }))).select();
-        if (error) throw error;
-        res?.forEach(p => finalMappings.produk[p.nama.toLowerCase()] = { existing: true, id: p.id, name: p.nama, satuanId: p.satuan_id });
-      }
+  const performImportPenjualan = async (m: any) => {
+    setStatus('Mengimport transaksi penjualan...');
+    const { data: promos } = await supabase.from('promo').select('*');
+    const validRows = data.filter(r => r.pelanggan?.trim() && r.produk?.trim());
+    const grouped = new Map<string, ImportRow[]>();
+    validRows.forEach(r => {
+      const k = `${parseCSVDate(r.tanggal).toISOString().split('T')[0]}|${normalizeCustomer(r.pelanggan!)}|${r.salesman?.toLowerCase()}|${r.cabang?.toLowerCase()}|${r.transaksi?.toLowerCase()}`;
+      if (!grouped.has(k)) grouped.set(k, []);
+      grouped.get(k)!.push(r);
+    });
 
-      // 4. Batch Import Mutasi
-      setStatus('Mengimport mutasi barang...');
-      const groupedData = new Map<string, ImportRow[]>();
-      data.forEach(row => {
-        const key = row.id || `${row.tanggal}-${row.operator}-${row.penerima}`;
-        if (!groupedData.has(key)) groupedData.set(key, []);
-        groupedData.get(key)!.push(row);
-      });
-
-      const mutasiKeys = Array.from(groupedData.keys());
-      const batchSize = 50;
-      
-      for (let i = 0; i < mutasiKeys.length; i += batchSize) {
-        const keys = mutasiKeys.slice(i, i + batchSize);
-        const mutasiBatch: any[] = [];
-        const persetujuanBatch: any[] = [];
-
-        keys.forEach(key => {
-          const rows = groupedData.get(key)!;
-          const first = rows[0];
-          const mutasiId = crypto.randomUUID();
-          
-          const dariCabangId = finalMappings.cabang[first.cabang?.toLowerCase() || '']?.id || defaultCabangId;
-          const operatorId = finalMappings.salesman[first.operator?.toLowerCase() || first.salesman?.toLowerCase() || '']?.id || defaultSalesId;
-          const penerimaId = finalMappings.penerima[first.penerima?.toLowerCase() || '']?.id || defaultSalesId;
-
-          const items = rows.map(r => ({
-            barangId: finalMappings.produk[r.produk.toLowerCase()]?.id || defaultBarangId,
+    const keys = Array.from(grouped.keys());
+    for (let i = 0; i < keys.length; i += 50) {
+      const batchKeys = keys.slice(i, i + 50);
+      const penjPayload: any[] = [];
+      const pembPayload: any[] = [];
+      batchKeys.forEach((k, idx) => {
+        const rows = grouped.get(k)!;
+        const first = rows[0];
+        const pId = crypto.randomUUID();
+        let sub = 0, disc = 0, tot = 0;
+        const items = rows.map(r => {
+          const subtotal = r.total || 0;
+          sub += subtotal + (r.promo || 0);
+          disc += r.promo || 0;
+          tot += subtotal;
+          return {
+            id: crypto.randomUUID(),
+            barangId: m.produk[r.produk.toLowerCase()]?.id,
             jumlah: r.qty,
-            satuanId: finalMappings.produk[r.produk.toLowerCase()]?.satuanId || defaultSatuanId,
-            konversi: 1,
-            totalQty: r.qty
-          }));
-
-          const tanggal = new Date(first.tanggal).toISOString();
-
-          mutasiBatch.push({
-            id: mutasiId,
-            nomor_mutasi: `MUT-IMP/${key.substring(0, 8)}`,
-            tanggal: tanggal,
-            dari_cabang_id: dariCabangId,
-            ke_cabang_id: dariCabangId,
-            items: items,
-            status: 'approved',
-            keterangan: first.note || 'Import data',
-            created_by: operatorId,
-            created_at: tanggal
-          });
-
-          persetujuanBatch.push({
-            jenis: 'mutasi_stok',
-            referensi_id: mutasiId,
-            status: 'approved',
-            diajukan_oleh: operatorId,
-            target_user_id: penerimaId,
-            tanggal_pengajuan: tanggal,
-            tanggal_persetujuan: tanggal,
-            disetujui_oleh: penerimaId,
-            catatan: 'Import data (Otomatis Approved)',
-            data: { items }
-          });
+            satuanId: m.produk[r.produk.toLowerCase()]?.satuanId || dbSatuan[0]?.id,
+            harga: r.harga || 0,
+            diskon: r.promo || 0,
+            subtotal: subtotal,
+            promoId: promos?.find(p => p.nama.toLowerCase() === r.transaksi?.toLowerCase())?.id || null
+          };
         });
 
-        const { error: errorMutasi } = await supabase.from('mutasi_barang').insert(mutasiBatch);
-        if (errorMutasi) throw errorMutasi;
+        const isLunas = first.transaksi?.toLowerCase() !== 'tempo';
+        penjPayload.push({
+          id: pId,
+          tanggal: parseCSVDate(first.tanggal).toISOString(),
+          pelanggan_id: m.pelanggan[normalizeCustomer(first.pelanggan!)]?.id,
+          sales_id: m.salesman[first.salesman?.toLowerCase() || '']?.id,
+          cabang_id: m.cabang[first.cabang?.toLowerCase() || '']?.id,
+          status: isLunas ? 'lunas' : 'tempo',
+          subtotal: sub, diskon: disc, total: tot, bayar: isLunas ? tot : 0,
+          is_lunas: isLunas,
+          metode_pembayaran: first.transaksi?.toLowerCase() === 'tunai' ? 'tunai' : (first.transaksi?.toLowerCase() === 'tempo' ? 'tempo' : 'transfer'),
+          items,
+          nomor_nota: `INV/${parseCSVDate(first.tanggal).toISOString().split('T')[0].replace(/-/g, '')}-${i + idx + 1}`,
+          catatan: 'Import Bulk'
+        });
 
-        const { error: errorPersetujuan } = await supabase.from('persetujuan').insert(persetujuanBatch);
-        if (errorPersetujuan) throw errorPersetujuan;
-
-        setProgress(Math.round(((i + keys.length) / mutasiKeys.length) * 100));
+        if (isLunas && tot > 0) {
+          pembPayload.push({
+            id: crypto.randomUUID(), penjualan_id: pId, jumlah: tot, bayar: tot,
+            metode_pembayaran: first.transaksi?.toLowerCase() === 'tunai' ? 'tunai' : 'transfer',
+            tanggal: parseCSVDate(first.tanggal).toISOString(), catatan: 'Import Pembayaran'
+          });
+        }
+      });
+      const { error: err1 } = await supabase.from('penjualan').insert(penjPayload);
+      if (err1) throw err1;
+      if (pembPayload.length > 0) {
+        const { error: err2 } = await supabase.from('pembayaran_penjualan').insert(pembPayload);
+        if (err2) throw err2;
       }
+      setProgress(30 + Math.round(((i + batchKeys.length) / keys.length) * 40));
+    }
+  };
 
-      toast.success('Import Mutasi berhasil!');
-      setStatus('Import Mutasi selesai!');
+  const performImportStok = async (m: any) => {
+    if (stokData.length === 0) return;
+    setStatus('Mengimport stok akhir...');
+    for (const row of stokData) {
+      const uId = m.salesman[row.holder.toLowerCase()]?.id;
+      const bId = m.produk[row.product.toLowerCase()]?.id;
+      if (!uId || !bId) continue;
+      const { data: exist } = await supabase.from('stok_pengguna').select('id').eq('user_id', uId).eq('barang_id', bId).maybeSingle();
+      if (exist) {
+        await supabase.from('stok_pengguna').update({ jumlah: row.qty, updated_at: new Date().toISOString() }).eq('id', exist.id);
+      } else {
+        await supabase.from('stok_pengguna').insert({ user_id: uId, barang_id: bId, jumlah: row.qty, updated_at: new Date().toISOString() });
+      }
+    }
+    setProgress(85);
+  };
+
+  const performImportSaldo = async (m: any) => {
+    if (saldoData.length === 0) return;
+    setStatus('Mengimport saldo akhir...');
+    for (const row of saldoData) {
+      const uId = m.salesman[row.karyawan.toLowerCase()]?.id;
+      if (!uId) continue;
+      const { data: exist } = await supabase.from('saldo_pengguna').select('id').eq('user_id', uId).maybeSingle();
+      if (exist) {
+        await supabase.from('saldo_pengguna').update({ saldo: row.belumDibayar, updated_at: new Date().toISOString() }).eq('id', exist.id);
+      } else {
+        await supabase.from('saldo_pengguna').insert({ user_id: uId, saldo: row.belumDibayar, updated_at: new Date().toISOString() });
+      }
+      await supabase.from('riwayat_saldo_pengguna').insert({
+        user_id: uId, tipe: 'masuk', jumlah: row.belumDibayar, saldo_awal: 0, saldo_akhir: row.belumDibayar,
+        keterangan: 'Import Saldo Awal', created_at: new Date().toISOString()
+      });
+    }
+    setProgress(95);
+  };
+
+  const executeBulkImport = async () => {
+    setIsProcessing(true);
+    setStep(3);
+    setProgress(5);
+    try {
+      const m = await createMasterData(mappings);
+      await performImportPenjualan(m);
+      await performImportStok(m);
+      await performImportSaldo(m);
+      setProgress(100);
+      setStatus('Inisialisasi Selesai!');
+      toast.success('Inisialisasi data berhasil!');
       await refresh();
     } catch (err: any) {
       console.error(err);
-      toast.error(err.message || 'Gagal import mutasi');
+      toast.error(err.message || 'Terjadi kesalahan saat inisialisasi');
+      setStatus('Gagal: ' + err.message);
     } finally {
       setIsProcessing(false);
     }
   };
+
 
   const mappingSummary = useMemo(() => {
     const summary = {
@@ -956,7 +623,6 @@ export default function ImportPenjualan() {
       salesman: { total: 0, new: 0 },
       pelanggan: { total: 0, new: 0 },
       produk: { total: 0, new: 0 },
-      penerima: { total: 0, new: 0 },
     };
 
     // Use Set to count unique mapping objects (since multiple CSV names can map to the same entity)
@@ -972,9 +638,6 @@ export default function ImportPenjualan() {
     const uniqueProduk = new Set(Object.values(mappings.produk));
     uniqueProduk.forEach(m => { summary.produk.total++; if (!m.existing) summary.produk.new++; });
 
-    const uniquePenerima = new Set(Object.values(mappings.penerima));
-    uniquePenerima.forEach(m => { summary.penerima.total++; if (!m.existing) summary.penerima.new++; });
-
     return summary;
   }, [mappings]);
 
@@ -982,32 +645,17 @@ export default function ImportPenjualan() {
     <div className="container mx-auto p-4 max-w-4xl space-y-6">
       <div className="flex items-center gap-3 mb-2">
         <div className="p-2 rounded-xl bg-primary/10">
-          <ShoppingCart className="w-6 h-6 text-primary" />
+          <Database className="w-6 h-6 text-primary" />
         </div>
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">Import Data Legacy</h1>
-          <p className="text-muted-foreground">Migrasi data transaksi {importType} dari file CSV</p>
+          <h1 className="text-2xl font-bold tracking-tight">Inisialisasi Data Aplikasi</h1>
+          <p className="text-muted-foreground">
+            Unggah data master dan transaksi untuk memulai aplikasi
+          </p>
         </div>
       </div>
 
-      <div className="flex gap-2 p-1 bg-muted rounded-lg w-fit mb-6">
-        <Button
-          variant={importType === 'penjualan' ? 'default' : 'ghost'}
-          onClick={() => setImportType('penjualan')}
-          disabled={step > 1}
-          size="sm"
-        >
-          Penjualan
-        </Button>
-        <Button
-          variant={importType === 'mutasi' ? 'default' : 'ghost'}
-          onClick={() => setImportType('mutasi')}
-          disabled={step > 1}
-          size="sm"
-        >
-          Mutasi Barang
-        </Button>
-      </div>
+
 
       <div className="grid grid-cols-3 gap-4 mb-6">
         {[1, 2, 3].map((s) => (
@@ -1019,43 +667,113 @@ export default function ImportPenjualan() {
       </div>
 
       {step === 1 && (
-        <Card className="border-dashed border-2">
-          <CardContent className="pt-10 pb-10 flex flex-col items-center justify-center space-y-4">
-            <div className="p-4 rounded-full bg-primary/5">
-              <FileUp className="w-12 h-12 text-primary animate-bounce" />
-            </div>
-            <div className="text-center">
-              <h3 className="text-lg font-medium">Unggah File CSV</h3>
-              <p className="text-sm text-muted-foreground max-w-xs mx-auto">
-                {importType === 'penjualan' 
-                  ? 'Kolom: tanggal, cabang, salesman, transaksi, pelanggan, alamat, lat, long, telp, produk, qty, harga, promo, total'
-                  : 'Kolom: id, tanggal, cabang_asal, operator, penerima, produk, qty, note'}
-              </p>
-            </div>
-            <div className="w-full max-w-xs pt-4">
-              <Input
-                id="file-upload"
-                type="file"
-                accept=".csv,.xlsx"
-                onChange={handleFileUpload}
-                disabled={isProcessing}
-                className="hidden"
-              />
-              <Button
-                onClick={() => document.getElementById('file-upload')?.click()}
-                disabled={isProcessing}
-                className="w-full h-12 text-lg rounded-xl"
-              >
-                {isProcessing ? (
-                  <Loader2 className="w-5 h-5 animate-spin mr-2" />
-                ) : (
-                  <FileUp className="w-5 h-5 mr-2" />
-                )}
-                Pilih File
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
+        <div className="space-y-6">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            {/* Penjualan File */}
+            <Card className={`border-2 transition-all ${files.penjualan ? 'border-primary bg-primary/5' : 'border-dashed'}`}>
+              <CardContent className="p-6 flex flex-col items-center text-center space-y-4">
+                <div className={`p-3 rounded-full ${files.penjualan ? 'bg-primary text-white' : 'bg-muted text-muted-foreground'}`}>
+                  <ShoppingCart className="w-6 h-6" />
+                </div>
+                <div>
+                  <h4 className="font-semibold text-sm">Data Penjualan</h4>
+                  <p className="text-[10px] text-muted-foreground mt-1">import_penjualan.csv (Wajib)</p>
+                </div>
+                <Input
+                  type="file"
+                  id="file-penjualan"
+                  className="hidden"
+                  accept=".csv,.xlsx"
+                  onChange={(e) => setFiles(prev => ({ ...prev, penjualan: e.target.files?.[0] || null }))}
+                />
+                <Button 
+                  variant={files.penjualan ? "secondary" : "outline"}
+                  size="sm"
+                  className="w-full"
+                  onClick={() => document.getElementById('file-penjualan')?.click()}
+                >
+                  {files.penjualan ? 'Ganti File' : 'Pilih File'}
+                </Button>
+              </CardContent>
+            </Card>
+
+            {/* Stok File */}
+            <Card className={`border-2 transition-all ${files.stok ? 'border-primary bg-primary/5' : 'border-dashed'}`}>
+              <CardContent className="p-6 flex flex-col items-center text-center space-y-4">
+                <div className={`p-3 rounded-full ${files.stok ? 'bg-primary text-white' : 'bg-muted text-muted-foreground'}`}>
+                  <Package className="w-6 h-6" />
+                </div>
+                <div>
+                  <h4 className="font-semibold text-sm">Stok Akhir</h4>
+                  <p className="text-[10px] text-muted-foreground mt-1">stok-akhir.csv (Opsional)</p>
+                </div>
+                <Input
+                  type="file"
+                  id="file-stok"
+                  className="hidden"
+                  accept=".csv,.xlsx"
+                  onChange={(e) => setFiles(prev => ({ ...prev, stok: e.target.files?.[0] || null }))}
+                />
+                <Button 
+                  variant={files.stok ? "secondary" : "outline"}
+                  size="sm"
+                  className="w-full"
+                  onClick={() => document.getElementById('file-stok')?.click()}
+                >
+                  {files.stok ? 'Ganti File' : 'Pilih File'}
+                </Button>
+              </CardContent>
+            </Card>
+
+            {/* Saldo File */}
+            <Card className={`border-2 transition-all ${files.saldo ? 'border-primary bg-primary/5' : 'border-dashed'}`}>
+              <CardContent className="p-6 flex flex-col items-center text-center space-y-4">
+                <div className={`p-3 rounded-full ${files.saldo ? 'bg-primary text-white' : 'bg-muted text-muted-foreground'}`}>
+                  <Users className="w-6 h-6" />
+                </div>
+                <div>
+                  <h4 className="font-semibold text-sm">Saldo Akhir</h4>
+                  <p className="text-[10px] text-muted-foreground mt-1">saldo-akhir.csv (Opsional)</p>
+                </div>
+                <Input
+                  type="file"
+                  id="file-saldo"
+                  className="hidden"
+                  accept=".csv,.xlsx"
+                  onChange={(e) => setFiles(prev => ({ ...prev, saldo: e.target.files?.[0] || null }))}
+                />
+                <Button 
+                  variant={files.saldo ? "secondary" : "outline"}
+                  size="sm"
+                  className="w-full"
+                  onClick={() => document.getElementById('file-saldo')?.click()}
+                >
+                  {files.saldo ? 'Ganti File' : 'Pilih File'}
+                </Button>
+              </CardContent>
+            </Card>
+          </div>
+
+          <div className="flex justify-center">
+            <Button 
+              onClick={handleProcessAll} 
+              disabled={!files.penjualan || isProcessing}
+              className="px-12 h-12 rounded-xl text-lg shadow-lg hover:shadow-primary/20 transition-all"
+            >
+              {isProcessing ? <Loader2 className="w-5 h-5 animate-spin mr-2" /> : <Database className="w-5 h-5 mr-2" />}
+              Analisa & Lanjutkan
+            </Button>
+          </div>
+
+          <Alert>
+            <Info className="h-4 w-4" />
+            <AlertTitle>Informasi Penting</AlertTitle>
+            <AlertDescription className="text-xs">
+              Sistem akan memetakan data Cabang, Salesman, Produk, dan Pelanggan dari ketiga file secara otomatis.
+              Jika data master belum ada di database, sistem akan membuatnya saat proses import berlangsung.
+            </AlertDescription>
+          </Alert>
+        </div>
       )}
 
       {step === 2 && (
@@ -1064,174 +782,23 @@ export default function ImportPenjualan() {
             <CardHeader>
               <CardTitle>Analisis Data</CardTitle>
               <CardDescription>
-                Ditemukan {data.length} baris transaksi. Berikut adalah ringkasan pemetaan data master.
+                Berhasil menganalisa {data.length} baris penjualan, {stokData.length} baris stok, dan {saldoData.length} baris saldo.
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                <MappingCard
-                  icon={Building2}
-                  label="Cabang"
-                  total={mappingSummary.cabang.total}
-                  newCount={mappingSummary.cabang.new}
-                />
-                <MappingCard
-                  icon={Users}
-                  label={importType === 'penjualan' ? "Salesman" : "Operator"}
-                  total={mappingSummary.salesman.total}
-                  newCount={mappingSummary.salesman.new}
-                />
-                {importType === 'penjualan' ? (
-                  <MappingCard
-                    icon={Users}
-                    label="Pelanggan"
-                    total={mappingSummary.pelanggan.total}
-                    newCount={mappingSummary.pelanggan.new}
-                  />
-                ) : (
-                  <MappingCard
-                    icon={Users}
-                    label="Penerima"
-                    total={mappingSummary.penerima.total}
-                    newCount={mappingSummary.penerima.new}
-                  />
-                )}
-                <MappingCard
-                  icon={Package}
-                  label="Produk"
-                  total={mappingSummary.produk.total}
-                  newCount={mappingSummary.produk.new}
-                />
+                <MappingCard icon={Building2} label="Cabang" total={mappingSummary.cabang.total} newCount={mappingSummary.cabang.new} />
+                <MappingCard icon={Users} label="Salesman" total={mappingSummary.salesman.total} newCount={mappingSummary.salesman.new} />
+                <MappingCard icon={Users} label="Pelanggan" total={mappingSummary.pelanggan.total} newCount={mappingSummary.pelanggan.new} />
+                <MappingCard icon={Package} label="Produk" total={mappingSummary.produk.total} newCount={mappingSummary.produk.new} />
               </div>
-
-              <h4 className="text-sm font-semibold flex items-center gap-2">
-                <Database className="w-4 h-4" />
-                Pratinjau Data (5 Baris Pertama)
-              </h4>
-              <div className="rounded-xl border overflow-hidden">
-                <table className="w-full text-xs text-left">
-                  <thead className="bg-muted text-muted-foreground uppercase tracking-wider">
-                    <tr>
-                      <th className="p-3 border-b font-semibold">Tanggal</th>
-                      <th className="p-3 border-b font-semibold">{importType === 'penjualan' ? 'Nama CSV (Original)' : 'Cabang Asal'}</th>
-                      <th className="p-3 border-b font-semibold">{importType === 'penjualan' ? 'Nama Sistem (Hasil Clean)' : 'Penerima'}</th>
-                      <th className="p-3 border-b font-semibold">Jenis</th>
-                      <th className="p-3 border-b font-semibold">Produk</th>
-                      <th className="p-3 border-b font-semibold text-right">Qty</th>
-                      {importType === 'penjualan' && <th className="p-3 border-b font-semibold text-right">Total</th>}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {data.slice(0, 5).map((row, i) => {
-                      const rawCust = row.pelanggan || '';
-                      const cleanCust = cleanCustomerName(rawCust);
-                      const normCust = normalizeCustomer(rawCust);
-                      const isNewPel = importType === 'penjualan' 
-                        ? !mappings.pelanggan[normCust]?.existing
-                        : !mappings.penerima[row.penerima?.toLowerCase() || '']?.existing;
-                      const isNewProd = !mappings.produk[row.produk?.toLowerCase() || '']?.existing;
-
-                      return (
-                        <tr key={i} className="hover:bg-muted/50 transition-colors">
-                          <td className="p-3 border-b whitespace-nowrap text-[11px] font-medium">
-                            {row.tanggal.includes(' ') 
-                              ? (() => {
-                                  const [d, t] = row.tanggal.split(' ');
-                                  const [y, m, day] = d.split('-');
-                                  return `${day}/${m}/${y} ${t.substring(0, 5)}`;
-                                })()
-                              : row.tanggal}
-                          </td>
-                          <td className="p-3 border-b text-muted-foreground">{importType === 'penjualan' ? rawCust : row.cabang_asal}</td>
-                          <td className="p-3 border-b">
-                            <div className="flex flex-col min-w-[150px]">
-                              <span className="font-semibold text-blue-900">{importType === 'penjualan' ? cleanCust : row.penerima}</span>
-                              {isNewPel ? (
-                                <span className="text-[10px] text-amber-600 font-bold uppercase tracking-tight flex items-center gap-1">
-                                  <div className="w-1.5 h-1.5 rounded-full bg-amber-600" /> + Baru (Belum Terdaftar)
-                                </span>
-                              ) : (
-                                <span className="text-[10px] text-green-600 font-bold uppercase tracking-tight flex items-center gap-1">
-                                  <div className="w-1.5 h-1.5 rounded-full bg-green-600" /> ✓ Sudah Terdaftar
-                                </span>
-                              )}
-                            </div>
-                          </td>
-                          <td className="p-3 border-b text-muted-foreground uppercase text-[10px] font-mono">{row.jenis}</td>
-                          <td className="p-3 border-b">
-                            <div className="flex flex-col min-w-[120px]">
-                              <span className="line-clamp-1">{row.produk}</span>
-                              {isNewProd ? (
-                                <span className="text-[10px] text-amber-500 italic">Produk Baru</span>
-                              ) : (
-                                <span className="text-[10px] text-blue-500 italic">Produk Terdaftar</span>
-                              )}
-                            </div>
-                          </td>
-                          <td className="p-3 border-b text-right font-mono font-semibold">{row.qty}</td>
-                          {importType === 'penjualan' && (
-                            <td className="p-3 border-b text-right font-bold text-blue-700">
-                              Rp {row.total?.toLocaleString('id-ID')}
-                            </td>
-                          )}
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-
-              {(importType === 'penjualan' ? mappingSummary.pelanggan.new > 0 : mappingSummary.penerima.new > 0) && (
-                <div className="space-y-3">
-                  <h4 className="text-sm font-semibold flex items-center gap-2">
-                    <Users className="w-4 h-4" />
-                    Review {importType === 'penjualan' ? 'Pelanggan' : 'Penerima'} Baru (Sampling 10 dari {importType === 'penjualan' ? mappingSummary.pelanggan.new : mappingSummary.penerima.new})
-                  </h4>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-2 p-3 bg-muted/20 rounded-xl border border-dashed">
-                    {Object.keys(importType === 'penjualan' ? mappings.pelanggan : mappings.penerima)
-                      .filter(key => !(importType === 'penjualan' ? mappings.pelanggan : mappings.penerima)[key].existing)
-                      .slice(0, 10)
-                      .map((key, idx) => (
-                        <div key={idx} className="flex items-center gap-2 text-xs bg-white p-2 rounded-lg border shadow-sm">
-                          <div className="w-6 h-6 rounded-full bg-amber-100 text-amber-700 flex items-center justify-center font-bold">
-                            {idx + 1}
-                          </div>
-                          <div className="flex flex-col">
-                            <span className="font-semibold">{(importType === 'penjualan' ? mappings.pelanggan : mappings.penerima)[key].name}</span>
-                            <span className="text-[9px] text-muted-foreground uppercase">Key: {key}</span>
-                          </div>
-                        </div>
-                      ))}
-                  </div>
-                </div>
-              )}
-
-              {Object.values(mappingSummary).some(s => s.new > 0) && (
-                <div className="p-4 rounded-xl bg-amber-50 border border-amber-200 flex gap-3">
-                  <AlertCircle className="w-5 h-5 text-amber-600 shrink-0" />
-                  <div className="space-y-1">
-                    <p className="text-sm font-semibold text-amber-900">Konfirmasi Pembuatan Data Baru</p>
-                    <p className="text-xs text-amber-800 leading-relaxed">
-                      Terdapat data master baru yang akan dibuat otomatis. Mohon pastikan tidak ada duplikasi nama:
-                      <ul className="list-disc ml-4 mt-1 space-y-0.5">
-                        {mappingSummary.cabang.new > 0 && <li><strong>{mappingSummary.cabang.new}</strong> Cabang Baru</li>}
-                        {mappingSummary.salesman.new > 0 && <li><strong>{mappingSummary.salesman.new}</strong> {importType === 'penjualan' ? 'Salesman' : 'Operator'} Baru</li>}
-                        {importType === 'penjualan' && mappingSummary.pelanggan.new > 0 && <li><strong>{mappingSummary.pelanggan.new}</strong> Pelanggan Baru</li>}
-                        {importType === 'mutasi' && mappingSummary.penerima.new > 0 && <li><strong>{mappingSummary.penerima.new}</strong> Penerima Baru</li>}
-                        {mappingSummary.produk.new > 0 && <li><strong>{mappingSummary.produk.new}</strong> Produk Baru</li>}
-                      </ul>
-                    </p>
-                  </div>
-                </div>
-              )}
 
               <div className="p-4 rounded-xl bg-primary/5 border border-primary/20 flex gap-3">
                 <CheckCircle2 className="w-5 h-5 text-primary shrink-0" />
                 <div className="space-y-1">
-                  <p className="text-sm font-semibold text-primary">Konfirmasi Import</p>
+                  <p className="text-sm font-semibold text-primary">Siap Diimport</p>
                   <p className="text-xs text-primary/80">
-                    Sebanyak <span className="font-bold">{data.length.toLocaleString()}</span> data {importType} siap untuk diimport.
-                    Pastikan kolom <span className="font-bold">Tanggal</span> pada pratinjau di atas sudah terlihat benar.
+                    Sistem akan melakukan inisialisasi database secara bulk.
                   </p>
                 </div>
               </div>
@@ -1242,12 +809,8 @@ export default function ImportPenjualan() {
             <Button variant="outline" onClick={() => setStep(1)} disabled={isProcessing}>
               Kembali
             </Button>
-            <Button 
-              onClick={importType === 'penjualan' ? executeImport : executeImportMutasi} 
-              disabled={isProcessing} 
-              className="px-10"
-            >
-              Mulai Import <ArrowRight className="w-4 h-4 ml-2" />
+            <Button onClick={executeBulkImport} disabled={isProcessing} className="px-10">
+              Mulai Inisialisasi <ArrowRight className="w-4 h-4 ml-2" />
             </Button>
           </div>
         </div>
@@ -1278,12 +841,11 @@ export default function ImportPenjualan() {
             </div>
 
             {progress === 100 ? (
-              <Button 
-                onClick={() => window.location.href = importType === 'penjualan' ? '/penjualan' : '/barang/mutasi'} 
-                className="rounded-xl"
-              >
-                Lihat Data {importType === 'penjualan' ? 'Penjualan' : 'Mutasi'}
-              </Button>
+              <div className="flex flex-col gap-3">
+                <Button onClick={() => window.location.href = '/beranda'} className="rounded-xl px-12">
+                  Selesai & Ke Beranda
+                </Button>
+              </div>
             ) : (
               <p className="text-sm text-muted-foreground animate-pulse">
                 Mohon jangan tutup halaman ini sampai proses selesai...

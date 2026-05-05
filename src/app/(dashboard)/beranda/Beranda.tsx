@@ -7,7 +7,7 @@ import { useDatabase } from '@/contexts/DatabaseContext';
 import {
   Package, Users, ShoppingCart, Wallet, Clock, TrendingUp,
   AlertCircle, CheckCircle, ArrowRight, MapPin, BarChart,
-  ScanLine, X, QrCode
+  ScanLine, X, QrCode, Flame
 } from 'lucide-react';
 import { Html5Qrcode } from "html5-qrcode";
 import {
@@ -218,8 +218,10 @@ export default function Beranda() {
       // B. Calculate Velocity
       let totalSold = 0;
       relevantSales.forEach(sale => {
-        const item = sale.items.find(i => i.barangId === b.id);
-        if (item) totalSold += item.jumlah;
+        const item = ((sale as any).penjualanItems || sale.items || []).find((i: any) => i.barangId === b.id);
+        if (item) {
+          totalSold += (item.totalQty !== undefined ? item.totalQty : (item.jumlah * (item.konversi || 1)));
+        }
       });
 
       const avgDailySales = totalSold / 30;
@@ -507,7 +509,7 @@ export default function Beranda() {
                 const currentAmount = target.target_type === 'nominal'
                   ? actualSales.reduce((sum, p) => sum + (p.total || 0), 0)
                   : actualSales.reduce((sum, p) => {
-                    const items = p.penjualanItems || p.items || [];
+                    const items = (p as any).penjualanItems || p.items || [];
                     return sum + items
                       .filter((i: any) => !i.isBonus && i.subtotal > 0) // Align with RekapPenjualan logic
                       .reduce((s: number, i: any) => s + (i.totalQty !== undefined ? i.totalQty : (i.jumlah * (i.konversi || 1))), 0);
@@ -634,42 +636,78 @@ export default function Beranda() {
 
         {/* High Demand Low Stock List */}
         {highDemandLowStock.length > 0 && (
-          <div className="space-y-3">
-            <h3 className="text-sm font-semibold text-muted-foreground px-1 flex items-center justify-between">
-              <span>Permintaan Tinggi & Stok Menipis</span>
-              <Button variant="ghost" size="sm" className="h-auto p-0 text-xs text-primary" onClick={() => router.push('/barang')}>
-                Semua
+          <div className="space-y-4">
+            <div className="flex items-center justify-between px-1">
+              <div className="flex items-center gap-2">
+                <div className="p-1.5 rounded-lg bg-orange-500/10">
+                  <Flame className="w-4 h-4 text-orange-500 animate-pulse" />
+                </div>
+                <h3 className="text-sm font-bold text-foreground">Permintaan Tinggi & Stok Menipis</h3>
+              </div>
+              <Button variant="ghost" size="sm" className="h-auto p-0 text-xs text-primary font-semibold hover:bg-transparent" onClick={() => router.push('/barang')}>
+                Lihat Semua
               </Button>
-            </h3>
-            <div className="space-y-2">
+            </div>
+            
+            <div className="grid gap-3">
               {highDemandLowStock.map((item, index) => (
-                <Card key={item.id} className="animate-slide-up border-l-4 border-l-warning" style={{ animationDelay: `${index * 50}ms` }}>
-                  <CardContent className="p-3 flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-lg bg-muted flex items-center justify-center flex-shrink-0">
-                      {item.gambarUrl ? (
-                        <img src={item.gambarUrl} alt={item.nama} className="w-full h-full object-cover rounded-lg" />
-                      ) : (
-                        <Package className="w-5 h-5 text-muted-foreground" />
+                <Card 
+                  key={item.id} 
+                  className={`group relative animate-slide-up overflow-hidden border-none shadow-sm hover:shadow-md transition-all duration-300 active:scale-[0.98] ${
+                    item.status === 'critical' 
+                      ? 'bg-gradient-to-r from-destructive/5 to-transparent' 
+                      : 'bg-gradient-to-r from-warning/5 to-transparent'
+                  }`}
+                  style={{ animationDelay: `${index * 50}ms` }}
+                  onClick={() => router.push(`/barang/${item.id}`)}
+                >
+                  <div className={`absolute left-0 top-0 bottom-0 w-1 ${
+                    item.status === 'critical' ? 'bg-destructive' : 'bg-warning'
+                  }`} />
+                  
+                  <CardContent className="p-3 flex items-center gap-4">
+                    <div className="relative">
+                      <div className="w-12 h-12 rounded-xl bg-muted flex items-center justify-center flex-shrink-0 overflow-hidden border border-border/50 group-hover:scale-105 transition-transform">
+                        {item.gambarUrl ? (
+                          <img src={item.gambarUrl} alt={item.nama} className="w-full h-full object-cover" />
+                        ) : (
+                          <Package className="w-6 h-6 text-muted-foreground/50" />
+                        )}
+                      </div>
+                      {item.totalSold > 100 && (
+                        <div className="absolute -top-1 -right-1 bg-orange-500 rounded-full p-0.5 border-2 border-background shadow-sm">
+                          <Flame className="w-2.5 h-2.5 text-white" />
+                        </div>
                       )}
                     </div>
+                    
                     <div className="flex-1 min-w-0">
-                      <p className="font-semibold text-xs truncate">{item.nama}</p>
-                      <div className="flex items-center gap-2 mt-0.5">
-                        <Badge variant="muted" className="text-[9px] px-1 py-0 h-4">
-                          {item.totalSold} terjual / 30hr
-                        </Badge>
-                        <span className="text-[10px] text-muted-foreground">
-                          Sisa: {formatNumber(item.currentStock)}
+                      <div className="flex items-center gap-1.5">
+                        <p className="font-bold text-sm truncate leading-tight">{item.nama}</p>
+                      </div>
+                      <div className="flex items-center gap-2 mt-1">
+                        <div className="flex items-center gap-1 text-[10px] text-muted-foreground font-medium bg-muted/50 px-1.5 py-0.5 rounded-md">
+                          <TrendingUp className="w-3 h-3 text-orange-500" />
+                          <span>{formatNumber(item.totalSold)} terjual (30hr)</span>
+                        </div>
+                        <span className="text-[10px] text-muted-foreground font-semibold">
+                          Stok: <span className={item.currentStock <= (item.minStok || 0) ? 'text-destructive' : 'text-foreground'}>
+                            {formatNumber(item.currentStock)}
+                          </span>
                         </span>
                       </div>
                     </div>
-                    <div className="text-right flex flex-col items-end gap-1">
-                      <Badge variant={item.status === 'critical' ? 'destructive' : 'warning'} className="text-[9px] px-1 py-0 h-4 min-w-[60px] justify-center">
-                        {item.daysCoverage < 1 ? '< 1 hari' : `${Math.round(item.daysCoverage)} hari`}
-                      </Badge>
-                      <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => router.push(`/barang/${item.id}`)}>
-                        <ArrowRight className="w-3 h-3" />
-                      </Button>
+                    
+                    <div className="flex flex-col items-end gap-1.5">
+                      <div className="flex flex-col items-end">
+                        <span className="text-[9px] text-muted-foreground font-bold uppercase tracking-tighter mb-0.5">EST. HABIS DALAM</span>
+                        <Badge 
+                          variant={item.status === 'critical' ? 'destructive' : 'warning'} 
+                          className="text-[10px] px-2 py-0 h-5 font-bold shadow-sm"
+                        >
+                          {item.daysCoverage < 1 ? '< 1 Hari' : `${Math.round(item.daysCoverage)} Hari`}
+                        </Badge>
+                      </div>
                     </div>
                   </CardContent>
                 </Card>
