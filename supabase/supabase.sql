@@ -369,6 +369,7 @@ CREATE TABLE IF NOT EXISTS public.petty_cash (
   id uuid,
   tanggal timestamp with time zone,
   tipe text,
+  jenis text,
   kategori text,
   keterangan text,
   jumlah numeric,
@@ -376,7 +377,9 @@ CREATE TABLE IF NOT EXISTS public.petty_cash (
   reimburse_id uuid,
   bukti_url text,
   created_by uuid,
-  created_at timestamp with time zone
+  created_at timestamp with time zone,
+  cabang_id uuid,
+  pengguna_anggaran uuid
 );
 
 CREATE TABLE IF NOT EXISTS public.user_locations (

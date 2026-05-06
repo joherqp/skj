@@ -7,7 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { formatCurrency, formatTanggal, cn } from '@/lib/utils';
-import { ArrowUpCircle, ArrowDownCircle, History, Wallet, FileText, ArrowUp, ArrowDown, User, Calendar, Tag, Info, ExternalLink } from 'lucide-react';
+import { ArrowUpCircle, ArrowDownCircle, History, Wallet, FileText, ArrowUp, ArrowDown, User, Calendar, Tag, Info, ExternalLink, Pencil } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { ImagePreviewModal } from '@/components/shared/ImagePreviewModal';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
@@ -17,10 +17,12 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { PettyCash as PettyCashType } from '@/types';
 import { Filter, X, Search, Plus } from 'lucide-react';
+import { SearchableSelect } from '@/components/ui/searchable-select';
 
 export default function PettyCash() {
   const router = useRouter();
   const { user } = useAuth();
+  const { pettyCash, users, cabang, isAdminOrOwner, isFinance } = useDatabase();
   const [isDetailOpen, setIsDetailOpen] = useState(false);
   const [visibleCount, setVisibleCount] = useState(10);
   const [selectedTransaction, setSelectedTransaction] = useState<PettyCashType | null>(null);
@@ -30,40 +32,49 @@ export default function PettyCash() {
   const [filterCategory, setFilterCategory] = useState<string>('all');
   const [filterStartDate, setFilterStartDate] = useState<string>('');
   const [filterEndDate, setFilterEndDate] = useState<string>('');
+  const [filterUserId, setFilterUserId] = useState<string>('all');
   const [isFilterOpen, setIsFilterOpen] = useState(false);
-
-  const isAdminOrOwner = user?.roles.some(r => ['admin', 'owner'].includes(r));
-  const { pettyCash, users, cabang } = useDatabase();
 
   const activeFiltersCount = 
     (filterBranchId !== 'all' ? 1 : 0) + 
     (filterCategory !== 'all' ? 1 : 0) + 
+    (filterUserId !== 'all' ? 1 : 0) + 
     (filterStartDate ? 1 : 0) + 
     (filterEndDate ? 1 : 0);
 
   // Filter Transactions based on Role using useMemo
   const { displayedData, currentBalance } = useMemo(() => {
       // 1. Identify permissions
-      const isGlobalAccess = isAdminOrOwner;
+      const isGlobalAccess = isAdminOrOwner; // Finance is now branch-specific
+      const isBranchFinance = isFinance && user?.cabangId !== 'cab-pusat';
       
       // 2. Filter logic
       let filtered = isGlobalAccess 
           ? pettyCash 
-          : pettyCash.filter(item => {
-              // Find creator
-              const creator = users.find(u => u.id === item.createdBy);
-              // Match branch
-              return creator?.cabangId === user?.cabangId;
-          });
+          : isBranchFinance
+            ? pettyCash.filter(item => {
+                // Find creator
+                const creator = users.find(u => u.id === item.createdBy);
+                // Match branch
+                return (item.cabangId || creator?.cabangId) === user?.cabangId;
+              })
+            : pettyCash.filter(item => item.createdBy === user?.id); // Normal user or Finance at Pusat only see their own
 
       // Apply Admin/Owner Filters
       if (isGlobalAccess) {
           if (filterBranchId !== 'all') {
               filtered = filtered.filter(item => {
                   const creator = users.find(u => u.id === item.createdBy);
-                  return creator?.cabangId === filterBranchId;
+                  const itemBranchId = item.cabangId || creator?.cabangId;
+                  return itemBranchId === filterBranchId;
               });
           }
+      }
+
+
+      // Filter by User
+      if (filterUserId !== 'all') {
+          filtered = filtered.filter(item => item.createdBy === filterUserId || item.penggunaAnggaran === filterUserId);
       }
 
       // Apply Common Filters
@@ -92,7 +103,7 @@ export default function PettyCash() {
       }, 0);
 
       return { displayedData: sorted, currentBalance: balance };
-  }, [pettyCash, users, user, isAdminOrOwner, filterBranchId, filterCategory, filterStartDate, filterEndDate]);
+  }, [pettyCash, users, user, isAdminOrOwner, isFinance, filterBranchId, filterCategory, filterUserId, filterStartDate, filterEndDate]);
 
   const displayedTransactions = displayedData.slice(0, visibleCount);
   const hasMore = visibleCount < displayedData.length;
@@ -167,10 +178,10 @@ export default function PettyCash() {
                 <CardTitle className="flex items-center justify-between text-lg">
                     <div className="flex items-center gap-2">
                         <History className="w-5 h-5" /> 
-                        Riwayat Transaksi {isAdminOrOwner ? '(Global)' : ''}
+                        Riwayat Transaksi {isAdminOrOwner ? '(Global)' : (isFinance && user?.cabangId !== 'cab-pusat') ? '(Cabang)' : ''}
                     </div>
                     
-                    {isAdminOrOwner && (
+                    {(isAdminOrOwner || isFinance) && (
                         <Popover open={isFilterOpen} onOpenChange={setIsFilterOpen}>
                             <PopoverTrigger asChild>
                                 <Button 
@@ -199,6 +210,7 @@ export default function PettyCash() {
                                                 onClick={() => {
                                                     setFilterBranchId('all');
                                                     setFilterCategory('all');
+                                                    setFilterUserId('all');
                                                     setFilterStartDate('');
                                                     setFilterEndDate('');
                                                 }}
@@ -210,19 +222,42 @@ export default function PettyCash() {
 
                                     <div className="space-y-3 pt-2">
                                         {/* Branch Filter */}
+                                        {isAdminOrOwner && (
+                                            <div className="space-y-1.5">
+                                                <Label className="text-[11px] uppercase tracking-wider text-muted-foreground">Cabang</Label>
+                                                <Select value={filterBranchId} onValueChange={setFilterBranchId}>
+                                                    <SelectTrigger className="h-8 text-xs">
+                                                        <SelectValue placeholder="Semua Cabang" />
+                                                    </SelectTrigger>
+                                                    <SelectContent>
+                                                        <SelectItem value="all">Semua Cabang</SelectItem>
+                                                        {[...cabang].sort((a, b) => a.nama.localeCompare(b.nama)).map(c => (
+                                                            <SelectItem key={c.id} value={c.id}>{c.nama}</SelectItem>
+                                                        ))}
+                                                    </SelectContent>
+                                                </Select>
+                                            </div>
+                                        )}
+
+
+                                        {/* User Filter */}
                                         <div className="space-y-1.5">
-                                            <Label className="text-[11px] uppercase tracking-wider text-muted-foreground">Cabang</Label>
-                                            <Select value={filterBranchId} onValueChange={setFilterBranchId}>
-                                                <SelectTrigger className="h-8 text-xs">
-                                                    <SelectValue placeholder="Semua Cabang" />
-                                                </SelectTrigger>
-                                                <SelectContent>
-                                                    <SelectItem value="all">Semua Cabang</SelectItem>
-                                                    {[...cabang].sort((a, b) => a.nama.localeCompare(b.nama)).map(c => (
-                                                        <SelectItem key={c.id} value={c.id}>{c.nama}</SelectItem>
-                                                    ))}
-                                                </SelectContent>
-                                            </Select>
+                                            <Label className="text-[11px] uppercase tracking-wider text-muted-foreground">Pengguna</Label>
+                                            <SearchableSelect 
+                                                options={[
+                                                    { label: 'Semua Pengguna', value: 'all' },
+                                                    ...users.map(u => ({ 
+                                                        label: u.nama, 
+                                                        value: u.id, 
+                                                        description: `${u.roles.join(', ')}${u.cabangId ? ` • ${cabang.find(c => c.id === u.cabangId)?.nama || ''}` : ''}`
+                                                    }))
+                                                ]}
+                                                value={filterUserId}
+                                                onChange={setFilterUserId}
+                                                placeholder="Pilih pengguna..."
+                                                searchPlaceholder="Cari nama..."
+                                                className="h-8"
+                                            />
                                         </div>
 
                                         {/* Category Filter */}
@@ -303,6 +338,11 @@ export default function PettyCash() {
                                                 <Badge variant="secondary" className="font-normal text-[10px] h-5 px-1.5 bg-slate-100 text-slate-600 border-slate-200">
                                                     {item.kategori}
                                                 </Badge>
+                                                {(isAdminOrOwner || isFinance) && (
+                                                    <Badge variant="outline" className="font-normal text-[10px] h-5 px-1.5 border-blue-200 text-blue-600 bg-blue-50">
+                                                        {cabang.find(c => c.id === (item.cabangId || users.find(u => u.id === item.createdBy)?.cabangId))?.nama || 'No Branch'}
+                                                    </Badge>
+                                                )}
                                             </div>
                                         </div>
                                     </div>
@@ -350,9 +390,25 @@ export default function PettyCash() {
       <Dialog open={isDetailOpen} onOpenChange={setIsDetailOpen}>
         <DialogContent className="sm:max-w-md max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <Info className="w-5 h-5 text-primary" /> Detail Transaksi
-            </DialogTitle>
+            <div className="flex items-center justify-between pr-8">
+                <DialogTitle className="flex items-center gap-2">
+                <Info className="w-5 h-5 text-primary" /> Detail Transaksi
+                </DialogTitle>
+                {(isAdminOrOwner || isFinance) && (
+                    <Button 
+                        variant="outline" 
+                        size="sm" 
+                        className="h-8 gap-1.5"
+                        onClick={() => {
+                            setIsDetailOpen(false);
+                            router.push(`/petty-cash/tambah?id=${selectedTransaction?.id}&type=${selectedTransaction?.tipe === 'masuk' ? 'masuk' : 'keluar'}`);
+                        }}
+                    >
+                        <Pencil className="w-3.5 h-3.5" />
+                        <span>Edit</span>
+                    </Button>
+                )}
+            </div>
             <DialogDescription>
               Detail lengkap transaksi kas kecil.
             </DialogDescription>
@@ -393,7 +449,7 @@ export default function PettyCash() {
                     </div>
                     <div>
                       <p className="text-xs text-muted-foreground">Tanggal</p>
-                      <p className="font-medium">{formatTanggal(selectedTransaction.tanggal)}</p>
+                      <p className="font-medium text-sm">{formatTanggal(selectedTransaction.tanggal)}</p>
                     </div>
                   </div>
                   <div className="flex items-start gap-3">
@@ -402,10 +458,34 @@ export default function PettyCash() {
                     </div>
                     <div>
                       <p className="text-xs text-muted-foreground">Kategori</p>
-                      <Badge variant="outline" className="font-medium mt-0.5">
+                      <Badge variant="outline" className="capitalize mt-0.5">
                         {selectedTransaction.kategori}
                       </Badge>
                     </div>
+                  </div>
+                </div>
+
+                <div className="flex items-start gap-3">
+                  <div className="w-8 h-8 rounded-lg bg-slate-100 flex items-center justify-center flex-shrink-0">
+                    <Wallet className="w-4 h-4 text-slate-500" />
+                  </div>
+                  <div>
+                    <p className="text-xs text-muted-foreground">Cabang</p>
+                    <p className="font-medium">
+                        {cabang.find(c => c.id === (selectedTransaction.cabangId || users.find(u => u.id === selectedTransaction.createdBy)?.cabangId))?.nama || 'Global / Pusat'}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-start gap-3">
+                  <div className="w-8 h-8 rounded-lg bg-slate-100 flex items-center justify-center flex-shrink-0">
+                    <User className="w-4 h-4 text-slate-500" />
+                  </div>
+                  <div>
+                    <p className="text-xs text-muted-foreground">Pengguna Anggaran</p>
+                    <p className="font-medium">
+                        {users.find(u => u.id === (selectedTransaction.penggunaAnggaran || selectedTransaction.createdBy))?.nama || 'Tidak diketahui'}
+                    </p>
                   </div>
                 </div>
 

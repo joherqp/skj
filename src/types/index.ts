@@ -577,8 +577,10 @@ export interface PettyCash {
   userId: string; // Yang input
   tipe?: string; // Some parts use this
   buktiUrl?: string;
+  penggunaAnggaran?: string;
   createdBy?: string;
   reimburseId?: string;
+  cabangId?: string;
 }
 
 export interface ProfilPerusahaan {
@@ -736,111 +738,112 @@ export interface DatabaseContextType {
   pendingSyncCount: number;
   dbMode: 'public' | 'demo';
   isAdminOrOwner: boolean;
+  isFinance: boolean;
   refresh: () => Promise<void>;
   repairUser: () => Promise<void>;
 
   // CRUD Actions
   addKategori: (item: Partial<Kategori>) => Promise<Kategori>;
-  updateKategori: (id: string, item: Partial<Kategori>) => Promise<void>;
+  updateKategori: (id: string, item: Partial<Kategori>) => Promise<Kategori>;
   deleteKategori: (id: string) => Promise<void>;
 
   addSatuan: (item: Partial<Satuan>) => Promise<Satuan>;
-  updateSatuan: (id: string, item: Partial<Satuan>) => Promise<void>;
+  updateSatuan: (id: string, item: Partial<Satuan>) => Promise<Satuan>;
   deleteSatuan: (id: string) => Promise<void>;
 
   addKategoriPelanggan: (item: Partial<KategoriPelanggan>) => Promise<KategoriPelanggan>;
-  updateKategoriPelanggan: (id: string, item: Partial<KategoriPelanggan>) => Promise<void>;
+  updateKategoriPelanggan: (id: string, item: Partial<KategoriPelanggan>) => Promise<KategoriPelanggan>;
   deleteKategoriPelanggan: (id: string) => Promise<void>;
 
   addRekeningBank: (item: Partial<RekeningBank>) => Promise<RekeningBank>;
-  updateRekeningBank: (id: string, item: Partial<RekeningBank>) => Promise<void>;
+  updateRekeningBank: (id: string, item: Partial<RekeningBank>) => Promise<RekeningBank>;
   deleteRekeningBank: (id: string) => Promise<void>;
 
   addArea: (item: Partial<Area>) => Promise<Area>;
-  updateArea: (id: string, item: Partial<Area>) => Promise<void>;
+  updateArea: (id: string, item: Partial<Area>) => Promise<Area>;
   deleteArea: (id: string) => Promise<void>;
 
   addCabang: (item: Partial<Cabang>) => Promise<Cabang>;
-  updateCabang: (id: string, item: Partial<Cabang>) => Promise<void>;
+  updateCabang: (id: string, item: Partial<Cabang>) => Promise<Cabang>;
   deleteCabang: (id: string) => Promise<void>;
 
   addBarang: (item: Partial<Barang>) => Promise<Barang>;
-  updateBarang: (id: string, item: Partial<Barang>) => Promise<void>;
+  updateBarang: (id: string, item: Partial<Barang>) => Promise<Barang>;
   deleteBarang: (id: string) => Promise<void>;
 
   addPelanggan: (item: Partial<Pelanggan>) => Promise<Pelanggan>;
-  updatePelanggan: (id: string, item: Partial<Pelanggan>) => Promise<void>;
+  updatePelanggan: (id: string, item: Partial<Pelanggan>) => Promise<Pelanggan>;
   deletePelanggan: (id: string) => Promise<void>;
 
   addPenjualan: (item: Partial<Penjualan>) => Promise<Penjualan>;
-  updatePenjualan: (id: string, item: Partial<Penjualan>) => Promise<void>;
+  updatePenjualan: (id: string, item: Partial<Penjualan>) => Promise<Penjualan>;
   deletePenjualan: (id: string) => Promise<void>;
 
   addSetoran: (item: Partial<Setoran>) => Promise<Setoran>;
-  updateSetoran: (id: string, item: Partial<Setoran>) => Promise<void>;
+  updateSetoran: (id: string, item: Partial<Setoran>) => Promise<Setoran>;
   deleteSetoran: (id: string) => Promise<void>;
 
   addAbsensi: (item: Partial<Absensi>) => Promise<Absensi>;
-  updateAbsensi: (id: string, item: Partial<Absensi>) => Promise<void>;
+  updateAbsensi: (id: string, item: Partial<Absensi>) => Promise<Absensi>;
   deleteAbsensi: (id: string) => Promise<void>;
 
   addKunjungan: (item: Partial<Kunjungan>) => Promise<Kunjungan>;
-  updateKunjungan: (id: string, item: Partial<Kunjungan>) => Promise<void>;
+  updateKunjungan: (id: string, item: Partial<Kunjungan>) => Promise<Kunjungan>;
   deleteKunjungan: (id: string) => Promise<void>;
 
   addRiwayatPelanggan: (item: Partial<RiwayatPelanggan>) => Promise<RiwayatPelanggan>;
-  updateRiwayatPelanggan: (id: string, item: Partial<RiwayatPelanggan>) => Promise<void>;
+  updateRiwayatPelanggan: (id: string, item: Partial<RiwayatPelanggan>) => Promise<RiwayatPelanggan>;
   deleteRiwayatPelanggan: (id: string) => Promise<void>;
 
 
 
   addUser: (item: Partial<User>) => Promise<User>;
-  updateUser: (id: string, item: Partial<User>) => Promise<void>;
+  updateUser: (id: string, item: Partial<User>) => Promise<User>;
   deleteUser: (id: string) => Promise<void>;
 
   addNotifikasi: (item: Partial<Notifikasi>) => Promise<Notifikasi>;
-  updateNotifikasi: (id: string, item: Partial<Notifikasi>) => Promise<void>;
+  updateNotifikasi: (id: string, item: Partial<Notifikasi>) => Promise<Notifikasi>;
   deleteNotifikasi: (id: string) => Promise<void>;
   markNotifikasiRead: (id: string) => Promise<void>;
   markAllNotifikasiRead: () => Promise<void>;
 
   addPersetujuan: (item: Partial<Persetujuan>) => Promise<Persetujuan>;
-  updatePersetujuan: (id: string, item: Partial<Persetujuan>) => Promise<void>;
+  updatePersetujuan: (id: string, item: Partial<Persetujuan>) => Promise<Persetujuan>;
   deletePersetujuan: (id: string) => Promise<void>;
 
   addHarga: (item: Partial<Harga>) => Promise<Harga>;
-  updateHarga: (id: string, item: Partial<Harga>) => Promise<void>;
+  updateHarga: (id: string, item: Partial<Harga>) => Promise<Harga>;
   deleteHarga: (id: string) => Promise<void>;
 
   updateProfilPerusahaan: (item: Partial<ProfilPerusahaan>) => Promise<ProfilPerusahaan>;
 
   addReimburse: (item: Partial<Reimburse>) => Promise<Reimburse>;
-  updateReimburse: (id: string, item: Partial<Reimburse>) => Promise<void>;
+  updateReimburse: (id: string, item: Partial<Reimburse>) => Promise<Reimburse>;
   deleteReimburse: (id: string) => Promise<void>;
 
   addPettyCash: (item: Partial<PettyCash>) => Promise<PettyCash>;
-  updatePettyCash: (id: string, item: Partial<PettyCash>) => Promise<void>;
+  updatePettyCash: (id: string, item: Partial<PettyCash>) => Promise<PettyCash>;
   deletePettyCash: (id: string) => Promise<void>;
 
   addStokPengguna: (item: Partial<StokPengguna>) => Promise<StokPengguna>;
-  updateStokPengguna: (id: string, item: Partial<StokPengguna>) => Promise<void>;
+  updateStokPengguna: (id: string, item: Partial<StokPengguna>) => Promise<StokPengguna>;
   deleteStokPengguna: (id: string) => Promise<void>;
 
   addPromo: (item: Partial<Promo>) => Promise<Promo>;
-  updatePromo: (id: string, item: Partial<Promo>) => Promise<void>;
+  updatePromo: (id: string, item: Partial<Promo>) => Promise<Promo>;
   deletePromo: (id: string) => Promise<void>;
 
   addMutasiBarang: (item: Partial<MutasiBarang>) => Promise<MutasiBarang>;
-  updateMutasiBarang: (id: string, item: Partial<MutasiBarang>) => Promise<void>;
+  updateMutasiBarang: (id: string, item: Partial<MutasiBarang>) => Promise<MutasiBarang>;
   deleteMutasiBarang: (id: string) => Promise<void>;
 
 
   addPenyesuaianStok: (item: Record<string, unknown>) => Promise<unknown>;
-  updatePenyesuaianStok: (id: string, item: Record<string, unknown>) => Promise<void>;
+  updatePenyesuaianStok: (id: string, item: Record<string, unknown>) => Promise<any>;
   deletePenyesuaianStok: (id: string) => Promise<void>;
 
   addPermintaanBarang: (item: Record<string, unknown>) => Promise<unknown>;
-  updatePermintaanBarang: (id: string, item: Record<string, unknown>) => Promise<void>;
+  updatePermintaanBarang: (id: string, item: Record<string, unknown>) => Promise<any>;
   deletePermintaanBarang: (id: string) => Promise<void>;
 
   addPembayaranPenjualan: (item: Partial<PembayaranPenjualan>) => Promise<PembayaranPenjualan>;
@@ -848,12 +851,12 @@ export interface DatabaseContextType {
   // Restock
   // Restock
   addRestock: (item: Partial<Restock>) => Promise<Restock>;
-  updateRestock: (id: string, item: Partial<Restock>) => Promise<void>;
+  updateRestock: (id: string, item: Partial<Restock>) => Promise<Restock>;
   deleteRestock: (id: string) => Promise<void>;
 
   // Sales Target
   addTarget: (item: Partial<SalesTarget>) => Promise<SalesTarget>;
-  updateTarget: (id: string, item: Partial<SalesTarget>) => Promise<void>;
+  updateTarget: (id: string, item: Partial<SalesTarget>) => Promise<SalesTarget>;
   deleteTarget: (id: string) => Promise<void>;
 
   // Merge Pelanggan

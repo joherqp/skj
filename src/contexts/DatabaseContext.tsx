@@ -572,6 +572,8 @@ export function DatabaseProvider({ children }: { children: ReactNode }) {
       const newItem = toCamelCase((data ?? dbItem)) as T;
       if (data) {
         setter((prev) => [newItem, ...prev]);
+        // Force React Query to refetch
+        queryClient.invalidateQueries({ queryKey: ['db', tableName] });
       }
       return newItem;
     } catch (error: any) {
@@ -586,7 +588,7 @@ export function DatabaseProvider({ children }: { children: ReactNode }) {
     try {
       const dbItem = toSnakeCase(item) as Record<string, unknown>;
 
-      const excludeAuditColumns = ['area', 'cabang', 'kategori', 'satuan', 'rekening_bank', 'kategori_pelanggan', 'peran', 'persetujuan', 'users', 'harga', 'notifikasi', 'stok_pengguna', 'absensi', 'saldo_pengguna', 'permintaan_barang', 'penyesuaian_stok', 'kunjungan', 'riwayat_pelanggan', 'pembayaran_penjualan', 'restock'];
+      const excludeAuditColumns = ['area', 'cabang', 'kategori', 'satuan', 'rekening_bank', 'kategori_pelanggan', 'peran', 'persetujuan', 'users', 'harga', 'notifikasi', 'stok_pengguna', 'absensi', 'saldo_pengguna', 'reimburse', 'permintaan_barang', 'penyesuaian_stok', 'kunjungan', 'riwayat_pelanggan', 'pembayaran_penjualan', 'restock'];
 
       if (currentUser && !excludeAuditColumns.includes(tableName)) {
         dbItem.updated_by = currentUser.id;
@@ -646,6 +648,11 @@ export function DatabaseProvider({ children }: { children: ReactNode }) {
 
       const updatedItem = toCamelCase((data ?? { ...dbItem, id })) as T;
       setter((prev) => prev.map((p) => ((p as { id: string }).id === id ? updatedItem : p)));
+      
+      // Force React Query to refetch to stay in sync
+      queryClient.invalidateQueries({ queryKey: ['db', tableName] });
+      
+      return updatedItem;
     } catch (error: any) {
       console.error(`Error updating ${tableName}:`, error.message || error);
       if (error.details) console.error('Error details:', error.details);
@@ -671,6 +678,8 @@ export function DatabaseProvider({ children }: { children: ReactNode }) {
       if (error) throw error;
 
       setter((prev) => prev.filter((p) => (p as { id: string }).id !== id));
+      // Force React Query to refetch
+      queryClient.invalidateQueries({ queryKey: ['db', tableName] });
     } catch (error) {
       console.error(`Error deleting ${tableName}:`, error);
       throw error;
@@ -712,6 +721,7 @@ export function DatabaseProvider({ children }: { children: ReactNode }) {
   }, [absensi, currentUser, updateItem]);
 
   const isAdminOrOwner = currentUser?.roles.includes('admin') || currentUser?.roles.includes('owner');
+  const isFinance = currentUser?.roles.includes('finance');
 
   const value = useMemo<DatabaseContextType>(() => ({
     // State
@@ -761,6 +771,7 @@ export function DatabaseProvider({ children }: { children: ReactNode }) {
     setViewMode,
     pendingSyncCount: 0,
     isAdminOrOwner,
+    isFinance,
     dbMode,
     refresh: () => loadAllData(true),
     repairUser: async () => {
@@ -1028,26 +1039,72 @@ export function DatabaseProvider({ children }: { children: ReactNode }) {
     // PETTY CASH
     addPettyCash: async (item) => {
       try {
-        // Calculate new balance
+        // Calculate new balance per branch
+        const targetBranchId = item.cabangId || currentUser?.cabangId;
+        
+        // Find latest transaction for this branch to get current balance
+        const branchTransactions = pettyCash.filter(pc => {
+            const creator = users.find(u => u.id === pc.createdBy);
+            return (pc.cabangId || creator?.cabangId) === targetBranchId;
+        });
+        
+        // pettyCash is usually sorted by date desc in context
+        const latestBranchPC = branchTransactions[0];
+        const currentBranchBalance = latestBranchPC?.saldoAkhir || 0;
+
         const isExpenses = item.jenis === 'pengeluaran';
         const amount = item.jumlah || 0;
         const newBalance = isExpenses
-          ? pettyCashBalance - amount
-          : pettyCashBalance + amount;
+          ? currentBranchBalance - amount
+          : currentBranchBalance + amount;
 
         const newItemData = { ...item, saldo_akhir: newBalance };
         const newItem = await createItem('petty_cash', newItemData, setPettyCash);
 
-        // Start sync of balance immediately
-        setPettyCashBalance(newBalance);
+        // Update global balance state if the new transaction affects current user's branch
+        if (targetBranchId === currentUser?.cabangId) {
+            setPettyCashBalance(newBalance);
+        }
+        
         return newItem;
       } catch (e) {
         console.error("Failed add petty cash", e);
         throw e;
       }
     },
-    updatePettyCash: (id, item) => updateItem('petty_cash', id, item, setPettyCash),
-    deletePettyCash: (id) => deleteItem('petty_cash', id, setPettyCash),
+    updatePettyCash: async (id, item) => {
+      const oldItem = pettyCash.find(p => p.id === id);
+      const updated = await updateItem('petty_cash', id, item, setPettyCash);
+      
+      if (oldItem && (item.jumlah !== undefined || item.jenis !== undefined)) {
+        const oldAmount = oldItem.jumlah || 0;
+        const newAmount = item.jumlah !== undefined ? item.jumlah : oldAmount;
+        
+        const oldType = oldItem.jenis;
+        const newType = item.jenis !== undefined ? item.jenis : oldType;
+        
+        let delta = 0;
+        // Reverse old impact
+        delta += (oldType === 'pengeluaran' ? oldAmount : -oldAmount);
+        // Apply new impact
+        delta += (newType === 'pengeluaran' ? -newAmount : newAmount);
+        
+        setPettyCashBalance(prev => prev + delta);
+      }
+      return updated;
+    },
+    deletePettyCash: async (id) => {
+      const itemToDelete = pettyCash.find(p => p.id === id);
+      await deleteItem('petty_cash', id, setPettyCash);
+      
+      if (itemToDelete) {
+        const amount = itemToDelete.jumlah || 0;
+        const isExpenses = itemToDelete.jenis === 'pengeluaran';
+        // Reverting the impact of the deleted item
+        const delta = isExpenses ? amount : -amount;
+        setPettyCashBalance(prev => prev + delta);
+      }
+    },
 
     // Stok Pengguna
     addStokPengguna: async (item) => {
@@ -1239,6 +1296,7 @@ export function DatabaseProvider({ children }: { children: ReactNode }) {
     deleteItem,
     harga,
     isAdminOrOwner,
+    isFinance,
     isInitialized,
     isLoading,
     isOnline,

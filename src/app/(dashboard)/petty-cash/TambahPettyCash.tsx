@@ -1,5 +1,5 @@
 'use client';
-import { type ChangeEvent, type FormEvent, useState } from 'react';
+import { type ChangeEvent, type FormEvent, useState, useEffect } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -8,31 +8,97 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select';
 import { toast } from 'sonner';
-import { Wallet, Upload, ArrowLeft, Save, ArrowUpCircle, ArrowDownCircle, Info } from 'lucide-react';
+import { Wallet, Upload, ArrowLeft, Save, ArrowUpCircle, ArrowDownCircle, Info, User } from 'lucide-react';
 import { useDatabase } from '@/contexts/DatabaseContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
 import { compressImage } from '@/lib/imageCompression';
+import { SearchableSelect } from '@/components/ui/searchable-select';
 
 export default function TambahPettyCash() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const typeParam = searchParams.get('type') as 'masuk' | 'keluar' || 'keluar';
+  const editId = searchParams.get('id');
   
   const { user } = useAuth();
-  const { addPettyCash } = useDatabase();
+  const { addPettyCash, updatePettyCash, pettyCash, users, cabang, isAdminOrOwner, isFinance } = useDatabase();
   
   const [formData, setFormData] = useState({
     keterangan: '',
     jumlah: '',
     kategori: 'umum',
     tanggal: new Date().toISOString().slice(0, 16), // datetime-local format
-    bukti: ''
+    bukti: '',
+    penggunaAnggaran: user?.id || '',
+    cabangId: user?.cabangId || ''
   });
   
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
+  const [isEditMode, setIsEditMode] = useState(false);
+
+  // Load data if in edit mode
+  useEffect(() => {
+    const loadTransaction = async () => {
+      if (!editId) return;
+
+      // Try to find in cache first
+      let transaction = pettyCash.find(p => p.id === editId);
+
+      // If not in cache, fetch from Supabase
+      if (!transaction) {
+        try {
+          const { data, error } = await supabase
+            .from('petty_cash')
+            .select('*')
+            .eq('id', editId)
+            .single();
+          
+          if (error) throw error;
+          if (data) {
+            transaction = {
+              ...data,
+              keterangan: data.keterangan,
+              jumlah: data.jumlah,
+              kategori: data.kategori,
+              tanggal: data.tanggal,
+              buktiUrl: data.bukti_url,
+              penggunaAnggaran: data.pengguna_anggaran,
+              tipe: data.tipe,
+              cabangId: data.cabang_id
+            };
+          }
+        } catch (error) {
+          console.error("Error fetching transaction for edit:", error);
+        }
+      }
+
+      if (transaction) {
+        setIsEditMode(true);
+        
+        // Robust category handling: trim, default to 'umum', and lowercase for standard matching
+        const rawKategori = transaction.kategori || '';
+        const cleanKategori = (rawKategori.trim() || 'umum').toLowerCase();
+        
+        setFormData({
+          keterangan: transaction.keterangan || '',
+          jumlah: transaction.jumlah ? new Intl.NumberFormat('id-ID').format(transaction.jumlah) : '0',
+          kategori: cleanKategori,
+          tanggal: transaction.tanggal ? new Date(transaction.tanggal).toISOString().slice(0, 16) : new Date().toISOString().slice(0, 16),
+          bukti: transaction.buktiUrl || '',
+          penggunaAnggaran: transaction.penggunaAnggaran || '',
+          cabangId: transaction.cabangId || ''
+        });
+        if (transaction.buktiUrl) {
+          setPreviewUrl(transaction.buktiUrl);
+        }
+      }
+    };
+
+    loadTransaction();
+  }, [editId, pettyCash, supabase]);
 
   const handleFileChange = async (e: ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
@@ -92,21 +158,30 @@ export default function TambahPettyCash() {
             finalBuktiUrl = urlData.publicUrl;
         }
 
-        await addPettyCash({
+        const payload = {
             tanggal: new Date(formData.tanggal),
             keterangan: formData.keterangan,
             jumlah: parseFloat(formData.jumlah.replace(/\./g, '')),
             tipe: typeParam,
+            jenis: (typeParam === 'masuk' ? 'pemasukan' : 'pengeluaran') as 'pemasukan' | 'pengeluaran',
             kategori: formData.kategori,
             buktiUrl: finalBuktiUrl,
-            createdBy: user.id
-        });
+            penggunaAnggaran: formData.penggunaAnggaran || user?.id || '',
+            cabangId: formData.cabangId || user?.cabangId || ''
+        };
+
+        if (isEditMode && editId) {
+            await updatePettyCash(editId, payload);
+            toast.success('Transaksi berhasil diperbarui');
+        } else {
+            await addPettyCash(payload);
+            toast.success('Transaksi berhasil dicatat');
+        }
         
-        toast.success('Transaksi berhasil dicatat');
         router.push('/petty-cash');
     } catch (error) {
         console.error('Petty cash error:', error);
-        toast.error('Gagal mencatat transaksi');
+        toast.error(isEditMode ? 'Gagal memperbarui transaksi' : 'Gagal mencatat transaksi');
     } finally {
         setUploading(false);
     }
@@ -137,7 +212,7 @@ export default function TambahPettyCash() {
                 )}
               </div>
               <CardTitle className="text-lg">
-                {typeParam === 'masuk' ? 'Input Pemasukan' : 'Input Pengeluaran'}
+                {isEditMode ? 'Update Transaksi' : (typeParam === 'masuk' ? 'Input Pemasukan' : 'Input Pengeluaran')}
               </CardTitle>
             </div>
           </CardHeader>
@@ -145,9 +220,11 @@ export default function TambahPettyCash() {
             <div className={`border rounded-xl p-3 flex gap-3 items-start ${typeParam === 'masuk' ? 'bg-green-50 border-green-100' : 'bg-red-50 border-red-100'}`}>
               <Info className={`w-5 h-5 mt-0.5 shrink-0 ${typeParam === 'masuk' ? 'text-green-600' : 'text-red-600'}`} />
               <p className={`text-xs leading-relaxed ${typeParam === 'masuk' ? 'text-green-700' : 'text-red-700'}`}>
-                {typeParam === 'masuk' 
-                  ? 'Gunakan form ini untuk mencatat penambahan saldo kas kecil (petty cash).' 
-                  : 'Gunakan form ini untuk mencatat pengeluaran operasional yang menggunakan kas kecil.'}
+                {isEditMode 
+                  ? 'Gunakan form ini untuk memperbarui data transaksi kas kecil yang sudah ada.'
+                  : (typeParam === 'masuk' 
+                      ? 'Gunakan form ini untuk mencatat penambahan saldo kas kecil (petty cash).' 
+                      : 'Gunakan form ini untuk mencatat pengeluaran operasional yang menggunakan kas kecil.')}
               </p>
             </div>
 
@@ -204,9 +281,66 @@ export default function TambahPettyCash() {
                       <SelectItem value="transport">Transport</SelectItem>
                       <SelectItem value="atk">ATK</SelectItem>
                       <SelectItem value="lainnya">Lainnya</SelectItem>
+                      {/* Fallback for existing categories not in the list */}
+                      {formData.kategori && !['umum', 'konsumsi', 'transport', 'atk', 'lainnya'].includes(formData.kategori) && (
+                        <SelectItem value={formData.kategori}>
+                          {formData.kategori.charAt(0).toUpperCase() + formData.kategori.slice(1)}
+                        </SelectItem>
+                      )}
                     </SelectContent>
                   </Select>
                 </div>
+
+                {isAdminOrOwner && (
+                    <div className="space-y-1.5">
+                        <Label className="text-sm flex items-center gap-1.5">
+                            <Wallet className="w-3.5 h-3.5" /> Cabang
+                        </Label>
+                        <Select 
+                            value={formData.cabangId} 
+                            onValueChange={(val) => setFormData({...formData, cabangId: val})}
+                        >
+                            <SelectTrigger className="h-11">
+                                <SelectValue placeholder="Pilih Cabang..." />
+                            </SelectTrigger>
+                            <SelectContent>
+                                {cabang.map(c => (
+                                    <SelectItem key={c.id} value={c.id}>{c.nama}</SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
+                    </div>
+                )}
+
+                {(isAdminOrOwner || (isFinance && user?.cabangId !== 'cab-pusat')) && (
+                    <div className="space-y-1.5">
+                        <Label className="text-sm flex items-center gap-1.5">
+                            <User className="w-3.5 h-3.5" /> Dicatat Atas Nama
+                        </Label>
+                        <SearchableSelect 
+                            options={users
+                                .filter(u => isAdminOrOwner || u.cabangId === user?.cabangId)
+                                .sort((a, b) => {
+                                    // Sort by branch then by name
+                                    const branchA = cabang.find(c => c.id === a.cabangId)?.nama || '';
+                                    const branchB = cabang.find(c => c.id === b.cabangId)?.nama || '';
+                                    if (branchA !== branchB) return branchA.localeCompare(branchB);
+                                    return a.nama.localeCompare(b.nama);
+                                })
+                                .map(u => ({ 
+                                    label: u.nama, 
+                                    value: u.id, 
+                                    description: `${cabang.find(c => c.id === u.cabangId)?.nama || 'Tanpa Cabang'} - ${u.roles.join(', ')}`
+                                }))
+                            }
+                            value={formData.penggunaAnggaran}
+                            onChange={(val) => setFormData({...formData, penggunaAnggaran: val})}
+                            placeholder="Pilih pengguna..."
+                            searchPlaceholder="Cari nama pengguna..."
+                            className="h-11"
+                        />
+                    </div>
+                )}
               </div>
 
               <div className="space-y-1.5">
@@ -253,7 +387,7 @@ export default function TambahPettyCash() {
                 }`}
               >
                 <Save className={`w-5 h-5 mr-2 ${uploading ? 'animate-spin' : ''}`} />
-                {uploading ? 'Menyimpan...' : 'Simpan Transaksi'}
+                {uploading ? (isEditMode ? 'Memperbarui...' : 'Menyimpan...') : (isEditMode ? 'Perbarui Transaksi' : 'Simpan Transaksi')}
               </Button>
             </form>
           </CardContent>
