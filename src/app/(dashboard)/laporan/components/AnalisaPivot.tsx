@@ -219,7 +219,7 @@ export default function AnalisaPivot() {
         const brgs = new Set<string>();
         const custCats = new Set<string>();
 
-        const isLeader = currentUser?.roles.includes('leader');
+        const isBranchStaff = currentUser?.roles.some(r => ['leader', 'manager', 'finance'].includes(r));
 
         // Pre-create Maps for faster lookup
         const barangMap = new Map(barang.map(b => [b.id, b]));
@@ -238,7 +238,7 @@ export default function AnalisaPivot() {
                 let canSee = false;
                 if (isAdminOrOwner) {
                     canSee = true;
-                } else if (isLeader) {
+                } else if (isBranchStaff) {
                     canSee = p.cabangId === currentUser?.cabangId;
                 } else {
                     canSee = pSalesId === currentUser?.id;
@@ -282,7 +282,7 @@ export default function AnalisaPivot() {
     // 1. Flatten Data Source
     const flatData = useMemo(() => {
         const isAdminOrOwner = currentUser?.roles.includes('admin') || currentUser?.roles.includes('owner');
-        const isLeader = currentUser?.roles.includes('leader');
+        const isBranchStaff = currentUser?.roles.some(r => ['leader', 'manager', 'finance'].includes(r));
 
         const data: PivotDataItem[] = [];
         penjualan
@@ -292,7 +292,7 @@ export default function AnalisaPivot() {
                 let hasAccess = false;
                 if (isAdminOrOwner) {
                     hasAccess = viewMode === 'me' ? (pSalesId === currentUser?.id) : true;
-                } else if (isLeader) {
+                } else if (isBranchStaff) {
                     hasAccess = p.cabangId === currentUser?.cabangId && (viewMode === 'me' ? (pSalesId === currentUser?.id) : true);
                 } else {
                     hasAccess = pSalesId === currentUser?.id;

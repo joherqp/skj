@@ -46,12 +46,13 @@ export function ScopeFilters({
     const [cabangSearch, setCabangSearch] = useState('');
     const [userSearch, setUserSearch] = useState('');
 
-    const isAdminOrOwner = currentUser?.roles.some(r => ['admin', 'owner', 'manager', 'finance'].includes(r));
+    const isAdminOrOwner = currentUser?.roles.some(r => ['admin', 'owner'].includes(r));
     const isLeader = currentUser?.roles.includes('leader');
     const isFinance = currentUser?.roles.includes('finance');
+    const isManager = currentUser?.roles.includes('manager');
 
     // Only show filters if viewMode is 'all' or user is privileged
-    const canSeeFilters = viewMode === 'all' || isAdminOrOwner || isLeader || isFinance;
+    const canSeeFilters = viewMode === 'all' || isAdminOrOwner || isLeader || isFinance || isManager;
     if (!canSeeFilters) return null;
 
     // Filtered Branch Options
@@ -71,7 +72,7 @@ export function ScopeFilters({
             if (isAdminOrOwner) {
                 const isInSelectedCabang = selectedCabangIds.length === 0 || (u.cabangId && selectedCabangIds.includes(u.cabangId));
                 rolePass = isActive && isInSelectedCabang;
-            } else if (isLeader || isFinance) {
+            } else if (isLeader || isFinance || isManager) {
                 rolePass = isActive && u.cabangId === currentUser?.cabangId;
             } else {
                 rolePass = u.id === currentUser?.id;

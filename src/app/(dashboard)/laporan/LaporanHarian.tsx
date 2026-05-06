@@ -103,7 +103,7 @@ export default function LaporanHarian() {
 
     const [selectedDate, setSelectedDate] = useState<string>(() => format(new Date(), 'yyyy-MM-dd'));
     const isAdminOrOwner = currentUser?.roles.some(r => ['admin', 'owner'].includes(r));
-    const isLeaderOrFinance = currentUser?.roles.some(r => ['leader', 'finance'].includes(r));
+    const isBranchStaff = currentUser?.roles.some(r => ['leader', 'finance', 'manager'].includes(r));
     const [selectedCabangIds, setSelectedCabangIds] = useState<string[]>([]);
     const [selectedUserIds, setSelectedUserIds] = useState<string[]>([]);
 
@@ -205,7 +205,7 @@ export default function LaporanHarian() {
             ? [currentUser.cabangId]
             : selectedCabangIds;
 
-        const effectiveUserIds = (!isAdminOrOwner && !isLeaderOrFinance) 
+        const effectiveUserIds = (!isAdminOrOwner && !isBranchStaff) 
             ? [currentUser.id] 
             : selectedUserIds;
 

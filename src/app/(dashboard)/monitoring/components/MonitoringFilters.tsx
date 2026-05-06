@@ -53,14 +53,14 @@ export function MonitoringFilters({
     setDateRange,
     tampilNama
 }: MonitoringFiltersProps) {
-    const isAdmin = currentUser?.roles.includes('admin') || currentUser?.roles.includes('owner') || currentUser?.roles.includes('finance');
-    const isAdminOwner = currentUser?.roles.includes('admin') || currentUser?.roles.includes('owner');
-    const isLeader = currentUser?.roles.includes('leader');
+    const isAdminOrOwner = currentUser?.roles.includes('admin') || currentUser?.roles.includes('owner');
+    const isBranchStaff = currentUser?.roles.some(r => ['leader', 'manager', 'finance'].includes(r));
     const isSales = currentUser?.roles.includes('sales');
+    const canFilter = isAdminOrOwner || isBranchStaff;
 
     return (
         <div className="flex flex-col md:flex-row gap-2 p-2 bg-muted/40 rounded-xl border">
-            {isAdmin && (
+            {canFilter && (
                 <>
                     <DropdownMenu>
                         <DropdownMenuTrigger asChild>
@@ -150,7 +150,7 @@ export function MonitoringFilters({
                 </>
             )}
 
-            {isAdminOwner && (
+            {isAdminOrOwner && (
                 <Select value={mapMode} onValueChange={(v) => setMapMode(v as MapMode)}>
                     <SelectTrigger className="w-full md:w-[160px] h-9 text-xs bg-background">
                         <SelectValue placeholder="Pilih Mode Peta" />
@@ -194,7 +194,7 @@ export function MonitoringFilters({
                         <SelectItem value="pengguna">
                             <span className="text-xs">Warna: Pengguna</span>
                         </SelectItem>
-                        {isAdminOwner && (
+                        {isAdminOrOwner && (
                             <SelectItem value="cabang">
                                 <span className="text-xs">Warna: Cabang</span>
                             </SelectItem>

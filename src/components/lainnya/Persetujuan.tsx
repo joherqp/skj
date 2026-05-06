@@ -197,19 +197,19 @@ export default function Persetujuan() {
             // So if targetUserId is null, and viewMode is 'self', we skip role/branch targets
             if (viewMode === 'me') {
                 // In 'Me' mode, we only show items if they are specifically targeted to our role OR branch
-                const isSuperUser = user?.roles.includes('admin') || user?.roles.includes('owner') || user?.roles.includes('manager');
+                const isSuperUser = user?.roles.includes('admin') || user?.roles.includes('owner');
                 const roleMatch = p.targetRole && user?.roles.includes(p.targetRole);
                 const branchMatch = p.targetCabangId && p.targetCabangId === user?.cabangId;
                 
                 if (!roleMatch && !branchMatch && !isSuperUser) isTarget = false;
             } else {
                 // 2. Role Target
-                const isSuperUser = user?.roles.includes('admin') || user?.roles.includes('owner') || user?.roles.includes('manager');
+                const isSuperUser = user?.roles.includes('admin') || user?.roles.includes('owner');
                 if (p.targetRole && !user?.roles.includes(p.targetRole) && !isSuperUser) isTarget = false;
 
                 // 3. Branch Target (unless global admin/owner/manager)
                 if (p.targetCabangId) {
-                    const isGlobalUser = user?.roles.includes('admin') || user?.roles.includes('owner') || user?.roles.includes('manager');
+                    const isGlobalUser = user?.roles.includes('admin') || user?.roles.includes('owner');
                     if (!isGlobalUser && p.targetCabangId !== user?.cabangId) isTarget = false;
                 }
             }
@@ -240,10 +240,10 @@ export default function Persetujuan() {
         if (p.targetUserId) {
             if (p.targetUserId !== user?.id) isTarget = false;
         } else {
-            const isSuperUser = user?.roles.includes('admin') || user?.roles.includes('owner') || user?.roles.includes('manager');
+            const isSuperUser = user?.roles.includes('admin') || user?.roles.includes('owner');
             if (p.targetRole && !user?.roles.includes(p.targetRole) && !isSuperUser) isTarget = false;
             if (p.targetCabangId) {
-                const isGlobalUser = user?.roles.includes('admin') || user?.roles.includes('owner') || user?.roles.includes('manager');
+                const isGlobalUser = user?.roles.includes('admin') || user?.roles.includes('owner');
                 if (!isGlobalUser && p.targetCabangId !== user?.cabangId) isTarget = false;
             }
         }

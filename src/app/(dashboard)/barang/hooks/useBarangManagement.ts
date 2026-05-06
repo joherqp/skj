@@ -18,6 +18,7 @@ export const useBarangManagement = () => {
 
     // -- Access Control --
     const isAdminOrOwner = user?.roles.includes('admin') || user?.roles.includes('owner');
+    const isFinanceOrLeader = user?.roles.includes('finance') || user?.roles.includes('leader') || user?.roles.includes('manager');
 
     // -- Filters State --
     const [search, _setSearch] = useState(globalSearch);
@@ -116,22 +117,27 @@ export const useBarangManagement = () => {
             // 1. Basic Active Filter
             if (u.isActive === false) return false;
 
-            // 2. Cabang Filter
+            // 2. Branch Isolation for non-admin
+            if (!isAdminOrOwner && u.cabangId !== user?.cabangId) return false;
+
+            // 3. Cabang Filter
             if (filterCabang.length > 0 && !filterCabang.includes(u.cabangId || '')) return false;
 
-            // 3. Stock Availability Filter
+            // 4. Stock Availability Filter
             const userTotalStock = stokPengguna
                 .filter(s => s.userId === u.id)
                 .reduce((acc, curr) => acc + curr.jumlah, 0);
 
             return userTotalStock > 0;
         });
-    }, [users, filterCabang, stokPengguna]);
+    }, [users, filterCabang, stokPengguna, isAdminOrOwner, user?.cabangId]);
 
     // -- Display Logic (Global vs Personal) --
     const displayedItems = useMemo(() => {
-        // 1. Admin / Owner / Gudang -> Global or Branch-specific
-        if (isAdminOrOwner) {
+        // 1. High-level access (Admin/Owner/Finance/Leader) -> Global or Branch-specific
+        if (isAdminOrOwner || isFinanceOrLeader) {
+            const effectiveCabangIds = isAdminOrOwner ? filterCabang : [user?.cabangId || ''];
+
             if (filterUser) {
                 // Specific User Stock
                 return filteredBarang.map(item => {
@@ -158,8 +164,8 @@ export const useBarangManagement = () => {
                     .sort((a, b) => (b.stok || 0) - (a.stok || 0));
             }
 
-            if (filterCabang.length === 0) {
-                // All User Stocks
+            if (effectiveCabangIds.length === 0) {
+                // All User Stocks (Consolidated)
                 return filteredBarang.map(item => {
                     let consolidatedStock = 0;
                     stokPengguna.filter(s => s.barangId === item.id)
@@ -184,8 +190,8 @@ export const useBarangManagement = () => {
                     return globalItem;
                 }).filter((item): item is (BarangType & { stok: number }) => item !== null);
             } else {
-                // Specific Branch Stock
-                const branchUserIds = users.filter(u => filterCabang.includes(u.cabangId)).map(u => u.id);
+                // Specific Branch Stock (or restricted branch for non-admins)
+                const branchUserIds = users.filter(u => effectiveCabangIds.includes(u.cabangId || '')).map(u => u.id);
 
                 return filteredBarang.map(item => {
                     let branchStock = 0;
@@ -259,6 +265,7 @@ export const useBarangManagement = () => {
 
         // Utils
         isAdminOrOwner,
+        isFinanceOrLeader,
         getStockHealth
     };
 };

@@ -88,10 +88,11 @@ export default function Setoran() {
     })
     : users.filter(u => {
       if (viewMode === 'me') return u.id === user?.id;
-      // Leaders/Finance can see branch in 'all' mode
+      // Leaders/Finance/Managers can see branch in 'all' mode
       const isUserLeader = user?.roles.includes('leader');
       const isUserFinance = user?.roles.includes('finance');
-      if (isUserLeader || isUserFinance) {
+      const isUserManager = user?.roles.includes('manager');
+      if (isUserLeader || isUserFinance || isUserManager) {
         const matchesCabang = u.cabangId === user?.cabangId;
         const matchesUser = selectedUserIds.length === 0 || selectedUserIds.includes(u.id);
         return matchesCabang && matchesUser;
@@ -524,7 +525,7 @@ export default function Setoran() {
                 )}
 
                 {/* Sales Filter (Only if in Team Mode) */}
-                {(isAdminOrOwner || isFinance || user?.roles.includes('leader')) && viewMode === 'all' && (
+                {(isAdminOrOwner || isFinance || user?.roles.includes('leader') || user?.roles.includes('manager')) && viewMode === 'all' && (
                   <div className="space-y-3">
                     <Label>Salesperson</Label>
                     <DropdownMenu>
@@ -558,7 +559,7 @@ export default function Setoran() {
                             const isInSelectedCabang = selectedCabangIds.length === 0 || (u.cabangId && selectedCabangIds.includes(u.cabangId));
                             return isSalesOrLeader && isActive && isInSelectedCabang;
                           }
-                          // If finance/leader, see same branch
+                          // If finance/leader/manager, see same branch
                           return isSalesOrLeader && isActive && u.cabangId === user?.cabangId;
                         }).sort((a, b) => a.nama.localeCompare(b.nama)).map(u => (
                           <DropdownMenuCheckboxItem

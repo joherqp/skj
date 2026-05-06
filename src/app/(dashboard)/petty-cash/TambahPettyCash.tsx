@@ -1,5 +1,5 @@
 'use client';
-import { type ChangeEvent, type FormEvent, useState, useEffect } from 'react';
+import { type ChangeEvent, type FormEvent, useState, useEffect, useMemo, useRef } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -14,6 +14,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
 import { compressImage } from '@/lib/imageCompression';
 import { SearchableSelect } from '@/components/ui/searchable-select';
+import { getUserDisplayName, toProperCase } from '@/lib/utils';
 
 export default function TambahPettyCash() {
   const router = useRouter();
@@ -22,7 +23,9 @@ export default function TambahPettyCash() {
   const editId = searchParams.get('id');
   
   const { user } = useAuth();
-  const { addPettyCash, updatePettyCash, pettyCash, users, cabang, isAdminOrOwner, isFinance } = useDatabase();
+  const { addPettyCash, updatePettyCash, pettyCash, users, cabang, isAdminOrOwner, isFinance, profilPerusahaan } = useDatabase();
+  
+  const displayMode = profilPerusahaan?.config?.tampilNama || 'nama';
   
   const [formData, setFormData] = useState({
     keterangan: '',
@@ -36,13 +39,14 @@ export default function TambahPettyCash() {
   
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
-  const [uploading, setUploading] = useState(false);
-  const [isEditMode, setIsEditMode] = useState(false);
+   const [uploading, setUploading] = useState(false);
+   const [isEditMode, setIsEditMode] = useState(false);
+   const hasLoadedData = useRef(false);
 
   // Load data if in edit mode
   useEffect(() => {
     const loadTransaction = async () => {
-      if (!editId) return;
+      if (!editId || hasLoadedData.current) return;
 
       // Try to find in cache first
       let transaction = pettyCash.find(p => p.id === editId);
@@ -76,11 +80,23 @@ export default function TambahPettyCash() {
       }
 
       if (transaction) {
+        // Access Control: Finance/Leader/Manager can only edit if incomplete
+        const isBranchAdmin = isFinance || user?.roles.includes('manager') || user?.roles.includes('leader');
+        const isBelumTerisi = !transaction.keterangan || !transaction.buktiUrl || !transaction.penggunaAnggaran || !transaction.kategori;
+        const canEdit = isAdminOrOwner || (isBranchAdmin && isBelumTerisi);
+
+        if (!canEdit) {
+            toast.error(isBranchAdmin ? 'Transaksi ini sudah lengkap dan tidak dapat diubah oleh Finance' : 'Hanya Admin yang dapat mengedit transaksi');
+            router.push('/petty-cash');
+            return;
+        }
+
         setIsEditMode(true);
+        hasLoadedData.current = true;
         
-        // Robust category handling: trim, default to 'umum', and lowercase for standard matching
+        // Preserve original casing but trim
         const rawKategori = transaction.kategori || '';
-        const cleanKategori = (rawKategori.trim() || 'umum').toLowerCase();
+        const cleanKategori = rawKategori.trim() || 'umum';
         
         setFormData({
           keterangan: transaction.keterangan || '',
@@ -99,6 +115,25 @@ export default function TambahPettyCash() {
 
     loadTransaction();
   }, [editId, pettyCash, supabase]);
+
+  // Get all unique categories from existing transactions
+  const categoryOptions = useMemo(() => {
+    const defaultCats = ['umum', 'konsumsi', 'transport', 'atk', 'lainnya'];
+    
+    // Get unique categories, preserving casing if possible but deduplicating
+    const seen = new Set(defaultCats);
+    const options = defaultCats.map(c => ({ label: toProperCase(c), value: c }));
+    
+    pettyCash.forEach(p => {
+        const cat = (p.kategori || '').trim();
+        if (cat && !seen.has(cat.toLowerCase())) {
+            seen.add(cat.toLowerCase());
+            options.push({ label: toProperCase(cat), value: cat });
+        }
+    });
+    
+    return options.sort((a, b) => a.label.localeCompare(b.label));
+  }, [pettyCash]);
 
   const handleFileChange = async (e: ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
@@ -271,24 +306,14 @@ export default function TambahPettyCash() {
                 
                 <div className="space-y-1.5">
                   <Label className="text-sm">Kategori</Label>
-                  <Select value={formData.kategori} onValueChange={(val) => setFormData({...formData, kategori: val})}>
-                    <SelectTrigger className="h-11">
-                      <SelectValue placeholder="Pilih kategori" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="umum">Umum</SelectItem>
-                      <SelectItem value="konsumsi">Konsumsi</SelectItem>
-                      <SelectItem value="transport">Transport</SelectItem>
-                      <SelectItem value="atk">ATK</SelectItem>
-                      <SelectItem value="lainnya">Lainnya</SelectItem>
-                      {/* Fallback for existing categories not in the list */}
-                      {formData.kategori && !['umum', 'konsumsi', 'transport', 'atk', 'lainnya'].includes(formData.kategori) && (
-                        <SelectItem value={formData.kategori}>
-                          {formData.kategori.charAt(0).toUpperCase() + formData.kategori.slice(1)}
-                        </SelectItem>
-                      )}
-                    </SelectContent>
-                  </Select>
+                  <SearchableSelect 
+                      options={categoryOptions}
+                      value={formData.kategori}
+                      onChange={(val) => setFormData({...formData, kategori: val})}
+                      placeholder="Pilih atau cari kategori..."
+                      searchPlaceholder="Cari kategori..."
+                      className="h-11"
+                  />
                 </div>
 
                 {isAdminOrOwner && (
@@ -328,7 +353,7 @@ export default function TambahPettyCash() {
                                     return a.nama.localeCompare(b.nama);
                                 })
                                 .map(u => ({ 
-                                    label: u.nama, 
+                                    label: getUserDisplayName(u, displayMode), 
                                     value: u.id, 
                                     description: `${cabang.find(c => c.id === u.cabangId)?.nama || 'Tanpa Cabang'} - ${u.roles.join(', ')}`
                                 }))

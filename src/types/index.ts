@@ -823,7 +823,7 @@ export interface DatabaseContextType {
 
   addPettyCash: (item: Partial<PettyCash>) => Promise<PettyCash>;
   updatePettyCash: (id: string, item: Partial<PettyCash>) => Promise<PettyCash>;
-  deletePettyCash: (id: string) => Promise<void>;
+  voidPettyCash: (id: string) => Promise<PettyCash>;
 
   addStokPengguna: (item: Partial<StokPengguna>) => Promise<StokPengguna>;
   updateStokPengguna: (id: string, item: Partial<StokPengguna>) => Promise<StokPengguna>;

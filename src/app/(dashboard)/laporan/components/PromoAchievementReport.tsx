@@ -21,7 +21,7 @@ export default function PromoAchievementReport() {
   const [searchQuery, setSearchQuery] = useState('');
 
   const isAdminOrOwner = currentUser?.roles.some(r => ['admin', 'owner'].includes(r));
-  const isLeader = currentUser?.roles.includes('leader');
+  const isBranchStaff = currentUser?.roles.some(r => ['leader', 'manager', 'finance'].includes(r));
 
   // Filter only Event type promos
   const eventPromos = useMemo(() => {
@@ -61,7 +61,7 @@ export default function PromoAchievementReport() {
       let hasAccess = false;
       if (isAdminOrOwner) {
         hasAccess = true;
-      } else if (isLeader) {
+      } else if (isBranchStaff) {
         hasAccess = p.cabangId === currentUser.cabangId;
       } else {
         hasAccess = (p.salesId || p.createdBy) === currentUser.id;
@@ -124,7 +124,7 @@ export default function PromoAchievementReport() {
         a.kode.toLowerCase().includes(searchQuery.toLowerCase())
       )
       .sort((a, b) => b.totalQty - a.totalQty);
-  }, [selectedPromo, penjualan, pelanggan, searchQuery, currentUser, isAdminOrOwner, isLeader]);
+  }, [selectedPromo, penjualan, pelanggan, searchQuery, currentUser, isAdminOrOwner, isBranchStaff]);
 
   return (
     <div className="space-y-10 pb-20 relative">

@@ -507,7 +507,7 @@ export function DatabaseProvider({ children }: { children: ReactNode }) {
     try {
       const dbItem = toSnakeCase(item) as Record<string, unknown>;
 
-      const excludeAuditColumns = ['area', 'cabang', 'kategori', 'satuan', 'rekening_bank', 'kategori_pelanggan', 'peran', 'persetujuan', 'users', 'harga', 'notifikasi', 'stok_pengguna', 'absensi', 'saldo_pengguna', 'reimburse', 'petty_cash', 'permintaan_barang', 'penyesuaian_stok', 'kunjungan', 'riwayat_pelanggan', 'pembayaran_penjualan', 'restock'];
+      const excludeAuditColumns = ['area', 'cabang', 'kategori', 'satuan', 'rekening_bank', 'kategori_pelanggan', 'peran', 'persetujuan', 'users', 'harga', 'notifikasi', 'stok_pengguna', 'absensi', 'saldo_pengguna', 'reimburse', 'permintaan_barang', 'penyesuaian_stok', 'kunjungan', 'riwayat_pelanggan', 'pembayaran_penjualan', 'restock'];
 
       if (currentUser && !excludeAuditColumns.includes(tableName)) {
         dbItem.created_by = currentUser.id;
@@ -722,6 +722,70 @@ export function DatabaseProvider({ children }: { children: ReactNode }) {
 
   const isAdminOrOwner = currentUser?.roles.includes('admin') || currentUser?.roles.includes('owner');
   const isFinance = currentUser?.roles.includes('finance');
+
+  const addPettyCash = useCallback(async (item: Partial<PettyCash>) => {
+    try {
+      const targetBranchId = item.cabangId || currentUser?.cabangId;
+      const branchTransactions = pettyCash.filter(pc => {
+          const creator = users.find(u => u.id === pc.createdBy);
+          return (pc.cabangId || creator?.cabangId) === targetBranchId;
+      });
+      
+      const latestBranchPC = branchTransactions[0];
+      const currentBranchBalance = latestBranchPC?.saldoAkhir || 0;
+
+      const isExpenses = item.jenis === 'pengeluaran';
+      const amount = item.jumlah || 0;
+      const newBalance = isExpenses
+        ? currentBranchBalance - amount
+        : currentBranchBalance + amount;
+
+      const newItemData = { ...item, saldo_akhir: newBalance };
+      const newItem = await createItem('petty_cash', newItemData, setPettyCash);
+
+      if (targetBranchId === currentUser?.cabangId) {
+          setPettyCashBalance(newBalance);
+      }
+      
+      return newItem;
+    } catch (e) {
+      console.error("Failed add petty cash", e);
+      throw e;
+    }
+  }, [currentUser, pettyCash, users, createItem]);
+
+  const updatePettyCash = useCallback(async (id: string, item: Partial<PettyCash>) => {
+    const oldItem = pettyCash.find(p => p.id === id);
+    const updated = await updateItem('petty_cash', id, item, setPettyCash);
+    
+    if (oldItem && (item.jumlah !== undefined || item.jenis !== undefined)) {
+      const oldAmount = oldItem.jumlah || 0;
+      const newAmount = item.jumlah !== undefined ? item.jumlah : oldAmount;
+      
+      const oldType = oldItem.jenis;
+      const newType = item.jenis !== undefined ? item.jenis : oldType;
+      
+      let delta = 0;
+      delta += (oldType === 'pengeluaran' ? oldAmount : -oldAmount);
+      delta += (newType === 'pengeluaran' ? -newAmount : newAmount);
+      
+      setPettyCashBalance(prev => prev + delta);
+    }
+    return updated;
+  }, [pettyCash, updateItem]);
+
+  const voidPettyCash = useCallback(async (id: string) => {
+    const itemToVoid = pettyCash.find(p => p.id === id);
+    if (!itemToVoid) throw new Error('Transaksi tidak ditemukan');
+    
+    const originalAmount = itemToVoid.jumlah || 0;
+    const originalKeterangan = itemToVoid.keterangan || '';
+    
+    return await updatePettyCash(id, {
+      jumlah: 0,
+      keterangan: `[VOID] (Rp ${new Intl.NumberFormat('id-ID').format(originalAmount)}) ${originalKeterangan}`.trim()
+    });
+  }, [pettyCash, updatePettyCash]);
 
   const value = useMemo<DatabaseContextType>(() => ({
     // State
@@ -1037,74 +1101,9 @@ export function DatabaseProvider({ children }: { children: ReactNode }) {
     deleteReimburse: (id) => deleteItem('reimburse', id, setReimburse),
 
     // PETTY CASH
-    addPettyCash: async (item) => {
-      try {
-        // Calculate new balance per branch
-        const targetBranchId = item.cabangId || currentUser?.cabangId;
-        
-        // Find latest transaction for this branch to get current balance
-        const branchTransactions = pettyCash.filter(pc => {
-            const creator = users.find(u => u.id === pc.createdBy);
-            return (pc.cabangId || creator?.cabangId) === targetBranchId;
-        });
-        
-        // pettyCash is usually sorted by date desc in context
-        const latestBranchPC = branchTransactions[0];
-        const currentBranchBalance = latestBranchPC?.saldoAkhir || 0;
-
-        const isExpenses = item.jenis === 'pengeluaran';
-        const amount = item.jumlah || 0;
-        const newBalance = isExpenses
-          ? currentBranchBalance - amount
-          : currentBranchBalance + amount;
-
-        const newItemData = { ...item, saldo_akhir: newBalance };
-        const newItem = await createItem('petty_cash', newItemData, setPettyCash);
-
-        // Update global balance state if the new transaction affects current user's branch
-        if (targetBranchId === currentUser?.cabangId) {
-            setPettyCashBalance(newBalance);
-        }
-        
-        return newItem;
-      } catch (e) {
-        console.error("Failed add petty cash", e);
-        throw e;
-      }
-    },
-    updatePettyCash: async (id, item) => {
-      const oldItem = pettyCash.find(p => p.id === id);
-      const updated = await updateItem('petty_cash', id, item, setPettyCash);
-      
-      if (oldItem && (item.jumlah !== undefined || item.jenis !== undefined)) {
-        const oldAmount = oldItem.jumlah || 0;
-        const newAmount = item.jumlah !== undefined ? item.jumlah : oldAmount;
-        
-        const oldType = oldItem.jenis;
-        const newType = item.jenis !== undefined ? item.jenis : oldType;
-        
-        let delta = 0;
-        // Reverse old impact
-        delta += (oldType === 'pengeluaran' ? oldAmount : -oldAmount);
-        // Apply new impact
-        delta += (newType === 'pengeluaran' ? -newAmount : newAmount);
-        
-        setPettyCashBalance(prev => prev + delta);
-      }
-      return updated;
-    },
-    deletePettyCash: async (id) => {
-      const itemToDelete = pettyCash.find(p => p.id === id);
-      await deleteItem('petty_cash', id, setPettyCash);
-      
-      if (itemToDelete) {
-        const amount = itemToDelete.jumlah || 0;
-        const isExpenses = itemToDelete.jenis === 'pengeluaran';
-        // Reverting the impact of the deleted item
-        const delta = isExpenses ? amount : -amount;
-        setPettyCashBalance(prev => prev + delta);
-      }
-    },
+    addPettyCash,
+    updatePettyCash,
+    voidPettyCash,
 
     // Stok Pengguna
     addStokPengguna: async (item) => {
@@ -1313,6 +1312,9 @@ export function DatabaseProvider({ children }: { children: ReactNode }) {
     permintaanBarang,
     persetujuan,
     pettyCash,
+    addPettyCash,
+    updatePettyCash,
+    voidPettyCash,
     pettyCashBalance,
     profilPerusahaan,
     promo,

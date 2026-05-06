@@ -83,7 +83,7 @@ export default function AnalisaVisual() {
     const [searchQuery, setSearchQuery] = useState({ cabang: '', user: '', kategori: '', barang: '' });
 
     const isAdminOrOwner = useMemo(() => currentUser?.roles?.some(r => ['admin', 'owner'].includes(r)) || false, [currentUser]);
-    const isLeader = useMemo(() => currentUser?.roles?.includes('leader') || false, [currentUser]);
+    const isBranchStaff = useMemo(() => currentUser?.roles?.some(r => ['leader', 'manager', 'finance'].includes(r)) || false, [currentUser]);
 
     // Auto-select "Rokok" category on initial load if none selected
     useEffect(() => {
@@ -149,7 +149,7 @@ export default function AnalisaVisual() {
             let hasAccess = false;
             if (isAdminOrOwner) {
                 hasAccess = viewMode === 'me' ? (pSalesId === currentUser?.id) : true;
-            } else if (isLeader) {
+            } else if (isBranchStaff) {
                 hasAccess = p.cabangId === currentUser?.cabangId && (viewMode === 'me' ? (pSalesId === currentUser?.id) : true);
             } else {
                 hasAccess = pSalesId === currentUser?.id;
@@ -173,7 +173,7 @@ export default function AnalisaVisual() {
             
             return true;
         });
-    }, [penjualan, dateBoundaries, currentUser, viewMode, selectedCabangIds, selectedUserIds, isAdminOrOwner, isLeader]);
+    }, [penjualan, dateBoundaries, currentUser, viewMode, selectedCabangIds, selectedUserIds, isAdminOrOwner, isBranchStaff]);
 
     const itemFilter = useMemo(() => (item: any) => {
         if (!item) return false;

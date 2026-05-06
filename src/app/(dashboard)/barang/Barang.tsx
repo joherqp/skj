@@ -35,6 +35,7 @@ export default function Barang() {
 
         // Utils
         isAdminOrOwner,
+        isFinanceOrLeader,
         getStockHealth
     } = useBarangManagement();
 
@@ -73,6 +74,7 @@ export default function Barang() {
                             cabangList={cabangList}
                             users={users}
                             isAdminOrOwner={isAdminOrOwner}
+                            isFinanceOrLeader={isFinanceOrLeader}
                         />
 
                         <Button onClick={() => router.push('/barang/update-stok')} variant="secondary" className="border-primary/20 bg-primary/5 text-primary hover:bg-primary/10">

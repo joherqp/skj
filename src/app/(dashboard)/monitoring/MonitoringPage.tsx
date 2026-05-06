@@ -53,10 +53,10 @@ export default function Monitoring() {
     const [selectedMarker, setSelectedMarker] = useState<MapMarker | null>(null);
     const [mapCenter, setMapCenter] = useState<{ lat: number; lng: number }>({ lat: -6.2088, lng: 106.8456 });
     const [selectedCabang, setSelectedCabang] = useState<string[]>([]);
-    const isLeader = useMemo(() => currentUser?.roles.includes('leader'), [currentUser]);
-    const isSalesOnly = useMemo(() => currentUser?.roles.includes('sales') && !currentUser?.roles.includes('leader'), [currentUser]);
+    const isBranchStaff = useMemo(() => currentUser?.roles.some(r => ['leader', 'manager', 'finance'].includes(r)), [currentUser]);
+    const isSalesOnly = useMemo(() => currentUser?.roles.includes('sales') && !isBranchStaff, [currentUser, isBranchStaff]);
     const isAdminOwner = useMemo(() => currentUser?.roles.includes('admin') || currentUser?.roles.includes('owner'), [currentUser]);
-    const isRestricted = useMemo(() => currentUser?.roles.some(r => ['leader', 'sales'].includes(r)), [currentUser]);
+    const isRestricted = useMemo(() => currentUser?.roles.some(r => ['leader', 'manager', 'finance', 'sales'].includes(r)), [currentUser]);
 
     // Force branch selection for restricted roles (leader/sales)
     useEffect(() => {
@@ -179,18 +179,45 @@ export default function Monitoring() {
     const [selectedSessionUsers, setSelectedSessionUsers] = useState<string[]>([]); // Changed to array for multi-select
 
     // Helper to filter items based on viewMode
-    const filterByViewMode = useCallback(<T extends { userId?: string; salesId?: string; createdBy?: string; id: string }>(items: T[]) => {
-        // Force "me" filter ONLY for sales. Leaders can see their branch.
-        if (viewMode === 'me' || (currentUser?.roles.includes('sales') && !currentUser?.roles.includes('leader'))) {
+    const filterByViewMode = useCallback(<T extends { userId?: string; salesId?: string; createdBy?: string; id: string; cabangId?: string }>(items: T[]) => {
+        // 1. If viewMode is 'me', filter strictly by current user
+        if (viewMode === 'me') {
             return items.filter(item =>
                 (item.userId && item.userId === currentUser?.id) ||
                 (item.salesId && item.salesId === currentUser?.id) ||
                 (item.createdBy && item.createdBy === currentUser?.id) ||
-                (item.id === currentUser?.id) // For user-specific items like activeUsers
+                (item.id === currentUser?.id)
             );
         }
+
+        // 2. If restricted role (Leader, Manager, Finance, Sales), enforce branch/ownership
+        if (isRestricted) {
+            const isStaff = currentUser?.roles.some(r => ['leader', 'manager', 'finance'].includes(r));
+            
+            if (isStaff) {
+                // Staff see all in branch
+                return items.filter(item => {
+                    // Check item's branch directly if available
+                    if (item.cabangId && item.cabangId === currentUser?.cabangId) return true;
+                    
+                    // Otherwise check owner's branch
+                    const ownerId = item.userId || item.salesId || item.createdBy || item.id;
+                    const owner = users.find(u => u.id === ownerId);
+                    return owner?.cabangId === currentUser?.cabangId;
+                });
+            } else {
+                // Regular sales only see themselves even in 'all' mode if restricted
+                return items.filter(item =>
+                    (item.userId && item.userId === currentUser?.id) ||
+                    (item.salesId && item.salesId === currentUser?.id) ||
+                    (item.createdBy && item.createdBy === currentUser?.id) ||
+                    (item.id === currentUser?.id)
+                );
+            }
+        }
+
         return items;
-    }, [viewMode, currentUser, isRestricted]);
+    }, [viewMode, currentUser, isRestricted, users]);
 
     // Calculate Team Markers
     const teamMarkers = useMemo(() => {
@@ -491,19 +518,20 @@ export default function Monitoring() {
             if (!(u.roles.includes('sales') || u.roles.includes('leader'))) return false;
 
             // 3. Permission Check
-            // If Admin/Owner/Finance/Manager -> See All
-            if (currentUser?.roles.includes('admin') || currentUser?.roles.includes('owner') || currentUser?.roles.includes('finance') || currentUser?.roles.includes('manager')) {
-                return true;
-            }
-            // If Leader -> See their branch
-            if (currentUser?.roles.includes('leader')) {
-                return u.cabangId === currentUser.cabangId;
-            }
-            // If Sales -> See ONLY themselves
-            if (currentUser?.roles.includes('sales')) {
-                return u.id === currentUser?.id;
-            }
-            return true;
+            const isAdminOrOwner = currentUser?.roles.includes('admin') || currentUser?.roles.includes('owner');
+            if (isAdminOrOwner) return true;
+
+            // Branch isolation for non-admin
+            if (u.cabangId !== currentUser?.cabangId) return false;
+
+            const isHighLevelInBranch = currentUser?.roles.includes('finance') || 
+                                       currentUser?.roles.includes('leader') || 
+                                       currentUser?.roles.includes('manager');
+            
+            if (isHighLevelInBranch) return true;
+
+            // Sales/Staf only see themselves
+            return u.id === currentUser?.id;
         });
 
         // Apply viewMode filter

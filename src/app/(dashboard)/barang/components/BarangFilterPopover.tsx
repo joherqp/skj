@@ -25,6 +25,7 @@ interface BarangFilterPopoverProps {
     cabangList: Cabang[];
     users: User[];
     isAdminOrOwner: boolean;
+    isFinanceOrLeader: boolean;
 }
 
 export function BarangFilterPopover({
@@ -35,7 +36,7 @@ export function BarangFilterPopover({
     filterCabang, setFilterCabang,
     filterUser, setFilterUser,
     showInactive, setShowInactive,
-    kategoriList, cabangList, users, isAdminOrOwner
+    kategoriList, cabangList, users, isAdminOrOwner, isFinanceOrLeader
 }: BarangFilterPopoverProps) {
     return (
         <Popover open={isFilterOpen} onOpenChange={setIsFilterOpen}>
@@ -82,46 +83,47 @@ export function BarangFilterPopover({
 
                     {/* Cabang Filter (Multi) - Admin Only */}
                     {isAdminOrOwner && (
-                        <>
-                            <div className="space-y-3 pt-3 border-t">
-                                <Label>Cabang</Label>
-                                <div className="space-y-2">
-                                    {cabangList.filter(c => !c.nama.toLowerCase().includes('pusat')).map(c => (
-                                        <div key={c.id} className="flex items-center space-x-2">
-                                            <input
-                                                type="checkbox"
-                                                id={`branch-${c.id}`}
-                                                className="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary"
-                                                checked={filterCabang.includes(c.id)}
-                                                onChange={(e) => {
-                                                    if (e.target.checked) setFilterCabang([...filterCabang, c.id]);
-                                                    else setFilterCabang(filterCabang.filter(id => id !== c.id));
-                                                }}
-                                            />
-                                            <label htmlFor={`branch-${c.id}`} className="text-sm leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
-                                                {c.nama}
-                                            </label>
-                                        </div>
-                                    ))}
-                                </div>
+                        <div className="space-y-3 pt-3 border-t">
+                            <Label>Cabang</Label>
+                            <div className="space-y-2">
+                                {cabangList.filter(c => !c.nama.toLowerCase().includes('pusat')).map(c => (
+                                    <div key={c.id} className="flex items-center space-x-2">
+                                        <input
+                                            type="checkbox"
+                                            id={`branch-${c.id}`}
+                                            className="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary"
+                                            checked={filterCabang.includes(c.id)}
+                                            onChange={(e) => {
+                                                if (e.target.checked) setFilterCabang([...filterCabang, c.id]);
+                                                else setFilterCabang(filterCabang.filter(id => id !== c.id));
+                                            }}
+                                        />
+                                        <label htmlFor={`branch-${c.id}`} className="text-sm leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
+                                            {c.nama}
+                                        </label>
+                                    </div>
+                                ))}
                             </div>
+                        </div>
+                    )}
 
-                            <div className="space-y-3 pt-3 border-t">
-                                <Label>Pengguna Spesifik</Label>
-                                <SearchableSelect
-                                    options={users
-                                        .map(u => ({
-                                            label: getUserDisplayName(u, 'panggilan'),
-                                            value: u.id,
-                                            description: cabangList.find(c => c.id === u.cabangId)?.nama || u.roles?.[0]
-                                        }))}
-                                    value={filterUser}
-                                    onChange={setFilterUser}
-                                    placeholder="Pilih pengguna..."
-                                    searchPlaceholder="Cari nama..."
-                                />
-                            </div>
-                        </>
+                    {/* Pengguna Spesifik Filter - Admin/Finance/Leader */}
+                    {(isAdminOrOwner || isFinanceOrLeader) && (
+                        <div className="space-y-3 pt-3 border-t">
+                            <Label>Pengguna Spesifik</Label>
+                            <SearchableSelect
+                                options={users
+                                    .map(u => ({
+                                        label: getUserDisplayName(u, 'panggilan'),
+                                        value: u.id,
+                                        description: cabangList.find(c => c.id === u.cabangId)?.nama || u.roles?.[0]
+                                    }))}
+                                value={filterUser}
+                                onChange={setFilterUser}
+                                placeholder="Pilih pengguna..."
+                                searchPlaceholder="Cari nama..."
+                            />
+                        </div>
                     )}
 
                     {/* Stock Status */}

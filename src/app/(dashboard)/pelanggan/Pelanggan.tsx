@@ -114,8 +114,8 @@ ${profilPerusahaan?.nama || ''}`;
 
   const activeFiltersCount = (filterKategori.length > 0 ? 1 : 0) + (filterStatus !== 'all' ? 1 : 0) + (selectedCabangIds.length > 0 ? 1 : 0) + (selectedUserIds.length > 0 ? 1 : 0);
 
-  const isAdminOrOwner = user?.roles.includes('admin') || user?.roles.includes('owner');
-  const isLeader = user?.roles.includes('leader');
+  const isAdminOrOwner = user?.roles.some(r => ['admin', 'owner'].includes(r));
+  const isBranchStaff = user?.roles.some(r => ['leader', 'manager', 'finance'].includes(r));
 
   const today = new Date();
   const todayStr = today.toDateString();
@@ -136,7 +136,7 @@ ${profilPerusahaan?.nama || ''}`;
             if (!kUser?.cabangId || !selectedCabangIds.includes(kUser.cabangId)) return false;
           }
           if (selectedUserIds.length > 0 && !selectedUserIds.includes(k.userId)) return false;
-        } else if (isLeader) {
+        } else if (isBranchStaff) {
           const kUser = users.find(u => u.id === k.userId);
           if (kUser?.cabangId !== user?.cabangId) return false;
           if (selectedUserIds.length > 0 && !selectedUserIds.includes(k.userId)) return false;
@@ -163,7 +163,7 @@ ${profilPerusahaan?.nama || ''}`;
             if (!pUser?.cabangId || !selectedCabangIds.includes(pUser.cabangId)) return false;
           }
           if (selectedUserIds.length > 0 && !selectedUserIds.includes(p.salesId)) return false;
-        } else if (isLeader) {
+        } else if (isBranchStaff) {
           const pUser = users.find(u => u.id === p.salesId);
           if (pUser?.cabangId !== user?.cabangId) return false;
           if (selectedUserIds.length > 0 && !selectedUserIds.includes(p.salesId)) return false;
@@ -176,7 +176,7 @@ ${profilPerusahaan?.nama || ''}`;
 
     // 3. Combine and unique
     return Array.from(new Set([...visitedCustomerIds, ...soldCustomerIds]));
-  }, [kunjungan, penjualan, todayStr, viewMode, user, selectedCabangIds, selectedUserIds, isAdminOrOwner, isLeader, users]);
+  }, [kunjungan, penjualan, todayStr, viewMode, user, selectedCabangIds, selectedUserIds, isAdminOrOwner, isBranchStaff, users]);
 
   // Duplicate Detection
   const duplicates = useMemo(() => {
@@ -230,12 +230,20 @@ ${profilPerusahaan?.nama || ''}`;
         if (isAdminOrOwner) {
           if (selectedCabangIds.length > 0 && (!p.cabangId || !selectedCabangIds.includes(p.cabangId))) return false;
           if (selectedUserIds.length > 0 && !selectedUserIds.includes(p.salesId)) return false;
-        } else if (p.cabangId !== user?.cabangId) {
-          return false; // Branch isolation
-        } else if (isLeader) {
-          if (selectedUserIds.length > 0 && !selectedUserIds.includes(p.salesId)) return false;
-        } else if (p.salesId !== user?.id) {
-          return false;
+        } else {
+          // Branch isolation for non-admin
+          if (p.cabangId !== user?.cabangId) return false;
+
+          // Role-specific filtering within branch
+          const isBranchStaff = user?.roles.some(r => ['leader', 'manager', 'finance'].includes(r));
+          
+          if (isBranchStaff) {
+            // Finance/Leader/Manager see all in branch, but can further filter by sales if selected
+            if (selectedUserIds.length > 0 && !selectedUserIds.includes(p.salesId)) return false;
+          } else {
+            // Sales/Staf only see their own customers even in branch mode (unless they are leader)
+            if (p.salesId !== user?.id) return false;
+          }
         }
       }
 
@@ -272,7 +280,7 @@ ${profilPerusahaan?.nama || ''}`;
     });
 
     return result;
-  }, [pelanggan, search, filterKategori, filterStatus, filterDuplicateOnly, viewMode, user, isAdminOrOwner, isLeader, selectedCabangIds, selectedUserIds, duplicates, sortBy, sortOrder, salesAchievementMap]);
+  }, [pelanggan, search, filterKategori, filterStatus, filterDuplicateOnly, viewMode, user, isAdminOrOwner, isBranchStaff, selectedCabangIds, selectedUserIds, duplicates, sortBy, sortOrder, salesAchievementMap]);
 
   const handleMerge = async () => {
     if (!mergeTarget || !mergeSource) return;
@@ -501,7 +509,7 @@ ${profilPerusahaan?.nama || ''}`;
                         )}
 
                         {/* Sales Filter (Only if in Team Mode) */}
-                        {(isAdminOrOwner || isLeader) && viewMode === 'all' && (
+                        {(isAdminOrOwner || isBranchStaff) && viewMode === 'all' && (
                           <div className="space-y-3">
                               <Label>Salesperson</Label>
                               <DropdownMenu>
@@ -529,13 +537,13 @@ ${profilPerusahaan?.nama || ''}`;
                                       </DropdownMenuCheckboxItem>
                                       <DropdownMenuSeparator />
                                       {users.filter(u => {
-                                          const isSalesOrLeader = u.roles.includes('sales') || u.roles.includes('leader');
+                                          const isSalesOrBranchStaff = u.roles.some(r => ['sales', 'leader', 'manager', 'finance'].includes(r));
                                           const isActive = u.isActive !== false;
                                           if (isAdminOrOwner) {
                                               const isInSelectedCabang = selectedCabangIds.length === 0 || (u.cabangId && selectedCabangIds.includes(u.cabangId));
-                                              return isSalesOrLeader && isActive && isInSelectedCabang;
+                                              return isSalesOrBranchStaff && isActive && isInSelectedCabang;
                                           }
-                                          return isSalesOrLeader && isActive && u.cabangId === user?.cabangId;
+                                          return isSalesOrBranchStaff && isActive && u.cabangId === user?.cabangId;
                                       })
                                       .sort((a, b) => a.nama.localeCompare(b.nama))
                                       .map(u => (
@@ -560,7 +568,7 @@ ${profilPerusahaan?.nama || ''}`;
                     </div>
               </PopoverContent>
           </Popover>
-          {user?.roles.includes('sales') && (
+          {(user?.roles.includes('sales') || isBranchStaff) && (
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button size="icon" className="bg-teal-600 hover:bg-teal-700 text-white rounded-xl shadow-lg hover:shadow-xl transition-all">

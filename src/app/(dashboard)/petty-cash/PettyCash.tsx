@@ -6,26 +6,43 @@ import { useAuth } from '@/contexts/AuthContext';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { formatCurrency, formatTanggal, cn } from '@/lib/utils';
+import { formatCurrency, formatTanggal, cn, getUserDisplayName, toProperCase } from '@/lib/utils';
 import { ArrowUpCircle, ArrowDownCircle, History, Wallet, FileText, ArrowUp, ArrowDown, User, Calendar, Tag, Info, ExternalLink, Pencil } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { ImagePreviewModal } from '@/components/shared/ImagePreviewModal';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Label } from '@/components/ui/label';
+import { toast } from 'sonner';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { PettyCash as PettyCashType } from '@/types';
-import { Filter, X, Search, Plus } from 'lucide-react';
+import { Filter, X, Search, Plus, Trash2 } from 'lucide-react';
 import { SearchableSelect } from '@/components/ui/searchable-select';
+import { Switch } from "@/components/ui/switch";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 export default function PettyCash() {
   const router = useRouter();
   const { user } = useAuth();
-  const { pettyCash, users, cabang, isAdminOrOwner, isFinance } = useDatabase();
+  const { pettyCash, users, cabang, isAdminOrOwner, isFinance, profilPerusahaan, voidPettyCash } = useDatabase();
+  const isManager = user?.roles.includes('manager');
+  const isLeader = user?.roles.includes('leader');
+  
+  const displayMode = profilPerusahaan?.config?.tampilNama || 'nama';
   const [isDetailOpen, setIsDetailOpen] = useState(false);
   const [visibleCount, setVisibleCount] = useState(10);
-  const [selectedTransaction, setSelectedTransaction] = useState<PettyCashType | null>(null);
+   const [selectedTransaction, setSelectedTransaction] = useState<PettyCashType | null>(null);
+   const [isVoidConfirmOpen, setIsVoidConfirmOpen] = useState(false);
 
   // Filter States
   const [filterBranchId, setFilterBranchId] = useState<string>('all');
@@ -33,6 +50,7 @@ export default function PettyCash() {
   const [filterStartDate, setFilterStartDate] = useState<string>('');
   const [filterEndDate, setFilterEndDate] = useState<string>('');
   const [filterUserId, setFilterUserId] = useState<string>('all');
+  const [filterShowVoid, setFilterShowVoid] = useState<boolean>(false);
   const [isFilterOpen, setIsFilterOpen] = useState(false);
 
   const activeFiltersCount = 
@@ -40,25 +58,27 @@ export default function PettyCash() {
     (filterCategory !== 'all' ? 1 : 0) + 
     (filterUserId !== 'all' ? 1 : 0) + 
     (filterStartDate ? 1 : 0) + 
-    (filterEndDate ? 1 : 0);
+    (filterEndDate ? 1 : 0) +
+    (filterShowVoid ? 1 : 0);
 
   // Filter Transactions based on Role using useMemo
   const { displayedData, currentBalance } = useMemo(() => {
       // 1. Identify permissions
-      const isGlobalAccess = isAdminOrOwner; // Finance is now branch-specific
-      const isBranchFinance = isFinance && user?.cabangId !== 'cab-pusat';
+      const isGlobalAccess = isAdminOrOwner; 
+      const isManager = user?.roles.includes('manager');
+      const isBranchStaff = isFinance || isManager || user?.roles.includes('leader');
       
       // 2. Filter logic
       let filtered = isGlobalAccess 
           ? pettyCash 
-          : isBranchFinance
+          : isBranchStaff
             ? pettyCash.filter(item => {
                 // Find creator
                 const creator = users.find(u => u.id === item.createdBy);
                 // Match branch
                 return (item.cabangId || creator?.cabangId) === user?.cabangId;
               })
-            : pettyCash.filter(item => item.createdBy === user?.id); // Normal user or Finance at Pusat only see their own
+            : pettyCash.filter(item => item.createdBy === user?.id);
 
       // Apply Admin/Owner Filters
       if (isGlobalAccess) {
@@ -82,6 +102,11 @@ export default function PettyCash() {
           filtered = filtered.filter(item => item.kategori === filterCategory);
       }
 
+      // Filter Void
+      if (!filterShowVoid) {
+          filtered = filtered.filter(item => !item.keterangan.startsWith('[VOID]'));
+      }
+
       if (filterStartDate) {
           const start = new Date(filterStartDate);
           start.setHours(0,0,0,0);
@@ -103,7 +128,7 @@ export default function PettyCash() {
       }, 0);
 
       return { displayedData: sorted, currentBalance: balance };
-  }, [pettyCash, users, user, isAdminOrOwner, isFinance, filterBranchId, filterCategory, filterUserId, filterStartDate, filterEndDate]);
+  }, [pettyCash, users, user, isAdminOrOwner, isFinance, filterBranchId, filterCategory, filterUserId, filterStartDate, filterEndDate, filterShowVoid]);
 
   const displayedTransactions = displayedData.slice(0, visibleCount);
   const hasMore = visibleCount < displayedData.length;
@@ -213,6 +238,7 @@ export default function PettyCash() {
                                                     setFilterUserId('all');
                                                     setFilterStartDate('');
                                                     setFilterEndDate('');
+                                                    setFilterShowVoid(false);
                                                 }}
                                             >
                                                 Reset
@@ -247,7 +273,7 @@ export default function PettyCash() {
                                                 options={[
                                                     { label: 'Semua Pengguna', value: 'all' },
                                                     ...users.map(u => ({ 
-                                                        label: u.nama, 
+                                                        label: getUserDisplayName(u, displayMode), 
                                                         value: u.id, 
                                                         description: `${u.roles.join(', ')}${u.cabangId ? ` • ${cabang.find(c => c.id === u.cabangId)?.nama || ''}` : ''}`
                                                     }))
@@ -270,7 +296,7 @@ export default function PettyCash() {
                                                 <SelectContent>
                                                     <SelectItem value="all">Semua Kategori</SelectItem>
                                                     {Array.from(new Set(pettyCash.map(p => p.kategori))).sort().map(cat => (
-                                                        <SelectItem key={cat} value={cat}>{cat}</SelectItem>
+                                                        <SelectItem key={cat} value={cat}>{toProperCase(cat)}</SelectItem>
                                                     ))}
                                                 </SelectContent>
                                             </Select>
@@ -293,6 +319,18 @@ export default function PettyCash() {
                                                     onChange={(e) => setFilterEndDate(e.target.value)}
                                                 />
                                             </div>
+                                        </div>
+
+                                        {/* Void Filter */}
+                                        <div className="flex items-center justify-between pt-2 border-t mt-4">
+                                            <Label className="text-[11px] uppercase tracking-wider text-muted-foreground cursor-pointer" htmlFor="show-void">
+                                                Tampilkan Void
+                                            </Label>
+                                            <Switch 
+                                                id="show-void"
+                                                checked={filterShowVoid} 
+                                                onCheckedChange={setFilterShowVoid} 
+                                            />
                                         </div>
                                     </div>
                                 </div>
@@ -329,8 +367,8 @@ export default function PettyCash() {
                                         </div>
                                         
                                         <div className="min-w-0 flex-1">
-                                            <p className="font-semibold text-sm sm:text-base truncate group-hover:text-primary transition-colors">
-                                                {item.keterangan}
+                                            <p className={`font-semibold text-sm sm:text-base truncate group-hover:text-primary transition-colors ${item.keterangan?.startsWith('[VOID]') ? 'line-through text-muted-foreground' : ''}`}>
+                                                {item.keterangan} <span className="text-muted-foreground font-normal text-xs sm:text-sm italic">({getUserDisplayName(users.find(u => u.id === (item.penggunaAnggaran || item.createdBy)), displayMode)})</span>
                                             </p>
                                             <div className="flex items-center gap-2 text-xs text-muted-foreground mt-0.5">
                                                 <span>{formatTanggal(item.tanggal)}</span>
@@ -338,6 +376,9 @@ export default function PettyCash() {
                                                 <Badge variant="secondary" className="font-normal text-[10px] h-5 px-1.5 bg-slate-100 text-slate-600 border-slate-200">
                                                     {item.kategori}
                                                 </Badge>
+                                                {item.keterangan?.startsWith('[VOID]') && (
+                                                    <Badge className="bg-red-600 hover:bg-red-600 text-white border-red-700 h-5 px-1.5 text-[10px] font-bold">VOID</Badge>
+                                                )}
                                                 {(isAdminOrOwner || isFinance) && (
                                                     <Badge variant="outline" className="font-normal text-[10px] h-5 px-1.5 border-blue-200 text-blue-600 bg-blue-50">
                                                         {cabang.find(c => c.id === (item.cabangId || users.find(u => u.id === item.createdBy)?.cabangId))?.nama || 'No Branch'}
@@ -394,7 +435,7 @@ export default function PettyCash() {
                 <DialogTitle className="flex items-center gap-2">
                 <Info className="w-5 h-5 text-primary" /> Detail Transaksi
                 </DialogTitle>
-                {(isAdminOrOwner || isFinance) && (
+                {!selectedTransaction?.keterangan?.startsWith('[VOID]') && (isAdminOrOwner || ((isFinance || isManager || isLeader) && (!selectedTransaction?.keterangan || !selectedTransaction?.buktiUrl || !selectedTransaction?.penggunaAnggaran || !selectedTransaction?.kategori))) && (
                     <Button 
                         variant="outline" 
                         size="sm" 
@@ -406,6 +447,17 @@ export default function PettyCash() {
                     >
                         <Pencil className="w-3.5 h-3.5" />
                         <span>Edit</span>
+                    </Button>
+                )}
+                {isAdminOrOwner && !selectedTransaction?.keterangan?.startsWith('[VOID]') && (
+                    <Button 
+                        variant="ghost" 
+                        size="sm" 
+                        className="h-8 gap-1.5 text-red-600 hover:text-red-700 hover:bg-red-50"
+                        onClick={() => setIsVoidConfirmOpen(true)}
+                    >
+                        <Trash2 className="w-3.5 h-3.5" />
+                        <span>Void</span>
                     </Button>
                 )}
             </div>
@@ -438,7 +490,9 @@ export default function PettyCash() {
                   </div>
                   <div>
                     <p className="text-xs text-muted-foreground">Keterangan</p>
-                    <p className="font-medium">{selectedTransaction.keterangan}</p>
+                    <p className="font-medium">
+                        {selectedTransaction.keterangan} <span className="text-muted-foreground font-normal text-sm italic">({getUserDisplayName(users.find(u => u.id === (selectedTransaction.penggunaAnggaran || selectedTransaction.createdBy)), displayMode)})</span>
+                    </p>
                   </div>
                 </div>
 
@@ -458,8 +512,8 @@ export default function PettyCash() {
                     </div>
                     <div>
                       <p className="text-xs text-muted-foreground">Kategori</p>
-                      <Badge variant="outline" className="capitalize mt-0.5">
-                        {selectedTransaction.kategori}
+                      <Badge variant="outline" className="mt-0.5">
+                        {toProperCase(selectedTransaction.kategori)}
                       </Badge>
                     </div>
                   </div>
@@ -484,7 +538,7 @@ export default function PettyCash() {
                   <div>
                     <p className="text-xs text-muted-foreground">Pengguna Anggaran</p>
                     <p className="font-medium">
-                        {users.find(u => u.id === (selectedTransaction.penggunaAnggaran || selectedTransaction.createdBy))?.nama || 'Tidak diketahui'}
+                        {getUserDisplayName(users.find(u => u.id === (selectedTransaction.penggunaAnggaran || selectedTransaction.createdBy)), displayMode)}
                     </p>
                   </div>
                 </div>
@@ -496,7 +550,7 @@ export default function PettyCash() {
                   <div>
                     <p className="text-xs text-muted-foreground">Dicatat Oleh</p>
                     <p className="font-medium">
-                      {users.find(u => u.id === selectedTransaction.createdBy)?.nama || 'System'}
+                      {getUserDisplayName(users.find(u => u.id === selectedTransaction.createdBy), displayMode)}
                     </p>
                   </div>
                 </div>
@@ -518,6 +572,40 @@ export default function PettyCash() {
           )}
         </DialogContent>
       </Dialog>
+
+      <AlertDialog open={isVoidConfirmOpen} onOpenChange={setIsVoidConfirmOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2 text-red-600">
+              <Trash2 className="w-5 h-5" /> Konfirmasi Void
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              Apakah Anda yakin ingin mem-void transaksi ini? 
+              <br /><br />
+              <strong>Data tidak akan dihapus</strong>, tetapi nominal akan diubah menjadi <strong>Rp 0</strong> dan saldo akan dikalkulasi ulang secara otomatis. Tindakan ini tidak dapat dibatalkan.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Batal</AlertDialogCancel>
+            <AlertDialogAction 
+                className="bg-red-600 hover:bg-red-700 text-white"
+                onClick={async () => {
+                    if (selectedTransaction) {
+                        try {
+                            await voidPettyCash(selectedTransaction.id);
+                            toast.success('Transaksi berhasil di-void');
+                            setIsDetailOpen(false);
+                        } catch (error) {
+                            toast.error('Gagal mem-void transaksi');
+                        }
+                    }
+                }}
+            >
+              Ya, Void Transaksi
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

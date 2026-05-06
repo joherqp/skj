@@ -67,7 +67,7 @@ export default function LaporanSalesPerformance() {
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
 
   const isAdminOrOwner = user?.roles.some(r => ['admin', 'owner'].includes(r));
-  const isLeaderOrFinance = user?.roles.some(r => ['leader', 'finance'].includes(r));
+  const isBranchStaff = user?.roles.some(r => ['leader', 'manager', 'finance'].includes(r));
   const userCabangId = user?.cabangId;
 
   const [selectedCabangIds, setSelectedCabangIds] = useState<string[]>([]);
@@ -117,7 +117,7 @@ export default function LaporanSalesPerformance() {
 
         // Security: Filter targets by branch if not admin
         if (!isAdminOrOwner && userCabangId) {
-          if (isLeaderOrFinance) {
+          if (isBranchStaff) {
             if (branchUserIds.length > 0) {
               query = query.or(`cabang_id.eq.${userCabangId},sales_id.in.(${branchUserIds.join(',')})`);
             } else {
@@ -160,7 +160,7 @@ export default function LaporanSalesPerformance() {
 
         if (!isAdminOrOwner) {
           if (userCabangId) {
-            if (isLeaderOrFinance) {
+            if (isBranchStaff) {
                 salesQuery = salesQuery.eq('cabang_id', userCabangId);
             } else {
                 salesQuery = salesQuery.eq('sales_id', user.id);
@@ -248,7 +248,7 @@ export default function LaporanSalesPerformance() {
             return selectedCabangIds.includes(item.cabang_id || '') ||
               (item.scope === 'sales' && salesData?.some(p => p.salesId === item.sales_id));
           }
-          if (isLeaderOrFinance) {
+          if (isBranchStaff) {
             // Allow if target belongs to branch OR target is for a user in this branch
             return item.cabang_id === userCabangId || (item.scope === 'sales' && branchUserIds.includes(item.sales_id || ''));
           }

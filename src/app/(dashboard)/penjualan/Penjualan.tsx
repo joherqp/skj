@@ -135,8 +135,8 @@ ${getUserDisplayName(user as any, profilPerusahaan?.config?.tampilNama || 'nama'
     (selectedUserIds.length > 0 ? 1 : 0);
 
   // Scope Filtering: "Sub-database" logic
-  const isAdminOrOwner = user?.roles.includes('admin') || user?.roles.includes('owner');
-  const isLeader = user?.roles.includes('leader');
+  const isAdminOrOwner = user?.roles.some(r => ['admin', 'owner'].includes(r));
+  const isBranchStaff = user?.roles.some(r => ['leader', 'manager', 'finance'].includes(r));
 
   const scopedPenjualan = penjualan.filter(p => {
     // 1. View Mode Constraint
@@ -158,8 +158,8 @@ ${getUserDisplayName(user as any, profilPerusahaan?.config?.tampilNama || 'nama'
       return true;
     }
 
-    if (isLeader) {
-      // Branch isolation for Leader
+    if (isBranchStaff) {
+      // Branch isolation for Finance/Leader/Manager
       if (p.cabangId !== user?.cabangId) return false;
       // Multi-select User filter within branch
       if (selectedUserIds.length > 0) {
@@ -170,7 +170,7 @@ ${getUserDisplayName(user as any, profilPerusahaan?.config?.tampilNama || 'nama'
     }
 
     // Sales role isolation
-    return p.salesId === user?.id || p.createdBy === user?.id;
+    return (p.salesId === user?.id || p.createdBy === user?.id) && p.cabangId === user?.cabangId;
   });
 
   const filteredPenjualan = scopedPenjualan.filter(p => {
@@ -284,7 +284,7 @@ ${getUserDisplayName(user as any, profilPerusahaan?.config?.tampilNama || 'nama'
           if (selectedUserIds.length > 0 && !selectedUserIds.includes(p.salesId)) return false;
         } else if (p.cabangId !== user?.cabangId) {
           return false; // Branch isolation
-        } else if (isLeader) {
+        } else if (isBranchStaff) {
           if (selectedUserIds.length > 0 && !selectedUserIds.includes(p.salesId)) return false;
         } else if (p.salesId !== user?.id) {
           return false;
@@ -304,7 +304,7 @@ ${getUserDisplayName(user as any, profilPerusahaan?.config?.tampilNama || 'nama'
       totalPiutang,
       debtors
     };
-  }, [scopedPenjualan, pelanggan, barang, satuan, todayStr, user, isAdminOrOwner, isLeader, viewMode, selectedCabangIds, selectedUserIds]);
+  }, [scopedPenjualan, pelanggan, barang, satuan, todayStr, user, isAdminOrOwner, isBranchStaff, viewMode, selectedCabangIds, selectedUserIds]);
 
   return (
     <div className="animate-in fade-in duration-500">
@@ -474,7 +474,7 @@ ${getUserDisplayName(user as any, profilPerusahaan?.config?.tampilNama || 'nama'
                 )}
 
                 {/* Sales Filter (Only if in Team Mode) */}
-                {(isAdminOrOwner || isLeader) && viewMode === 'all' && (
+                {(isAdminOrOwner || isBranchStaff) && viewMode === 'all' && (
                   <div className="space-y-3 pt-2 border-t">
                     <Label>Salesperson</Label>
                     <DropdownMenu>

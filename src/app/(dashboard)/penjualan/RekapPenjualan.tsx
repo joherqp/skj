@@ -38,7 +38,7 @@ export default function RekapPenjualan() {
 
     // Scope Filtering: "Sub-database" logic
     const isAdminOrOwner = user?.roles.includes('admin') || user?.roles.includes('owner');
-    const isLeader = user?.roles.includes('leader');
+    const isBranchStaff = user?.roles.some(r => ['leader', 'manager', 'finance'].includes(r));
 
     const [selectedCabangIds, setSelectedCabangIds] = useState<string[]>([]);
     const [selectedUserIds, setSelectedUserIds] = useState<string[]>([]);
@@ -49,7 +49,7 @@ export default function RekapPenjualan() {
         let hasAccess = false;
         if (isAdminOrOwner) {
             hasAccess = viewMode === 'me' ? (pSalesId === user?.id) : true;
-        } else if (isLeader) {
+        } else if (isBranchStaff) {
             hasAccess = p.cabangId === user?.cabangId && (viewMode === 'me' ? (pSalesId === user?.id) : true);
         } else {
             hasAccess = pSalesId === user?.id; // Sales only see their own data

@@ -153,7 +153,7 @@ export default function Beranda() {
 
   // Role & Scope Logic
   const isAdminOrOwner = user?.roles.includes('admin') || user?.roles.includes('owner');
-  const isLeader = user?.roles.includes('leader');
+  const isBranchStaff = user?.roles.some(r => ['leader', 'manager', 'finance'].includes(r));
 
   // Filter Penjualan based on role & View Mode
   const scopedPenjualan = penjualan.filter(p => {
@@ -162,12 +162,12 @@ export default function Beranda() {
       return true;
     }
 
-    // For regular sales (not leader), prioritize showing their own sales
-    if (!isLeader) {
+    // For regular staff (not leader/manager/finance), prioritize showing their own sales
+    if (!isBranchStaff) {
       return p.salesId === user?.id;
     }
 
-    // For Leader, enforce Cabang check
+    // For Branch Staff (Leader, Manager, Finance), enforce Cabang check
     if (p.cabangId !== cabangId) return false;
 
     if (viewMode === 'me') return p.salesId === user?.id || p.createdBy === user?.id;
@@ -183,7 +183,7 @@ export default function Beranda() {
     if (p.targetUserId) {
       if (p.targetUserId !== user?.id) isTarget = false;
     } else {
-      const isSuperUser = isAdminOrOwner || user?.roles.includes('manager');
+      const isSuperUser = isAdminOrOwner;
       if (p.targetRole && !user?.roles.includes(p.targetRole) && !isSuperUser) isTarget = false;
       if (p.targetCabangId && !isSuperUser && p.targetCabangId !== cabangId) isTarget = false;
     }
@@ -289,7 +289,7 @@ export default function Beranda() {
         if (viewMode === 'me') return k.userId === user?.id;
         return true;
       }
-      if (!isLeader) return k.userId === user?.id;
+      if (!isBranchStaff) return k.userId === user?.id;
       
       const kUser = users.find(u => u.id === k.userId);
       if (kUser?.cabangId !== cabangId) return false;
@@ -302,7 +302,7 @@ export default function Beranda() {
 
     // 3. Combine and unique
     return new Set([...visitedCustomerIds, ...soldCustomerIds]).size;
-  }, [kunjungan, validPenjualanHariIni, todayStr, isAdminOrOwner, viewMode, user, isLeader, users, cabangId]);
+  }, [kunjungan, validPenjualanHariIni, todayStr, isAdminOrOwner, viewMode, user, isBranchStaff, users, cabangId]);
 
   const pendingApprovals = scopedPersetujuan.length;
   const lowStockItems = lowStockItemsCount;
@@ -427,7 +427,7 @@ export default function Beranda() {
               </div>
 
               {/* View Mode Toggle - Hidden for Owner (Auto All) */}
-              {((isAdminOrOwner || isLeader) && !user?.roles.includes('owner')) && (
+              {((isAdminOrOwner || isBranchStaff) && !user?.roles.includes('owner')) && (
                 <div className="flex flex-col items-center gap-1.5 p-1 rounded-xl bg-white/10 backdrop-blur-md border border-white/20">
                   <Switch
                     id="view-mode"

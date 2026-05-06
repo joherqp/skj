@@ -358,18 +358,27 @@ Terima kasih.`;
               <div className="space-y-2">
                 <Label>Peran (Bisa lebih dari satu)</Label>
                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 mt-2 border rounded-md p-3 bg-muted/10">
-                  {(Object.keys(roleLabels) as UserRole[]).map((roleKey) => (
-                    <div key={roleKey} className="flex items-center space-x-2">
-                      <Checkbox
-                        id={`role-${roleKey}`}
-                        checked={formData.roles?.includes(roleKey)}
-                        onCheckedChange={(checked) => handleRoleChange(roleKey, checked as boolean)}
-                      />
-                      <Label htmlFor={`role-${roleKey}`} className="text-xs">
-                        {roleLabels[roleKey]}
-                      </Label>
-                    </div>
-                  ))}
+                  {(Object.keys(roleLabels) as UserRole[]).map((roleKey) => {
+                    // Restriction: Pusat only admin/owner, others only non-admin/owner
+                    const isPusat = formData.cabangId === 'cab-pusat';
+                    const isAdminRole = ['admin', 'owner'].includes(roleKey);
+                    
+                    if (isPusat && !isAdminRole) return null;
+                    if (!isPusat && formData.cabangId && isAdminRole) return null;
+                    
+                    return (
+                      <div key={roleKey} className="flex items-center space-x-2">
+                        <Checkbox
+                          id={`role-${roleKey}`}
+                          checked={formData.roles?.includes(roleKey)}
+                          onCheckedChange={(checked) => handleRoleChange(roleKey, checked as boolean)}
+                        />
+                        <Label htmlFor={`role-${roleKey}`} className="text-xs">
+                          {roleLabels[roleKey]}
+                        </Label>
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
             </section>
