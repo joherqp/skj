@@ -49,7 +49,8 @@ export default function DetailBarang() {
         showInactive, setShowInactive,
         activeFiltersCount,
         cabangList,
-        users: filteredUsers
+        users: filteredUsers,
+        isFinanceOrLeader
     } = useBarangManagement();
 
     useEffect(() => {
@@ -386,6 +387,7 @@ export default function DetailBarang() {
                         cabangList={cabangList}
                         users={filteredUsers}
                         isAdminOrOwner={isAdminOrOwner}
+                        isFinanceOrLeader={isFinanceOrLeader}
                     />
                 </div>
 

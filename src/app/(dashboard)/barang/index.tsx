@@ -35,6 +35,7 @@ export default function Barang() {
 
         // Utils
         isAdminOrOwner,
+        isFinanceOrLeader,
         getStockHealth
     } = useBarangManagement();
 
@@ -73,6 +74,7 @@ export default function Barang() {
                             cabangList={cabangList}
                             users={users}
                             isAdminOrOwner={isAdminOrOwner}
+                            isFinanceOrLeader={isFinanceOrLeader}
                         />
 
                         {isAdminOrOwner && (
