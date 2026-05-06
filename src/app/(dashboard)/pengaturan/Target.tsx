@@ -267,7 +267,15 @@ export default function TargetPage() {
   const handleSaveAdjust = async () => {
     if (!selectedTargetAdjust) return;
     try {
-      // 1. Update Target
+      // 1. Check existing history to preserve initial value if this is the first adjustment
+      const { data: existingHistory } = await supabase
+        .schema(dbMode)
+        .from('sales_target_history')
+        .select('id')
+        .eq('target_id', selectedTargetAdjust.id)
+        .limit(1);
+
+      // 2. Update Target
       const { error: updateError } = await supabase
         .schema(dbMode)
         .from('sales_targets')
@@ -276,17 +284,32 @@ export default function TargetPage() {
 
       if (updateError) throw updateError;
 
-      // 2. Insert History
+      // 3. Insert History
+      const historyToInsert = [];
+      
+      // If no history exists, record the initial value first
+      if (!existingHistory || existingHistory.length === 0) {
+        historyToInsert.push({
+          target_id: selectedTargetAdjust.id,
+          amount: selectedTargetAdjust.nilai,
+          // Use start_date or a far past date for looping targets to ensure it covers the past
+          tanggal: selectedTargetAdjust.start_date || '2024-01-01T00:00:00.000Z',
+          created_by: user?.id
+        });
+      }
+
+      // Record the new adjusted value
+      historyToInsert.push({
+        target_id: selectedTargetAdjust.id,
+        amount: newTargetValue,
+        tanggal: new Date().toISOString(),
+        created_by: user?.id
+      });
+
       const { error: historyError } = await supabase
         .schema(dbMode)
         .from('sales_target_history')
-        .insert([{
-          target_id: selectedTargetAdjust.id,
-          nilai_lama: selectedTargetAdjust.nilai,
-          nilai_baru: newTargetValue,
-          keterangan: 'Penyesuaian target berjalan',
-          created_by: user?.id
-        }]);
+        .insert(historyToInsert);
 
       if (historyError) {
         console.error('History record failed:', historyError);

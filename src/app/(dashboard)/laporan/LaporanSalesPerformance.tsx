@@ -46,9 +46,8 @@ interface PerformanceItem extends SalesTargetDB {
 
 interface AdjustmentHistory {
   id: string;
-  nilai_lama: number;
-  nilai_baru: number;
-  keterangan: string;
+  target_id: string;
+  amount: number;
   tanggal: string;
 }
 
@@ -149,6 +148,18 @@ export default function LaporanSalesPerformance() {
           data?.forEach((c: { id: string; nama: string }) => cabangMap[c.id] = c.nama);
         }
 
+        // Fetch History for these targets to determine historical values
+        const targetIds = (targetData as SalesTargetDB[]).map(t => t.id);
+        let historyDataArr: AdjustmentHistory[] = [];
+        if (targetIds.length > 0) {
+          const { data: histData } = await supabase
+            .from('sales_target_history')
+            .select('*')
+            .in('target_id', targetIds)
+            .order('tanggal', { ascending: false });
+          if (histData) historyDataArr = histData as AdjustmentHistory[];
+        }
+
         // 2. Fetch Sales Data for this period
         let salesQuery = supabase
           .from('penjualan')
@@ -188,9 +199,25 @@ export default function LaporanSalesPerformance() {
 
         // 3. Calculate Performance & Apply final filtering
         const rawCalculatedData = (targetData as SalesTargetDB[])?.map((targetRow: SalesTargetDB) => {
+          // Determine the effective target value for this period
+          let effectiveNilai = targetRow.nilai;
+          const targetHistory = historyDataArr.filter(h => h.target_id === targetRow.id);
+          if (targetHistory.length > 0) {
+            // Find the latest history record that occurred on or before endDate
+            const historyBeforeEnd = targetHistory.filter(h => new Date(h.tanggal) <= endDate);
+            if (historyBeforeEnd.length > 0) {
+              // Since it's ordered descending by tanggal, the first one is the latest before endDate
+              effectiveNilai = historyBeforeEnd[0].amount;
+            } else {
+              // If all history is after endDate, use the oldest history record available (the initial value)
+              effectiveNilai = targetHistory[targetHistory.length - 1].amount;
+            }
+          }
+
           // Enrich with names
           const target = {
             ...targetRow,
+            nilai: effectiveNilai, // Override with the historical effective value
             sales: targetRow.sales_id ? { nama: salesMap[targetRow.sales_id] || 'Unknown' } : undefined,
             cabang: targetRow.cabang_id ? { nama: cabangMap[targetRow.cabang_id] || 'Unknown' } : undefined
           };
@@ -571,17 +598,13 @@ export default function LaporanSalesPerformance() {
                         <div className="absolute -left-[29px] top-1.5 w-4 h-4 rounded-full border-2 border-primary bg-background z-10" />
                         <div className="space-y-1">
                           <div className="flex items-center gap-2 text-sm">
-                            <span className="text-muted-foreground">
-                              {selectedTarget?.target_type === 'nominal' ? formatRupiah(h.nilai_lama) : formatNumber(h.nilai_lama)}
-                            </span>
-                            <ArrowRight className="w-3 h-3 text-muted-foreground" />
                             <span className="font-bold text-primary">
-                              {selectedTarget?.target_type === 'nominal' ? formatRupiah(h.nilai_baru) : formatNumber(h.nilai_baru)}
+                              Diubah Menjadi: {selectedTarget?.target_type === 'nominal' ? formatRupiah(h.amount) : formatNumber(h.amount)}
                             </span>
                           </div>
-                          <p className="text-xs font-medium">{h.keterangan}</p>
+                          <p className="text-xs font-medium">Penyesuaian target berjalan</p>
                           <p className="text-[10px] text-muted-foreground italic">
-                            {format(new Date(h.tanggal), 'dd MMM yyyy, HH:mm')}
+                            {h.tanggal ? format(new Date(h.tanggal), 'dd MMM yyyy, HH:mm') : '-'}
                           </p>
                         </div>
                       </div>
