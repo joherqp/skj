@@ -6,14 +6,18 @@ import { Toaster } from "@/components/ui/sonner";
 
 import { PwaManager } from "./PwaManager";
 
+import { QueryProvider } from "./QueryProvider";
+
 export function Providers({ children }: { children: React.ReactNode }) {
     return (
-        <AuthProvider>
-            <DatabaseProvider>
-                {children}
-                <PwaManager />
-                <Toaster position="top-center" richColors />
-            </DatabaseProvider>
-        </AuthProvider>
+        <QueryProvider>
+            <AuthProvider>
+                <DatabaseProvider>
+                    {children}
+                    <PwaManager />
+                    <Toaster position="top-center" richColors />
+                </DatabaseProvider>
+            </AuthProvider>
+        </QueryProvider>
     );
 }

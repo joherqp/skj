@@ -45,9 +45,11 @@ export default function DetailBarang() {
         filterKategori, setFilterKategori,
         filterStok, setFilterStok,
         filterCabang, setFilterCabang,
+        filterUser, setFilterUser,
         showInactive, setShowInactive,
         activeFiltersCount,
-        cabangList
+        cabangList,
+        users: filteredUsers
     } = useBarangManagement();
 
     useEffect(() => {
@@ -100,11 +102,15 @@ export default function DetailBarang() {
     const currentUnit = availableUnits.find(u => u.id === currentSatuanId) || availableUnits[0];
 
     // Calculate Stock based on Role & Filter
-    // stokPengguna is available from the top-level useDatabase call
     let totalStock = 0;
     if (isAdminOrOwner) {
         let filteredStok = stokPengguna.filter(s => s.barangId === id);
-        if (filterCabang.length > 0) {
+
+        if (filterUser) {
+            // Priority 1: Specific User
+            filteredStok = filteredStok.filter(s => s.userId === filterUser);
+        } else if (filterCabang.length > 0) {
+            // Priority 2: Branch Filter
             filteredStok = filteredStok.filter(s => {
                 const userObj = users.find(u => u.id === s.userId);
                 return userObj && filterCabang.includes(userObj.cabangId);
@@ -119,8 +125,14 @@ export default function DetailBarang() {
     const productUnitName = mainSatuanDef?.simbol || 'Unit';
 
     // -- HISTORY FILTER HELPER --
-    const isHistoryValidForBranch = (targetUserId: string | undefined, cabangIdField?: string | undefined) => {
-        if (!isAdminOrOwner || filterCabang.length === 0) return true;
+    const isHistoryValidForFilter = (targetUserId: string | undefined, cabangIdField?: string | undefined) => {
+        if (!isAdminOrOwner) return true;
+
+        if (filterUser) {
+            return targetUserId === filterUser;
+        }
+
+        if (filterCabang.length === 0) return true;
         if (cabangIdField && filterCabang.includes(cabangIdField)) return true;
         if (targetUserId) {
             const userObj = users.find(u => u.id === targetUserId);
@@ -136,8 +148,8 @@ export default function DetailBarang() {
             const hasItem = p.items.some(i => i.barangId === id);
             const validStatus = p.status !== 'batal';
             const userMatch = isAdminOrOwner ? true : p.salesId === user?.id; // Admin sees all, User sees own
-            const branchMatch = isHistoryValidForBranch(p.salesId);
-            return hasItem && validStatus && userMatch && branchMatch;
+            const filterMatch = isHistoryValidForFilter(p.salesId);
+            return hasItem && validStatus && userMatch && filterMatch;
         }).map(p => {
             const item = p.items.find(i => i.barangId === id);
             let unitName = productUnitName;
@@ -168,8 +180,8 @@ export default function DetailBarang() {
             if (!isRestockType) return false;
             
             const userMatch = isAdminOrOwner ? true : p.targetUserId === user?.id;
-            const branchMatch = isHistoryValidForBranch(p.targetUserId);
-            if (!userMatch || !branchMatch) return false;
+            const filterMatch = isHistoryValidForFilter(p.targetUserId);
+            if (!userMatch || !filterMatch) return false;
 
             const items = pData?.items || (pData?.barangId ? [pData] : []);
             return items.some((it: any) => it.barangId === id);
@@ -203,7 +215,12 @@ export default function DetailBarang() {
         ...persetujuan.filter(p => {
             const isMutasi = (p.jenis === 'mutasi' || p.jenis === 'mutasi_stok') && p.status === 'disetujui';
             if (!isMutasi) return false;
-            if (isAdminOrOwner) return true;
+            
+            // Admin Filter: Must match sender OR receiver
+            if (isAdminOrOwner) {
+                return isHistoryValidForFilter(p.diajukanOleh) || isHistoryValidForFilter(p.targetUserId);
+            }
+            
             return p.diajukanOleh === user?.id || p.targetUserId === user?.id;
         }).flatMap(p => {
             const mData = mutasiBarang.find(m => m.id === p.referensiId);
@@ -267,8 +284,8 @@ export default function DetailBarang() {
             if (!isPermintaan) return false;
             if (!isAdminOrOwner && !isRequester) return false;
 
-            const branchMatch = isHistoryValidForBranch(p.diajukanOleh);
-            return branchMatch;
+            const filterMatch = isHistoryValidForFilter(p.diajukanOleh);
+            return filterMatch;
         }).flatMap(p => {
             const pData = p.data as PersetujuanData;
             const items = pData?.items || [];
@@ -299,8 +316,8 @@ export default function DetailBarang() {
             if (!isPermintaan) return false;
             if (!isAdminOrOwner && !isTarget) return false;
 
-            const branchMatch = isHistoryValidForBranch(p.targetUserId, p.targetCabangId);
-            return branchMatch;
+            const filterMatch = isHistoryValidForFilter(p.targetUserId, p.targetCabangId);
+            return filterMatch;
         }).flatMap(p => {
             const pData = p.data as PersetujuanData;
             const items = pData?.items || [];
@@ -328,7 +345,7 @@ export default function DetailBarang() {
         ...penyesuaianStok.filter(ps => {
             const isValid = ps.barangId === id && ps.status === 'disetujui';
             if (!isValid) return false;
-            return isHistoryValidForBranch(undefined, ps.cabangId);
+            return isHistoryValidForFilter(undefined, ps.cabangId);
         }).map(ps => {
             return {
                 id: ps.id,
@@ -361,10 +378,13 @@ export default function DetailBarang() {
                         setFilterStok={setFilterStok}
                         filterCabang={filterCabang}
                         setFilterCabang={setFilterCabang}
+                        filterUser={filterUser}
+                        setFilterUser={setFilterUser}
                         showInactive={showInactive}
                         setShowInactive={setShowInactive}
                         kategoriList={kategoriList}
                         cabangList={cabangList}
+                        users={filteredUsers}
                         isAdminOrOwner={isAdminOrOwner}
                     />
                 </div>

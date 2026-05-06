@@ -22,6 +22,7 @@ export default function Barang() {
         filterKategori, setFilterKategori,
         filterStok, setFilterStok,
         filterCabang, setFilterCabang,
+        filterUser, setFilterUser,
         showInactive, setShowInactive,
         activeFiltersCount,
 
@@ -30,6 +31,7 @@ export default function Barang() {
         kategoriList,
         satuanList,
         cabangList,
+        users,
 
         // Utils
         isAdminOrOwner,
@@ -63,10 +65,13 @@ export default function Barang() {
                             setFilterStok={setFilterStok}
                             filterCabang={filterCabang}
                             setFilterCabang={setFilterCabang}
+                            filterUser={filterUser}
+                            setFilterUser={setFilterUser}
                             showInactive={showInactive}
                             setShowInactive={setShowInactive}
                             kategoriList={kategoriList}
                             cabangList={cabangList}
+                            users={users}
                             isAdminOrOwner={isAdminOrOwner}
                         />
 

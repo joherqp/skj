@@ -3,7 +3,9 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Label } from '@/components/ui/label';
 import { Switch } from "@/components/ui/switch";
 import { Filter } from 'lucide-react';
-import { Cabang, Kategori } from '@/types';
+import { Cabang, Kategori, User } from '@/types';
+import { SearchableSelect } from '@/components/ui/searchable-select';
+import { getUserDisplayName } from '@/lib/utils';
 
 interface BarangFilterPopoverProps {
     isFilterOpen: boolean;
@@ -15,10 +17,13 @@ interface BarangFilterPopoverProps {
     setFilterStok: (val: string[]) => void;
     filterCabang: string[];
     setFilterCabang: (val: string[]) => void;
+    filterUser: string;
+    setFilterUser: (val: string) => void;
     showInactive: boolean;
     setShowInactive: (val: boolean) => void;
     kategoriList: Kategori[];
     cabangList: Cabang[];
+    users: User[];
     isAdminOrOwner: boolean;
 }
 
@@ -28,8 +33,9 @@ export function BarangFilterPopover({
     filterKategori, setFilterKategori,
     filterStok, setFilterStok,
     filterCabang, setFilterCabang,
+    filterUser, setFilterUser,
     showInactive, setShowInactive,
-    kategoriList, cabangList, isAdminOrOwner
+    kategoriList, cabangList, users, isAdminOrOwner
 }: BarangFilterPopoverProps) {
     return (
         <Popover open={isFilterOpen} onOpenChange={setIsFilterOpen}>
@@ -43,8 +49,8 @@ export function BarangFilterPopover({
                 <div className="p-4 space-y-4 max-h-[80vh] overflow-y-auto">
                     <div className="flex items-center justify-between">
                         <h4 className="font-medium leading-none">Filter Barang</h4>
-                        {(filterKategori.length > 0 || filterStok.length > 0 || filterCabang.length > 0) && (
-                            <Button variant="ghost" size="sm" className="h-auto p-0 text-destructive text-xs" onClick={() => { setFilterKategori([]); setFilterStok([]); setFilterCabang([]); }}>
+                        {(filterKategori.length > 0 || filterStok.length > 0 || filterCabang.length > 0 || filterUser !== '') && (
+                            <Button variant="ghost" size="sm" className="h-auto p-0 text-destructive text-xs" onClick={() => { setFilterKategori([]); setFilterStok([]); setFilterCabang([]); setFilterUser(''); }}>
                                 Reset
                             </Button>
                         )}
@@ -76,28 +82,46 @@ export function BarangFilterPopover({
 
                     {/* Cabang Filter (Multi) - Admin Only */}
                     {isAdminOrOwner && (
-                        <div className="space-y-3 pt-3 border-t">
-                            <Label>Cabang</Label>
-                            <div className="space-y-2">
-                                {cabangList.filter(c => !c.nama.toLowerCase().includes('pusat')).map(c => (
-                                    <div key={c.id} className="flex items-center space-x-2">
-                                        <input
-                                            type="checkbox"
-                                            id={`branch-${c.id}`}
-                                            className="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary"
-                                            checked={filterCabang.includes(c.id)}
-                                            onChange={(e) => {
-                                                if (e.target.checked) setFilterCabang([...filterCabang, c.id]);
-                                                else setFilterCabang(filterCabang.filter(id => id !== c.id));
-                                            }}
-                                        />
-                                        <label htmlFor={`branch-${c.id}`} className="text-sm leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
-                                            {c.nama}
-                                        </label>
-                                    </div>
-                                ))}
+                        <>
+                            <div className="space-y-3 pt-3 border-t">
+                                <Label>Cabang</Label>
+                                <div className="space-y-2">
+                                    {cabangList.filter(c => !c.nama.toLowerCase().includes('pusat')).map(c => (
+                                        <div key={c.id} className="flex items-center space-x-2">
+                                            <input
+                                                type="checkbox"
+                                                id={`branch-${c.id}`}
+                                                className="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary"
+                                                checked={filterCabang.includes(c.id)}
+                                                onChange={(e) => {
+                                                    if (e.target.checked) setFilterCabang([...filterCabang, c.id]);
+                                                    else setFilterCabang(filterCabang.filter(id => id !== c.id));
+                                                }}
+                                            />
+                                            <label htmlFor={`branch-${c.id}`} className="text-sm leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
+                                                {c.nama}
+                                            </label>
+                                        </div>
+                                    ))}
+                                </div>
                             </div>
-                        </div>
+
+                            <div className="space-y-3 pt-3 border-t">
+                                <Label>Pengguna Spesifik</Label>
+                                <SearchableSelect
+                                    options={users
+                                        .map(u => ({
+                                            label: getUserDisplayName(u, 'panggilan'),
+                                            value: u.id,
+                                            description: cabangList.find(c => c.id === u.cabangId)?.nama || u.roles?.[0]
+                                        }))}
+                                    value={filterUser}
+                                    onChange={setFilterUser}
+                                    placeholder="Pilih pengguna..."
+                                    searchPlaceholder="Cari nama..."
+                                />
+                            </div>
+                        </>
                     )}
 
                     {/* Stock Status */}

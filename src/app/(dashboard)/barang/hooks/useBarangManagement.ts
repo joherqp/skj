@@ -9,6 +9,7 @@ let globalSearch = '';
 let globalFilterKategori: string[] = [];
 let globalFilterStok: string[] = [];
 let globalFilterCabang: string[] = [];
+let globalFilterUser = '';
 let globalShowInactive = false;
 
 export const useBarangManagement = () => {
@@ -23,6 +24,7 @@ export const useBarangManagement = () => {
     const [filterKategori, _setFilterKategori] = useState<string[]>(globalFilterKategori);
     const [filterStok, _setFilterStok] = useState<string[]>(globalFilterStok);
     const [filterCabang, _setFilterCabang] = useState<string[]>(globalFilterCabang);
+    const [filterUser, _setFilterUser] = useState(globalFilterUser);
     const [showInactive, _setShowInactive] = useState(globalShowInactive);
 
     // Sync setters to global
@@ -30,6 +32,7 @@ export const useBarangManagement = () => {
     const setFilterKategori = (val: string[]) => { globalFilterKategori = val; _setFilterKategori(val); };
     const setFilterStok = (val: string[]) => { globalFilterStok = val; _setFilterStok(val); };
     const setFilterCabang = (val: string[]) => { globalFilterCabang = val; _setFilterCabang(val); };
+    const setFilterUser = (val: string) => { globalFilterUser = val; _setFilterUser(val); };
     const setShowInactive = (val: boolean | ((prevState: boolean) => boolean)) => {
         if (typeof val === 'function') {
             _setShowInactive((prev) => {
@@ -103,13 +106,58 @@ export const useBarangManagement = () => {
     const activeFiltersCount = [
         filterKategori.length > 0,
         filterStok.length > 0,
-        filterCabang.length > 0
+        filterCabang.length > 0,
+        filterUser !== ''
     ].filter(Boolean).length;
+ 
+    // -- User Filtering (For Dropdown) --
+    const filteredUsers = useMemo(() => {
+        return users.filter(u => {
+            // 1. Basic Active Filter
+            if (u.isActive === false) return false;
+
+            // 2. Cabang Filter
+            if (filterCabang.length > 0 && !filterCabang.includes(u.cabangId || '')) return false;
+
+            // 3. Stock Availability Filter
+            const userTotalStock = stokPengguna
+                .filter(s => s.userId === u.id)
+                .reduce((acc, curr) => acc + curr.jumlah, 0);
+
+            return userTotalStock > 0;
+        });
+    }, [users, filterCabang, stokPengguna]);
 
     // -- Display Logic (Global vs Personal) --
     const displayedItems = useMemo(() => {
         // 1. Admin / Owner / Gudang -> Global or Branch-specific
         if (isAdminOrOwner) {
+            if (filterUser) {
+                // Specific User Stock
+                return filteredBarang.map(item => {
+                    const userStock = stokPengguna.find(s => s.userId === filterUser && s.barangId === item.id);
+                    const quantity = userStock ? userStock.jumlah : 0;
+                    const userItem = { ...item, stok: quantity };
+
+                    // Stock Health Filtering
+                    const health = getStockHealth(userItem.id, userItem.stok);
+                    const matchesStockFilter = filterStok.length === 0 ||
+                        (filterStok.includes('aman') && health.status === 'aman') ||
+                        (filterStok.includes('rendah') && health.status !== 'aman') ||
+                        (filterStok.includes('kosong') && userItem.stok <= 0);
+
+                    if (!matchesStockFilter) return null;
+
+                    // Hiding logic: Hide 0 stock if not specifically filtering for it
+                    if (userItem.stok <= 0 && !filterStok.includes('kosong')) {
+                        return null;
+                    }
+
+                    return userItem;
+                }).filter((item): item is (BarangType & { stok: number }) => item !== null)
+                    .sort((a, b) => (b.stok || 0) - (a.stok || 0));
+            }
+
             if (filterCabang.length === 0) {
                 // All User Stocks
                 return filteredBarang.map(item => {
@@ -155,8 +203,8 @@ export const useBarangManagement = () => {
 
                     if (!matchesStockFilter) return null;
 
-                    // Hiding logic: Hide 0 stock if no search and no specific "kosong" filter
-                    if (search === '' && branchItem.stok <= 0 && !filterStok.includes('kosong')) {
+                    // Hiding logic: Hide 0 stock if not specifically filtering for it
+                    if (branchItem.stok <= 0 && !filterStok.includes('kosong')) {
                         return null;
                     }
 
@@ -190,7 +238,7 @@ export const useBarangManagement = () => {
         }).filter((item): item is (BarangType & { stok: number }) => item !== null)
             .sort((a, b) => (b.stok || 0) - (a.stok || 0));
 
-    }, [filteredBarang, stokPengguna, user, isAdminOrOwner, filterStok, filterCabang, users, cabang, getStockHealth, search]);
+    }, [filteredBarang, stokPengguna, user, isAdminOrOwner, filterStok, filterCabang, filterUser, users, cabang, getStockHealth, search]);
 
     return {
         // State
@@ -198,6 +246,7 @@ export const useBarangManagement = () => {
         filterKategori, setFilterKategori,
         filterStok, setFilterStok,
         filterCabang, setFilterCabang,
+        filterUser, setFilterUser,
         showInactive, setShowInactive,
         activeFiltersCount,
 
@@ -206,6 +255,7 @@ export const useBarangManagement = () => {
         kategoriList,
         satuanList,
         cabangList: cabang,
+        users: filteredUsers,
 
         // Utils
         isAdminOrOwner,

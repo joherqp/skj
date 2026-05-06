@@ -1,5 +1,6 @@
 'use client';
 import { createContext, type Dispatch, type ReactNode, type SetStateAction, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import { useQuery, useQueries, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase';
 import {
   DatabaseContextType,
@@ -51,6 +52,7 @@ export function useDatabase() {
 
 export function DatabaseProvider({ children }: { children: ReactNode }) {
   const { user: currentUser, isLoading: isAuthLoading } = useAuth();
+  const queryClient = useQueryClient();
   const isFetchingRef = useRef(false);
 
   // State definitions
@@ -310,6 +312,81 @@ export function DatabaseProvider({ children }: { children: ReactNode }) {
     }
   }, [getTableSchema]);
 
+  // React Query Integration
+  const tables = useMemo(() => [
+    { name: 'kategori', setter: setKategori, isMaster: true },
+    { name: 'satuan', setter: setSatuan, isMaster: true },
+    { name: 'kategori_pelanggan', setter: setKategoriPelanggan, isMaster: true },
+    { name: 'rekening_bank', setter: setRekeningBank, isMaster: true },
+    { name: 'area', setter: setArea, isMaster: true },
+    { name: 'barang', setter: setBarang, isMaster: true },
+    { name: 'pelanggan', setter: setPelanggan, isMaster: true },
+    { name: 'harga', setter: setHarga, isMaster: true },
+    { name: 'promo', setter: setPromo, isMaster: true },
+    { name: 'penjualan', setter: setPenjualan, days: 30 },
+    { name: 'setoran', setter: setSetoran, days: 30 },
+    { name: 'absensi', setter: setAbsensi, days: 30 },
+    { name: 'kunjungan', setter: setKunjungan, days: 30 },
+    { name: 'riwayat_pelanggan', setter: setRiwayatPelanggan, days: 30 },
+    { name: 'notifikasi', setter: setNotifikasi, days: 30 },
+    { name: 'persetujuan', setter: setPersetujuan, days: 30 },
+    { name: 'stok_pengguna', setter: setStokPengguna, days: 30 },
+    { name: 'mutasi_barang', setter: setMutasiBarang, days: 30 },
+    { name: 'saldo_pengguna', setter: setSaldoPengguna, days: 30 },
+    { name: 'reimburse', setter: setReimburse, days: 30 },
+    { name: 'petty_cash', setter: setPettyCash, days: 30 },
+    { name: 'restock', setter: setRestock, days: 30 },
+    { name: 'penyesuaian_stok', setter: setPenyesuaianStok, days: 30 },
+    { name: 'permintaan_barang', setter: setPermintaanBarang, days: 30 },
+    { name: 'sales_targets', setter: setTargets, days: 30 },
+    { name: 'stok_harian', setter: setStokHarian, days: 30 },
+    { name: 'stok_log', setter: setStokLog, days: 30 },
+    { name: 'pembayaran_penjualan', setter: setPembayaranPenjualan, days: 30 },
+    { name: 'user_locations', setter: setUserLocations, days: 7 },
+    { name: 'push_subscriptions', setter: setPushSubscriptions, days: 30 },
+    { name: 'sales_target_history', setter: setSalesTargetHistory, days: 30 },
+    { name: 'stok_snapshot', setter: setStokSnapshot, days: 30 },
+    { name: 'riwayat_saldo_pengguna', setter: setRiwayatSaldoPengguna, days: 30 },
+  ], []);
+
+  const results = useQueries({
+    queries: tables.map(t => ({
+      queryKey: ['db', t.name, currentUser?.id, dbMode],
+      queryFn: () => fetchData(t.name, t.days || 30),
+      enabled: !!currentUser && isInitialized,
+      staleTime: t.isMaster ? Infinity : 5 * 60 * 1000,
+    }))
+  });
+
+  // Sync React Query results with local state for compatibility
+  useEffect(() => {
+    results.forEach((result, index) => {
+      if (result.data) {
+        // Use type assertion to avoid "union type too complex" error
+        const setter = tables[index].setter as (data: any) => void;
+        setter(result.data);
+
+        // Special handling for Petty Cash balance
+        if (tables[index].name === 'petty_cash') {
+          const pcData = result.data as PettyCash[];
+          if (pcData && pcData.length > 0) {
+            setPettyCashBalance(pcData[0].saldoAkhir);
+          } else {
+            setPettyCashBalance(0);
+          }
+        }
+      }
+    });
+  }, [results, tables]);
+
+  // Loading state coordination
+  useEffect(() => {
+    const stillLoading = results.some(r => r.isLoading);
+    if (!stillLoading && isInitialized && isLoading) {
+      setIsLoading(false);
+    }
+  }, [results, isInitialized, isLoading]);
+
   // Load all data
   const loadAllData = useCallback(async (isManualRefresh = false) => {
     console.log('loadAllData called', { isManualRefresh, isFetching: isFetchingRef.current, hasUser: !!currentUser, isAuthLoading });
@@ -368,134 +445,28 @@ export function DatabaseProvider({ children }: { children: ReactNode }) {
       const isUserDemo = meInAllUsers.isDemo || false;
 
       const effectiveMode = (isGlobalDemo || isBranchDemo || isUserDemo) ? 'demo' : 'public';
-      const daysLimit = profile?.config?.daysToFetch || 30;
-
-      console.log(`Loading master data in mode: ${effectiveMode}`);
-
-      // 2. Fetch Master Data and Transactions using the effectiveMode
-      // Use Promise.all but fetchData already has individual catch blocks
-      const [
-        kategoriRes,
-        satuanRes,
-        kategoriPelangganRes,
-        rekeningBankRes,
-        areaRes,
-        barangRes,
-        pelangganRes,
-        penjualanRes,
-        setoranRes,
-        absensiRes,
-        kunjunganRes,
-        riwayatPelangganRes,
-        notifikasiRes,
-        persetujuanRes,
-        hargaRes,
-        stokRes,
-        promoRes,
-        mutasiRes,
-        saldoRes,
-        reimburseRes,
-        pettyCashRes,
-        restockRes,
-        penyesuaianRes,
-        permintaanRes,
-        targetsRes,
-        stokHarianRes,
-        stokLogRes,
-        pembayaranPenjualanRes,
-        userLocationsRes,
-        pushSubscriptionsRes,
-         salesTargetHistoryRes,
-        stokSnapshotRes,
-        riwayatSaldoRes
-      ] = await Promise.all([
-        fetchData<Kategori>('kategori', 30, effectiveMode),
-        fetchData<Satuan>('satuan', 30, effectiveMode),
-        fetchData<KategoriPelanggan>('kategori_pelanggan', 30, effectiveMode),
-        fetchData<RekeningBank>('rekening_bank', 30, effectiveMode),
-        fetchData<Area>('area', 30, effectiveMode),
-        fetchData<Barang>('barang', 30, effectiveMode),
-        fetchData<Pelanggan>('pelanggan', 30, effectiveMode),
-        fetchData<Penjualan>('penjualan', daysLimit, effectiveMode),
-        fetchData<Setoran>('setoran', daysLimit, effectiveMode),
-        fetchData<Absensi>('absensi', daysLimit, effectiveMode),
-        fetchData<Kunjungan>('kunjungan', daysLimit, effectiveMode),
-        fetchData<RiwayatPelanggan>('riwayat_pelanggan', daysLimit, effectiveMode),
-        fetchData<Notifikasi>('notifikasi', daysLimit, effectiveMode),
-        fetchData<Persetujuan>('persetujuan', daysLimit, effectiveMode),
-        fetchData<Harga>('harga', 30, effectiveMode),
-        fetchData<StokPengguna>('stok_pengguna', 30, effectiveMode),
-        fetchData<Promo>('promo', 30, effectiveMode),
-        fetchData<MutasiBarang>('mutasi_barang', daysLimit, effectiveMode),
-        fetchData<SaldoPengguna>('saldo_pengguna', 30, effectiveMode),
-        fetchData<Reimburse>('reimburse', daysLimit, effectiveMode),
-        fetchData<PettyCash>('petty_cash', daysLimit, effectiveMode),
-        fetchData<Restock>('restock', daysLimit, effectiveMode),
-        fetchData<any>('penyesuaian_stok', daysLimit, effectiveMode),
-        fetchData<any>('permintaan_barang', daysLimit, effectiveMode),
-        fetchData<SalesTarget>('sales_targets', 30, effectiveMode),
-        fetchData<StokHarian>('stok_harian', daysLimit, effectiveMode),
-        fetchData<StokLog>('stok_log', daysLimit, effectiveMode),
-        fetchData<PembayaranPenjualan>('pembayaran_penjualan', daysLimit, effectiveMode),
-        fetchData<any>('user_locations', 7, effectiveMode),
-        fetchData<any>('push_subscriptions', 30, effectiveMode),
-        fetchData<any>('sales_target_history', 30, effectiveMode),
-        fetchData<any>('stok_snapshot', 30, effectiveMode),
-        fetchData<RiwayatSaldoPengguna>('riwayat_saldo_pengguna', daysLimit, effectiveMode)
-      ]);
-
-      setKategori(kategoriRes);
-      setSatuan(satuanRes);
-      setKategoriPelanggan(kategoriPelangganRes);
-      setRekeningBank(rekeningBankRes);
-      setArea(areaRes);
-      setBarang(barangRes);
-      setPelanggan(pelangganRes);
-      setPenjualan(penjualanRes);
-      setSetoran(setoranRes);
-      setAbsensi(absensiRes);
-      setKunjungan(kunjunganRes);
-      setRiwayatPelanggan(riwayatPelangganRes);
-      setNotifikasi(notifikasiRes);
-      setPersetujuan(persetujuanRes);
-      setHarga(hargaRes);
-      setStokPengguna(stokRes);
-      setPromo(promoRes);
-      setMutasiBarang(mutasiRes);
-      setSaldoPengguna(saldoRes);
-      setReimburse(reimburseRes);
-      setPettyCash(pettyCashRes);
-      setRestock(restockRes);
-      setPenyesuaianStok(penyesuaianRes);
-      setPermintaanBarang(permintaanRes);
-      setTargets(targetsRes);
-      setStokHarian(stokHarianRes);
-      setStokLog(stokLogRes);
-      setPembayaranPenjualan(pembayaranPenjualanRes);
-      setUserLocations(userLocationsRes);
-      setPushSubscriptions(pushSubscriptionsRes);
-      setSalesTargetHistory(salesTargetHistoryRes);
-      setStokSnapshot(stokSnapshotRes);
-      setRiwayatSaldoPengguna(riwayatSaldoRes);
-
-      if (pettyCashRes && pettyCashRes.length > 0) {
-        setPettyCashBalance(pettyCashRes[0].saldoAkhir);
-      } else {
-        setPettyCashBalance(0);
+      
+      // 2. Trigger React Query to handle the rest
+      // Since dbMode is in the queryKey and it's memoized from profile/branches/users,
+      // React Query will automatically detect the change and refetch if needed.
+      // If it's a manual refresh, we explicitly invalidate to force a refetch.
+      if (isManualRefresh) {
+        await queryClient.invalidateQueries({ queryKey: ['db'] });
       }
+
     } catch (error) {
       console.error('Error in loadAllData:', error);
-      toast.error('Gagal menyinkronkan data. Beberapa fitur mungkin tidak tersedia.');
+      toast.error('Gagal menyinkronkan konfigurasi. Beberapa fitur mungkin tidak tersedia.');
     } finally {
       clearTimeout(globalTimeout);
-      console.log('loadAllData finished');
+      console.log('loadAllData core config finished');
       isFetchingRef.current = false;
       setIsLoading(false);
       setIsRefreshing(false);
       setIsInitialized(true);
       isInitializedRef.current = true;
     }
-  }, [currentUser, isInitialized, fetchData, isAuthLoading]);
+  }, [currentUser, isInitialized, fetchData, isAuthLoading, queryClient]);
 
   // Handle app visibility/focus to refresh data
   const lastRefreshRef = useRef<number>(Date.now());
@@ -503,10 +474,10 @@ export function DatabaseProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const handleFocus = () => {
       const now = Date.now();
-      // If app has been in background for more than 2 minutes, refresh data
-      // We use 2 minutes to balance freshness vs battery/data usage
-      if (now - lastRefreshRef.current > 120000 && currentUser && isInitialized && !isRefreshing) {
-        console.log('App resumed after >2 mins, refreshing data...');
+      // If app has been in background for more than 10 minutes, refresh data
+      // We increased this from 2 minutes to 10 minutes to reduce network load
+      if (now - lastRefreshRef.current > 600000 && currentUser && isInitialized && !isRefreshing) {
+        console.log('App resumed after >10 mins, refreshing data...');
         lastRefreshRef.current = now;
         void loadAllData(true);
       }

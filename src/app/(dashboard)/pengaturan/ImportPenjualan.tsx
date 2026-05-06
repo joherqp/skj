@@ -308,7 +308,7 @@ export default function ImportPenjualan() {
         if (sKey && !newMappings.salesman[sKey]) {
           const found = dbUsers.find(u => u.nama.toLowerCase() === sKey || (u.username && u.username.toLowerCase() === sKey)) ||
             dbUsers.find(u => isSimilar(u.nama, sKey));
-          newMappings.salesman[sKey] = { existing: !!found, id: found?.id, name: found?.nama || row.salesman, kodeUnik: (found as any)?.kode_unik };
+          newMappings.salesman[sKey] = { existing: !!found, id: found?.id, name: found?.nama || row.salesman, kodeUnik: found?.kodeUnik };
         }
         const pKey = row.produk.toLowerCase();
         if (pKey && !newMappings.produk[pKey]) {
@@ -328,7 +328,7 @@ export default function ImportPenjualan() {
         const sKey = row.holder.toLowerCase();
         if (sKey && !newMappings.salesman[sKey]) {
           const found = dbUsers.find(u => u.nama.toLowerCase() === sKey) || dbUsers.find(u => isSimilar(u.nama, sKey));
-          newMappings.salesman[sKey] = { existing: !!found, id: found?.id, name: found?.nama || row.holder, kodeUnik: (found as any)?.kode_unik };
+          newMappings.salesman[sKey] = { existing: !!found, id: found?.id, name: found?.nama || row.holder, kodeUnik: found?.kodeUnik };
         }
         const pKey = row.product.toLowerCase();
         if (pKey && !newMappings.produk[pKey]) {
@@ -342,7 +342,7 @@ export default function ImportPenjualan() {
         const sKey = row.karyawan.toLowerCase();
         if (sKey && !newMappings.salesman[sKey]) {
           const found = dbUsers.find(u => u.nama.toLowerCase() === sKey) || dbUsers.find(u => isSimilar(u.nama, sKey));
-          newMappings.salesman[sKey] = { existing: !!found, id: found?.id, name: found?.nama || row.karyawan };
+          newMappings.salesman[sKey] = { existing: !!found, id: found?.id, name: found?.nama || row.karyawan, kodeUnik: found?.kodeUnik };
         }
       });
 
@@ -466,7 +466,7 @@ export default function ImportPenjualan() {
           const row = firstRowPerPelanggan[n];
           const cId = finalMappings.cabang[row?.cabang?.toLowerCase()]?.id || defaultCabangId;
           const sInfo = finalMappings.salesman[row?.salesman?.toLowerCase()] || {};
-          const sKode = sInfo.kodeUnik || 'GEN';
+          const sKode = sInfo.kodeUnik || dbUsers.find(u => u.id === sInfo.id)?.kodeUnik || 'SAL';
           const catId = dbKategoriPelanggan.find(c => c.nama.toLowerCase() === row?.kategori_pelanggan?.toLowerCase())?.id || defaultKategoriPelangganId;
           return {
             nama: finalMappings.pelanggan[n].name,
